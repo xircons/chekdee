@@ -11,21 +11,31 @@ type Config struct {
 	Env         string
 	DatabaseURL string
 	JWTSecret   string
+
+	LineChannelID     string
+	LineChannelSecret string
 }
 
 func Load() (*Config, error) {
 	cfg := &Config{
-		Port:        getEnv("PORT", "8080"),
-		Env:         getEnv("APP_ENV", "development"),
-		DatabaseURL: os.Getenv("DATABASE_URL"),
-		JWTSecret:   os.Getenv("JWT_SECRET"),
+		Port:              getEnv("PORT", "8080"),
+		Env:               getEnv("APP_ENV", "development"),
+		DatabaseURL:       os.Getenv("DATABASE_URL"),
+		JWTSecret:         os.Getenv("JWT_SECRET"),
+		LineChannelID:     os.Getenv("LINE_CHANNEL_ID"),
+		LineChannelSecret: os.Getenv("LINE_CHANNEL_SECRET"),
 	}
 
-	if cfg.DatabaseURL == "" {
-		return nil, fmt.Errorf("DATABASE_URL is required")
+	required := map[string]string{
+		"DATABASE_URL":        cfg.DatabaseURL,
+		"JWT_SECRET":          cfg.JWTSecret,
+		"LINE_CHANNEL_ID":     cfg.LineChannelID,
+		"LINE_CHANNEL_SECRET": cfg.LineChannelSecret,
 	}
-	if cfg.JWTSecret == "" {
-		return nil, fmt.Errorf("JWT_SECRET is required")
+	for name, value := range required {
+		if value == "" {
+			return nil, fmt.Errorf("%s is required", name)
+		}
 	}
 
 	return cfg, nil

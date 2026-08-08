@@ -11,6 +11,7 @@ import (
 
 	"checkdee-backend/internal/config"
 	"checkdee-backend/internal/handler"
+	"checkdee-backend/internal/usecase"
 )
 
 type Server struct {
@@ -19,14 +20,14 @@ type Server struct {
 	logger *slog.Logger
 }
 
-func New(cfg *config.Config, logger *slog.Logger) *Server {
+func New(cfg *config.Config, logger *slog.Logger, authHandler *handler.AuthHandler, jwtIssuer *usecase.JWTIssuer) *Server {
 	e := echo.New()
 	e.HideBanner = true
 	e.HidePort = true
 	e.Use(middleware.Recover())
 	e.Use(middleware.RequestID())
 
-	handler.RegisterRoutes(e)
+	handler.RegisterRoutes(e, authHandler, jwtIssuer)
 
 	return &Server{echo: e, cfg: cfg, logger: logger}
 }

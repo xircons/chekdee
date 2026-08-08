@@ -4,7 +4,7 @@ dev:
 	docker compose up --build
 
 deps:
-	cd backend && go mod tidy
+	cd backend && go mod tidy && go mod tidy -tags wireinject
 
 backend-dev:
 	cd backend && go run ./cmd/server
