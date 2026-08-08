@@ -19,4 +19,5 @@ func RegisterRoutes(e *echo.Echo, auth *AuthHandler, jwtIssuer *usecase.JWTIssue
 	// group prefix was found to leak RequireAuth onto unrelated/unmatched
 	// routes under Echo's router.
 	e.POST("/auth/register", auth.CompleteRegistration, RequireAuth(jwtIssuer))
+	e.GET("/auth/me", auth.Me, RequireAuth(jwtIssuer))
 }

@@ -124,3 +124,9 @@ func (a *AuthUsecase) Logout(ctx context.Context, refreshTokenRaw string) error 
 func (a *AuthUsecase) CompleteRegistration(ctx context.Context, userID, firstName, lastName, studentGen string) (*domain.User, error) {
 	return a.users.CompleteRegistration(ctx, userID, firstName, lastName, studentGen)
 }
+
+// Me returns the authenticated user — used by the frontend on page load
+// to check session validity and registration status.
+func (a *AuthUsecase) Me(ctx context.Context, userID string) (*domain.User, error) {
+	return a.users.GetByID(ctx, userID)
+}

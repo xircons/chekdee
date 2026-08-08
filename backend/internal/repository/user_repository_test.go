@@ -24,12 +24,15 @@ func TestUserRepository_CreateFetchRegister(t *testing.T) {
 
 	pool, err := pgxpool.New(context.Background(), databaseURL)
 	require.NoError(t, err)
-	defer pool.Close()
+	t.Cleanup(pool.Close)
 
 	repo := repository.NewUserRepository(pool)
 	ctx := context.Background()
 
 	lineUserID := "test-line-user-" + time.Now().Format("20060102150405.000000000")
+	// Registered after the pool.Close cleanup, so it runs first (t.Cleanup
+	// is LIFO) — a prior version had `defer pool.Close()` instead, which
+	// ran before this delete could execute, silently leaking test rows.
 	t.Cleanup(func() {
 		_, _ = pool.Exec(ctx, "DELETE FROM users WHERE line_user_id = $1", lineUserID)
 	})

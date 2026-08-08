@@ -21,7 +21,7 @@ func TestRefreshTokenRepository_CreateGetRevoke(t *testing.T) {
 
 	pool, err := pgxpool.New(context.Background(), databaseURL)
 	require.NoError(t, err)
-	defer pool.Close()
+	t.Cleanup(pool.Close)
 
 	users := repository.NewUserRepository(pool)
 	tokens := repository.NewRefreshTokenRepository(pool)
@@ -30,7 +30,10 @@ func TestRefreshTokenRepository_CreateGetRevoke(t *testing.T) {
 	lineUserID := "test-rt-user-" + time.Now().Format("20060102150405.000000000")
 	user, err := users.CreateEmployeeFromLine(ctx, lineUserID, "RT Test", "")
 	require.NoError(t, err)
+	// Registered after pool.Close so it runs first (LIFO), and deletes
+	// refresh_tokens before users — the FK has no ON DELETE CASCADE.
 	t.Cleanup(func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM refresh_tokens WHERE user_id = $1", user.ID)
 		_, _ = pool.Exec(ctx, "DELETE FROM users WHERE id = $1", user.ID)
 	})
 

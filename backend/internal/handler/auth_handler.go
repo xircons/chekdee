@@ -134,6 +134,15 @@ func (h *AuthHandler) CompleteRegistration(c echo.Context) error {
 	return c.JSON(http.StatusOK, toUserView(user))
 }
 
+// Me returns the authenticated user. Mounted behind RequireAuth.
+func (h *AuthHandler) Me(c echo.Context) error {
+	user, err := h.auth.Me(c.Request().Context(), userIDFromContext(c))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusNotFound, "user not found")
+	}
+	return c.JSON(http.StatusOK, toUserView(user))
+}
+
 func setRefreshCookie(c echo.Context, value string) {
 	c.SetCookie(&http.Cookie{
 		Name:     refreshCookieName,
