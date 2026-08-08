@@ -11,4 +11,5 @@ type UserRepository interface {
 	CreateEmployeeFromLine(ctx context.Context, lineUserID, displayName, pictureURL string) (*User, error)
 	UpdateLineProfile(ctx context.Context, id, displayName, pictureURL string) error
 	CompleteRegistration(ctx context.Context, id, firstName, lastName, studentGen string) (*User, error)
+	CreateSystemOwner(ctx context.Context, username, passwordHash string) (*User, error)
 }

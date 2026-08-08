@@ -33,7 +33,8 @@ type User struct {
 	LineDisplayName *string
 	LinePictureURL  *string
 
-	Username *string
+	Username     *string
+	PasswordHash *string
 
 	FirstName  *string
 	LastName   *string

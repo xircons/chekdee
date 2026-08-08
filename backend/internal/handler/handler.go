@@ -12,6 +12,7 @@ func RegisterRoutes(e *echo.Echo, auth *AuthHandler, jwtIssuer *usecase.JWTIssue
 	e.GET("/healthz", HealthCheck)
 
 	e.POST("/auth/line/login", auth.LineLogin)
+	e.POST("/auth/login", auth.PasswordLogin)
 	e.POST("/auth/refresh", auth.Refresh)
 	e.POST("/auth/logout", auth.Logout)
 

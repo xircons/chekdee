@@ -28,3 +28,8 @@ SET first_name = $2,
     updated_at = now()
 WHERE id = $1
 RETURNING *;
+
+-- name: CreateSystemOwner :one
+INSERT INTO users (role, username, password_hash)
+VALUES ('system_owner', $1, $2)
+RETURNING *;

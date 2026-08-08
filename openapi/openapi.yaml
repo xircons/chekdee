@@ -49,6 +49,36 @@ paths:
         "403":
           description: Account is deactivated
 
+  /auth/login:
+    post:
+      operationId: passwordLogin
+      summary: >
+        Username/password login for the system_owner role — the only
+        role that doesn't use LINE login. Accounts are bootstrapped
+        out-of-band (see backend/cmd/seedowner), there is no signup
+        endpoint.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasswordLoginRequest"
+      responses:
+        "200":
+          description: >
+            Login succeeded. Sets an httpOnly refresh-token cookie
+            (scoped to /auth) in addition to the response body.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Missing username or password
+        "401":
+          description: Invalid username or password
+        "403":
+          description: Account is deactivated
+
   /auth/refresh:
     post:
       operationId: refreshToken
@@ -137,6 +167,16 @@ components:
           type: string
         redirect_uri:
           type: string
+
+    PasswordLoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+          format: password
 
     CompleteRegistrationRequest:
       type: object

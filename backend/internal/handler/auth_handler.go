@@ -80,6 +80,39 @@ func (h *AuthHandler) LineLogin(c echo.Context) error {
 	})
 }
 
+type passwordLoginRequest struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+// PasswordLogin authenticates the system_owner account — the only role
+// that doesn't use LINE login.
+func (h *AuthHandler) PasswordLogin(c echo.Context) error {
+	var req passwordLoginRequest
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+	}
+	if req.Username == "" || req.Password == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "username and password are required")
+	}
+
+	user, tokens, err := h.auth.LoginWithPassword(c.Request().Context(), req.Username, req.Password, c.Request().UserAgent(), c.RealIP())
+	if err != nil {
+		if errors.Is(err, usecase.ErrAccountDeactivated) {
+			return echo.NewHTTPError(http.StatusForbidden, "account deactivated")
+		}
+		return echo.NewHTTPError(http.StatusUnauthorized, "invalid username or password")
+	}
+
+	setRefreshCookie(c, tokens.RefreshToken)
+
+	return c.JSON(http.StatusOK, authResponse{
+		AccessToken: tokens.AccessToken,
+		ExpiresAt:   tokens.ExpiresAt,
+		User:        toUserView(user),
+	})
+}
+
 func (h *AuthHandler) Refresh(c echo.Context) error {
 	cookie, err := c.Cookie(refreshCookieName)
 	if err != nil || cookie.Value == "" {

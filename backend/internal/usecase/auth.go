@@ -5,12 +5,15 @@ import (
 	"errors"
 	"time"
 
+	"golang.org/x/crypto/bcrypt"
+
 	"checkdee-backend/internal/domain"
 )
 
 var (
 	ErrAccountDeactivated = errors.New("account deactivated")
 	ErrNotRegistered      = errors.New("registration not completed")
+	ErrInvalidCredentials = errors.New("invalid username or password")
 )
 
 // LineClient exchanges a LINE Login authorization code for the user's
@@ -59,6 +62,29 @@ func (a *AuthUsecase) LoginWithLine(ctx context.Context, code, redirectURI, user
 		if updateErr := a.users.UpdateLineProfile(ctx, user.ID, displayName, pictureURL); updateErr != nil {
 			return nil, TokenPair{}, updateErr
 		}
+	}
+
+	if !user.IsActive() {
+		return nil, TokenPair{}, ErrAccountDeactivated
+	}
+
+	tokens, err := a.issueTokens(ctx, user, userAgent, ip)
+	return user, tokens, err
+}
+
+// LoginWithPassword authenticates the system_owner account — the only
+// role that doesn't use LINE login.
+func (a *AuthUsecase) LoginWithPassword(ctx context.Context, username, password, userAgent, ip string) (*domain.User, TokenPair, error) {
+	user, err := a.users.GetByUsername(ctx, username)
+	if err != nil {
+		return nil, TokenPair{}, ErrInvalidCredentials
+	}
+
+	if user.PasswordHash == nil {
+		return nil, TokenPair{}, ErrInvalidCredentials
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(*user.PasswordHash), []byte(password)); err != nil {
+		return nil, TokenPair{}, ErrInvalidCredentials
 	}
 
 	if !user.IsActive() {

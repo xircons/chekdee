@@ -28,7 +28,7 @@ func NewUserRepository(pool *pgxpool.Pool) *UserRepository {
 const userColumns = `
 	id::text, role::text, status::text, team_id::text,
 	line_user_id, line_display_name, line_picture_url,
-	username, first_name, last_name, student_gen,
+	username, password_hash, first_name, last_name, student_gen,
 	registration_completed_at,
 	offboarded_at, offboarded_by::text, offboarded_reason,
 	created_at, updated_at`
@@ -40,7 +40,7 @@ func scanUser(row pgx.Row) (*domain.User, error) {
 	err := row.Scan(
 		&u.ID, &role, &status, &u.TeamID,
 		&u.LineUserID, &u.LineDisplayName, &u.LinePictureURL,
-		&u.Username, &u.FirstName, &u.LastName, &u.StudentGen,
+		&u.Username, &u.PasswordHash, &u.FirstName, &u.LastName, &u.StudentGen,
 		&u.RegistrationCompletedAt,
 		&u.OffboardedAt, &u.OffboardedBy, &u.OffboardedReason,
 		&u.CreatedAt, &u.UpdatedAt,
@@ -108,6 +108,16 @@ func (r *UserRepository) CompleteRegistration(ctx context.Context, id, firstName
 		WHERE id = $1
 		RETURNING `+userColumns,
 		id, firstName, lastName, studentGen,
+	)
+	return scanUser(row)
+}
+
+func (r *UserRepository) CreateSystemOwner(ctx context.Context, username, passwordHash string) (*domain.User, error) {
+	row := r.pool.QueryRow(ctx, `
+		INSERT INTO users (role, username, password_hash)
+		VALUES ('system_owner', $1, $2)
+		RETURNING `+userColumns,
+		username, passwordHash,
 	)
 	return scanUser(row)
 }
