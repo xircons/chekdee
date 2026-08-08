@@ -1,0 +1,43 @@
+openapi: 3.0.3
+info:
+  title: Checkdee API
+  description: >
+    Employee attendance API for Checkdee (CAMT, Chiang Mai University).
+    This spec is the shared contract between the Go backend and the
+    generated frontend client — see design.md and CONTRIBUTING.md for
+    project-wide conventions.
+  version: 0.1.0
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+
+paths:
+  /healthz:
+    get:
+      operationId: getHealth
+      summary: Liveness check
+      responses:
+        "200":
+          description: Service is up
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          example: ok
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
