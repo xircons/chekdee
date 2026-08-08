@@ -15,7 +15,8 @@ func RegisterRoutes(e *echo.Echo, auth *AuthHandler, jwtIssuer *usecase.JWTIssue
 	e.POST("/auth/refresh", auth.Refresh)
 	e.POST("/auth/logout", auth.Logout)
 
-	protected := e.Group("")
-	protected.Use(RequireAuth(jwtIssuer))
-	protected.POST("/auth/register", auth.CompleteRegistration)
+	// Attached directly (not via an empty-prefix e.Group) — an empty
+	// group prefix was found to leak RequireAuth onto unrelated/unmatched
+	// routes under Echo's router.
+	e.POST("/auth/register", auth.CompleteRegistration, RequireAuth(jwtIssuer))
 }
