@@ -1,0 +1,9 @@
+DROP TABLE IF EXISTS admin_audit_logs;
+DROP TABLE IF EXISTS leave_requests;
+DROP TYPE IF EXISTS leave_status;
+DROP TABLE IF EXISTS attendance_corrections;
+DROP TABLE IF EXISTS attendance_records;
+DROP TYPE IF EXISTS attendance_status;
+DROP TABLE IF EXISTS holidays;
+DROP TYPE IF EXISTS holiday_source;
+DROP TABLE IF EXISTS work_schedules;
