@@ -1,7 +1,8 @@
 # Checkdee — Execution Plan
 
 **Current focus:** Phase 3, in progress — dashboard, employee directory, schedule
-management, and holidays are done; next up is CSV bulk import for schedules.
+management, holidays, and CSV import are done; next up is the supervisor leave-approval
+list, the last Phase 3 item.
 
 This is a living document. Update it in place as phases and tasks complete — don't
 recreate it, don't leave stale status.
@@ -91,7 +92,13 @@ Status: **in progress**
       holiday keeps its source (doesn't flip it to "manual"), per the migration
       comment; only newly added rows are "manual". Remove is a real delete (holidays
       aren't subject to the soft-delete-only rule that applies to users).
-- [ ] Import/export UI, CSV bulk import UI for schedules.
+- [x] Import/export UI, CSV bulk import UI for schedules — added to `/admin/schedules`.
+      Validates each row (`employee_id, day_of_week, start_time, end_time`) client-side
+      and reports per-line errors rather than failing the whole file; a "Download
+      template" button gives the expected format. Same replace-by-employee-and-day
+      merge semantics as the single-employee editor above, and both now share a
+      `scheduleVersion` counter so the editor reflects an import immediately instead of
+      only after re-selecting the employee.
 - [ ] Supervisor view: leave request approval list (in-app fallback view — supervisors
       also approve via the email-approval link).
 

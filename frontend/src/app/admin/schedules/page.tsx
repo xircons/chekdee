@@ -26,7 +26,44 @@ const DAY_LABELS = [
   "Saturday",
 ];
 
+const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
+
 type DayEntry = { working: boolean; startTime: string; endTime: string };
+
+type ImportRow = { employeeId: string; dayOfWeek: number; startTime: string; endTime: string };
+type ImportError = { line: number; message: string };
+type ImportResult = { imported: number; errors: ImportError[] };
+
+function parseCsv(text: string): string[][] {
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .map((line) => line.split(",").map((cell) => cell.trim()));
+}
+
+function validateRow(cells: string[], validEmployeeIds: Set<string>): { row?: ImportRow; error?: string } {
+  const [employeeId, dayOfWeekRaw, startTime, endTime] = cells;
+
+  if (!employeeId || !validEmployeeIds.has(employeeId)) {
+    return { error: `unknown employee_id "${employeeId ?? ""}"` };
+  }
+
+  const dayOfWeek = Number(dayOfWeekRaw);
+  if (!Number.isInteger(dayOfWeek) || dayOfWeek < 0 || dayOfWeek > 6) {
+    return { error: `day_of_week must be 0–6, got "${dayOfWeekRaw ?? ""}"` };
+  }
+
+  if (!TIME_RE.test(startTime ?? "") || !TIME_RE.test(endTime ?? "")) {
+    return { error: "start_time/end_time must be HH:mm" };
+  }
+
+  if (endTime <= startTime) {
+    return { error: "end_time must be after start_time" };
+  }
+
+  return { row: { employeeId, dayOfWeek, startTime, endTime } };
+}
 
 function buildDayEntries(employeeId: string, schedules: MockWorkSchedule[]): DayEntry[] {
   return DAY_LABELS.map((_, dayOfWeek) => {
@@ -110,6 +147,9 @@ export default function SchedulesPage() {
   const employees = getActiveEmployees().filter((e) => e.role === "employee");
   const [selectedId, setSelectedId] = useState<string | null>(employees[0]?.id ?? null);
   const [schedules, setSchedules] = useState<MockWorkSchedule[]>(mockWorkSchedules);
+  const [scheduleVersion, setScheduleVersion] = useState(0);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
 
   const handleSave = (employeeId: string, days: DayEntry[]) => {
     setSchedules((prev) => {
@@ -131,6 +171,63 @@ export default function SchedulesPage() {
       );
       return [...withoutEmployee, ...newEntries];
     });
+    setScheduleVersion((v) => v + 1);
+  };
+
+  const handleImport = async () => {
+    if (!importFile) return;
+
+    const text = await importFile.text();
+    const rows = parseCsv(text);
+    const hasHeader = rows[0]?.[0]?.toLowerCase() === "employee_id";
+    const dataRows = hasHeader ? rows.slice(1) : rows;
+    const validEmployeeIds = new Set(employees.map((e) => e.id));
+
+    const errors: ImportError[] = [];
+    const validRows: ImportRow[] = [];
+
+    dataRows.forEach((cells, i) => {
+      const line = i + (hasHeader ? 2 : 1);
+      const { row, error } = validateRow(cells, validEmployeeIds);
+      if (error) {
+        errors.push({ line, message: error });
+      } else if (row) {
+        validRows.push(row);
+      }
+    });
+
+    setSchedules((prev) => {
+      let next = prev;
+      for (const row of validRows) {
+        next = next.filter((s) => !(s.employeeId === row.employeeId && s.dayOfWeek === row.dayOfWeek));
+      }
+      const newEntries: MockWorkSchedule[] = validRows.map((row) => ({
+        id: `sched-${row.employeeId}-${row.dayOfWeek}`,
+        employeeId: row.employeeId,
+        dayOfWeek: row.dayOfWeek,
+        startTime: row.startTime,
+        endTime: row.endTime,
+        effectiveFrom: new Date().toISOString().slice(0, 10),
+        effectiveTo: null,
+      }));
+      return [...next, ...newEntries];
+    });
+
+    setImportResult({ imported: validRows.length, errors });
+    setScheduleVersion((v) => v + 1);
+    setImportFile(null);
+  };
+
+  const handleDownloadTemplate = () => {
+    const header = "employee_id,day_of_week,start_time,end_time";
+    const example = `${employees[0]?.id ?? "user-1"},1,09:00,17:00`;
+    const blob = new Blob([`${header}\n${example}\n`], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "schedule-template.csv";
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -160,11 +257,56 @@ export default function SchedulesPage() {
 
           {selectedId && (
             <ScheduleEditor
-              key={selectedId}
+              key={`${selectedId}-${scheduleVersion}`}
               employeeId={selectedId}
               schedules={schedules}
               onSave={handleSave}
             />
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="rounded-2xl shadow-sm">
+        <CardHeader>
+          <CardTitle>Bulk import (CSV)</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <p className="text-sm text-muted-foreground">
+            Columns: <code>employee_id, day_of_week</code> (0–6, 0=Sunday),{" "}
+            <code>start_time, end_time</code> (HH:mm). Existing entries for the same
+            employee and day are replaced.
+          </p>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Input
+              type="file"
+              accept=".csv"
+              onChange={(e) => setImportFile(e.target.files?.[0] ?? null)}
+              className="w-auto"
+            />
+            <Button onClick={() => void handleImport()} disabled={!importFile}>
+              Import
+            </Button>
+            <Button variant="outline" onClick={handleDownloadTemplate}>
+              Download template
+            </Button>
+          </div>
+
+          {importResult && (
+            <div className="flex flex-col gap-2 rounded-xl border border-border p-3 text-sm">
+              <p className="font-medium text-foreground">
+                Imported {importResult.imported} row{importResult.imported === 1 ? "" : "s"}.
+              </p>
+              {importResult.errors.length > 0 && (
+                <ul className="flex flex-col gap-1 text-danger-foreground">
+                  {importResult.errors.map((e) => (
+                    <li key={e.line}>
+                      Line {e.line}: {e.message}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           )}
         </CardContent>
       </Card>
