@@ -1,6 +1,7 @@
 # Checkdee — Execution Plan
 
-**Current focus:** Phase 2 done. Phase 3 (admin/HR views) not yet started.
+**Current focus:** Phase 3, in progress — dashboard and employee directory are done;
+next up is schedule management.
 
 This is a living document. Update it in place as phases and tasks complete — don't
 recreate it, don't leave stale status.
@@ -70,11 +71,18 @@ Status: **done**
 
 ## Phase 3 — Admin/HR views (desktop-first)
 
-Status: **not started**
+Status: **in progress**
 
-- [ ] Dashboard: present today, pending approvals, absences, leave requests — matching
-      the card style from the design reference.
-- [ ] Employee directory: create, edit, offboard (soft-delete UI — never a hard delete).
+- [x] Dashboard: present today, pending approvals, absent today, on-leave today —
+      4-stat grid matching the employee dashboard's card style, via new org-wide
+      `mock-data.ts` accessors (`getAttendanceForDate`, `getPendingLeaveRequests`,
+      `getEmployeesOnLeave`).
+- [x] Employee directory: create, edit, offboard (soft-delete UI — never a hard delete).
+      Added shadcn `table`/`dialog`/`select`/`alert-dialog` primitives for this (and
+      reusable by the rest of Phase 3). Offboard sets `offboardedAt`/`offboardedBy` via a
+      confirm dialog; the row stays in the table, just badged "Offboarded" — matches the
+      schema's soft-delete-only rule. Directory state is local to the page (session-only,
+      resets on reload) until Phase 4.
 - [ ] Schedule management: per-employee recurring weekly schedule editor.
 - [ ] Holidays / company calendar: manually add, edit, remove.
 - [ ] Import/export UI, CSV bulk import UI for schedules.

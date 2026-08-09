@@ -19,6 +19,8 @@ export type MockEmployee = {
   displayName: string;
   pictureUrl: string | null;
   offboardedAt: string | null;
+  offboardedBy: string | null;
+  offboardedReason: string | null;
 };
 
 export type MockWorkSchedule = {
@@ -78,6 +80,8 @@ export const mockEmployees: MockEmployee[] = [
     displayName: "Nira S.",
     pictureUrl: null,
     offboardedAt: null,
+    offboardedBy: null,
+    offboardedReason: null,
   },
   {
     id: "user-2",
@@ -90,6 +94,8 @@ export const mockEmployees: MockEmployee[] = [
     displayName: "Ploy C.",
     pictureUrl: null,
     offboardedAt: null,
+    offboardedBy: null,
+    offboardedReason: null,
   },
   {
     id: "user-3",
@@ -102,6 +108,8 @@ export const mockEmployees: MockEmployee[] = [
     displayName: "Kritsada B.",
     pictureUrl: null,
     offboardedAt: null,
+    offboardedBy: null,
+    offboardedReason: null,
   },
   {
     id: "user-4",
@@ -114,6 +122,8 @@ export const mockEmployees: MockEmployee[] = [
     displayName: "Anong W.",
     pictureUrl: null,
     offboardedAt: null,
+    offboardedBy: null,
+    offboardedReason: null,
   },
   {
     id: "user-5",
@@ -126,6 +136,8 @@ export const mockEmployees: MockEmployee[] = [
     displayName: "Somsak I.",
     pictureUrl: null,
     offboardedAt: "2026-06-30T00:00:00Z",
+    offboardedBy: "user-4",
+    offboardedReason: "Graduated",
   },
 ];
 
@@ -152,6 +164,8 @@ export const mockAttendanceRecords: MockAttendanceRecord[] = [
   { id: "att-3", employeeId: "user-1", workDate: "2026-08-06", checkInAt: "2026-08-06T08:58:00Z", checkOutAt: "2026-08-06T17:02:00Z", status: "present", autoClosed: false },
   { id: "att-4", employeeId: "user-1", workDate: "2026-08-07", checkInAt: null, checkOutAt: null, status: "ขาด", autoClosed: false },
   { id: "att-5", employeeId: "user-1", workDate: "2026-08-08", checkInAt: "2026-08-08T09:00:00Z", checkOutAt: null, status: null, autoClosed: true },
+  { id: "att-6", employeeId: "user-2", workDate: "2026-08-08", checkInAt: "2026-08-08T09:05:00Z", checkOutAt: "2026-08-08T17:00:00Z", status: "present", autoClosed: false },
+  { id: "att-7", employeeId: "user-3", workDate: "2026-08-08", checkInAt: null, checkOutAt: null, status: "ขาด", autoClosed: false },
 ];
 
 export const mockLeaveRequests: MockLeaveRequest[] = [
@@ -177,6 +191,27 @@ export function getUpcomingHolidays(fromDate: string): MockHoliday[] {
 
 export function getAttendanceForEmployee(employeeId: string): MockAttendanceRecord[] {
   return mockAttendanceRecords.filter((r) => r.employeeId === employeeId);
+}
+
+// Org-wide accessors — used by the admin/HR views (Phase 3), as opposed
+// to the single-employee accessors above (Phase 2).
+
+export function getActiveEmployees(): MockEmployee[] {
+  return mockEmployees.filter((e) => e.status === "active" && e.offboardedAt === null);
+}
+
+export function getAttendanceForDate(date: string): MockAttendanceRecord[] {
+  return mockAttendanceRecords.filter((r) => r.workDate === date);
+}
+
+export function getPendingLeaveRequests(): MockLeaveRequest[] {
+  return mockLeaveRequests.filter((r) => r.status === "pending");
+}
+
+export function getEmployeesOnLeave(date: string): MockLeaveRequest[] {
+  return mockLeaveRequests.filter(
+    (r) => r.status === "approved" && r.startDate <= date && date <= r.endDate
+  );
 }
 
 export function getLeaveRequestsForEmployee(employeeId: string): MockLeaveRequest[] {
