@@ -1,7 +1,7 @@
 # Checkdee — Execution Plan
 
-**Current focus:** Phase 3, in progress — dashboard, employee directory, and schedule
-management are done; next up is holidays / company calendar.
+**Current focus:** Phase 3, in progress — dashboard, employee directory, schedule
+management, and holidays are done; next up is CSV bulk import for schedules.
 
 This is a living document. Update it in place as phases and tasks complete — don't
 recreate it, don't leave stale status.
@@ -87,7 +87,10 @@ Status: **in progress**
       employee, toggle each day on/off with a `Switch`, set start/end time when on.
       Saves replace that employee's `work_schedules` rows in local page state
       (session-only, resets on reload, like the directory).
-- [ ] Holidays / company calendar: manually add, edit, remove.
+- [x] Holidays / company calendar: manually add, edit, remove. Editing a `nager_date`
+      holiday keeps its source (doesn't flip it to "manual"), per the migration
+      comment; only newly added rows are "manual". Remove is a real delete (holidays
+      aren't subject to the soft-delete-only rule that applies to users).
 - [ ] Import/export UI, CSV bulk import UI for schedules.
 - [ ] Supervisor view: leave request approval list (in-app fallback view — supervisors
       also approve via the email-approval link).
