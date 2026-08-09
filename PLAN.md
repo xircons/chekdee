@@ -1,7 +1,6 @@
 # Checkdee — Execution Plan
 
-**Current focus:** Phase 2, in progress — dashboard, check-in/out, leave, and schedule
-are done; next up is the profile view (the last Phase 2 item).
+**Current focus:** Phase 2 done. Phase 3 (admin/HR views) not yet started.
 
 This is a living document. Update it in place as phases and tasks complete — don't
 recreate it, don't leave stale status.
@@ -43,7 +42,7 @@ Status: **done**
 
 ## Phase 2 — Employee views (mobile-first)
 
-Status: **in progress**
+Status: **done**
 
 - [x] Home/dashboard: status card (today's check-in/out state), 2-column stat grid
       (hours this month, late count, absence count, leave balance) — now wired to
@@ -65,7 +64,9 @@ Status: **in progress**
 - [x] Schedule/calendar view — weekly recurring schedule (from `work_schedules`, via
       `getWorkScheduleForEmployee`) with today highlighted, plus an upcoming-holidays
       list (`getUpcomingHolidays`).
-- [ ] Profile view.
+- [x] Profile view — name/role/avatar-initials from the real `me` session, enriched
+      with team and student-gen from `mock-data.ts` when the session id happens to
+      match a fixture (real `/auth/me` doesn't return those fields yet).
 
 ## Phase 3 — Admin/HR views (desktop-first)
 
