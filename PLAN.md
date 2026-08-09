@@ -1,7 +1,7 @@
 # Checkdee — Execution Plan
 
-**Current focus:** Phase 3, in progress — dashboard and employee directory are done;
-next up is schedule management.
+**Current focus:** Phase 3, in progress — dashboard, employee directory, and schedule
+management are done; next up is holidays / company calendar.
 
 This is a living document. Update it in place as phases and tasks complete — don't
 recreate it, don't leave stale status.
@@ -83,7 +83,10 @@ Status: **in progress**
       confirm dialog; the row stays in the table, just badged "Offboarded" — matches the
       schema's soft-delete-only rule. Directory state is local to the page (session-only,
       resets on reload) until Phase 4.
-- [ ] Schedule management: per-employee recurring weekly schedule editor.
+- [x] Schedule management: per-employee recurring weekly schedule editor — pick an
+      employee, toggle each day on/off with a `Switch`, set start/end time when on.
+      Saves replace that employee's `work_schedules` rows in local page state
+      (session-only, resets on reload, like the directory).
 - [ ] Holidays / company calendar: manually add, edit, remove.
 - [ ] Import/export UI, CSV bulk import UI for schedules.
 - [ ] Supervisor view: leave request approval list (in-app fallback view — supervisors
