@@ -1,8 +1,6 @@
 # Checkdee — Execution Plan
 
-**Current focus:** Phase 3, in progress — dashboard, employee directory, schedule
-management, holidays, and CSV import are done; next up is the supervisor leave-approval
-list, the last Phase 3 item.
+**Current focus:** Phase 3 done. Phase 4 (backend integration) not yet started.
 
 This is a living document. Update it in place as phases and tasks complete — don't
 recreate it, don't leave stale status.
@@ -72,7 +70,7 @@ Status: **done**
 
 ## Phase 3 — Admin/HR views (desktop-first)
 
-Status: **in progress**
+Status: **done**
 
 - [x] Dashboard: present today, pending approvals, absent today, on-leave today —
       4-stat grid matching the employee dashboard's card style, via new org-wide
@@ -99,8 +97,12 @@ Status: **in progress**
       merge semantics as the single-employee editor above, and both now share a
       `scheduleVersion` counter so the editor reflects an import immediately instead of
       only after re-selecting the employee.
-- [ ] Supervisor view: leave request approval list (in-app fallback view — supervisors
-      also approve via the email-approval link).
+- [x] Supervisor view: leave request approval list (in-app fallback view — supervisors
+      also approve via the email-approval link). Org-wide table (pending sorted first),
+      Approve/Reject set `status`/`decidedBy`/`decidedAt`; decided rows lose the action
+      buttons since decisions are final in this UI. `/admin/leave-requests` is reachable
+      by admin/supervisor/system_owner alike (the sidebar doesn't yet vary by role —
+      that's a Phase 4 concern once real permissions exist).
 
 ## Phase 4 — Backend integration
 
