@@ -3,8 +3,11 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { CalendarRange } from "lucide-react";
 import { z } from "zod";
 
+import { EmployeeListRow } from "@/components/employee-list-row";
+import { EmployeePageHeader } from "@/components/employee-page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,15 +16,19 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { getLeaveRequestsForEmployee, type LeaveStatus, type MockLeaveRequest } from "@/lib/mock-data";
 import { useMe } from "@/lib/session";
+import { cn } from "@/lib/utils";
+
+const fieldClass =
+  "h-12 rounded-xl border-border bg-muted/40 px-3 text-sm placeholder:text-sm focus-visible:border-brand-600 focus-visible:bg-card focus-visible:ring-brand-600/20";
 
 const leaveRequestSchema = z
   .object({
-    start_date: z.string().min(1, "Start date is required"),
-    end_date: z.string().min(1, "End date is required"),
-    reason: z.string().trim().min(1, "Reason is required"),
+    start_date: z.string().min(1, "กรุณาระบุวันที่เริ่มลา"),
+    end_date: z.string().min(1, "กรุณาระบุวันที่สิ้นสุด"),
+    reason: z.string().trim().min(1, "กรุณาระบุเหตุผล"),
   })
   .refine((data) => data.end_date >= data.start_date, {
-    message: "End date must be on or after the start date",
+    message: "วันที่สิ้นสุดต้องไม่ก่อนวันที่เริ่มลา",
     path: ["end_date"],
   });
 
@@ -31,6 +38,12 @@ const statusBadgeVariant: Record<LeaveStatus, "warning" | "success" | "danger"> 
   pending: "warning",
   approved: "success",
   rejected: "danger",
+};
+
+const statusLabelTh: Record<LeaveStatus, string> = {
+  pending: "รอดำเนินการ",
+  approved: "อนุมัติแล้ว",
+  rejected: "ไม่อนุมัติ",
 };
 
 function formatDateRange(startDate: string, endDate: string): string {
@@ -67,76 +80,88 @@ export default function LeavePage() {
   };
 
   return (
-    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 p-6">
-      <h1 className="text-2xl font-bold text-foreground">Leave</h1>
+    <div className="flex w-full flex-1 flex-col">
+      <EmployeePageHeader title="ขอลา" subtitle="จัดการคำขอลาของคุณ" />
 
-      <Card className="rounded-2xl shadow-sm">
-        <CardHeader>
-          <CardTitle>Request leave</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="start_date">Start date</Label>
-                <Input id="start_date" type="date" {...register("start_date")} />
-                {errors.start_date && (
-                  <p className="text-xs text-danger-foreground">{errors.start_date.message}</p>
-                )}
+      <div className="flex flex-col gap-6 px-6 py-6">
+        <Card className="rounded-2xl">
+          <CardHeader>
+            <CardTitle>ยื่นคำขอลา</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="start_date" className="text-xs text-muted-foreground">
+                    วันที่เริ่มลา
+                  </Label>
+                  <Input id="start_date" type="date" className={fieldClass} {...register("start_date")} />
+                  {errors.start_date && (
+                    <p className="text-xs text-danger-foreground">{errors.start_date.message}</p>
+                  )}
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="end_date" className="text-xs text-muted-foreground">
+                    วันที่สิ้นสุด
+                  </Label>
+                  <Input id="end_date" type="date" className={fieldClass} {...register("end_date")} />
+                  {errors.end_date && (
+                    <p className="text-xs text-danger-foreground">{errors.end_date.message}</p>
+                  )}
+                </div>
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="end_date">End date</Label>
-                <Input id="end_date" type="date" {...register("end_date")} />
-                {errors.end_date && (
-                  <p className="text-xs text-danger-foreground">{errors.end_date.message}</p>
+                <Label htmlFor="reason" className="text-xs text-muted-foreground">
+                  เหตุผล
+                </Label>
+                <Textarea
+                  id="reason"
+                  placeholder="ระบุเหตุผลการลา"
+                  className={cn(fieldClass, "min-h-32 py-3")}
+                  {...register("reason")}
+                />
+                {errors.reason && (
+                  <p className="text-xs text-danger-foreground">{errors.reason.message}</p>
                 )}
               </div>
-            </div>
 
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="reason">Reason</Label>
-              <Textarea id="reason" placeholder="What's this leave for?" {...register("reason")} />
-              {errors.reason && (
-                <p className="text-xs text-danger-foreground">{errors.reason.message}</p>
-              )}
-            </div>
+              <Button
+                type="submit"
+                disabled={isSubmitting}
+                className="mt-2 h-12 w-full rounded-2xl bg-accent-600 text-base font-semibold text-white hover:bg-accent-700"
+              >
+                {isSubmitting ? "กำลังส่ง…" : "ส่งคำขอ"}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
 
-            <Button type="submit" disabled={isSubmitting} className="mt-2 w-full">
-              {isSubmitting ? "Submitting…" : "Submit request"}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
-
-      <Card className="rounded-2xl shadow-sm">
-        <CardHeader>
-          <CardTitle>Your requests</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3">
-          {requests.length === 0 && (
-            <p className="text-sm text-muted-foreground">No leave requests yet.</p>
-          )}
-          {requests.map((request) => (
-            <div
-              key={request.id}
-              className="flex items-center justify-between gap-3 rounded-xl border border-border p-3"
-            >
-              <div>
-                <p className="text-sm font-medium text-foreground">
-                  {formatDateRange(request.startDate, request.endDate)}
-                </p>
-                {request.reason && (
-                  <p className="text-xs text-muted-foreground">{request.reason}</p>
-                )}
-              </div>
-              <Badge variant={statusBadgeVariant[request.status]} className="capitalize">
-                {request.status}
-              </Badge>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
-    </main>
+        <Card className="rounded-2xl">
+          <CardHeader>
+            <CardTitle>คำขอของคุณ</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col">
+            {requests.length === 0 && (
+              <p className="text-sm text-muted-foreground">ยังไม่มีคำขอลา</p>
+            )}
+            {requests.map((request) => (
+              <EmployeeListRow
+                key={request.id}
+                icon={CalendarRange}
+                label={formatDateRange(request.startDate, request.endDate)}
+                sublabel={request.reason ?? undefined}
+                trailing={
+                  <Badge variant={statusBadgeVariant[request.status]}>
+                    {statusLabelTh[request.status]}
+                  </Badge>
+                }
+              />
+            ))}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
   );
 }

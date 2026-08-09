@@ -4,7 +4,7 @@ import { createContext, useContext, useState } from "react";
 
 // In-memory stand-in for today's attendance_records row — resets on
 // reload. Geofence/WiFi verification is backend work (PLAN.md Phase 4);
-// this only stubs the interaction so the check-in/out screen has
+// this only stubs the interaction so the dashboard's check-in/out CTA has
 // something to react to.
 export type TodayAttendance = {
   checkInAt: string | null;

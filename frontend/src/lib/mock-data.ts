@@ -21,6 +21,11 @@ export type MockEmployee = {
   offboardedAt: string | null;
   offboardedBy: string | null;
   offboardedReason: string | null;
+  // Optional: not yet managed by the admin employee form, only shown on
+  // the employee's own profile page.
+  nickname?: string | null;
+  studentId?: string | null;
+  phoneNumber?: string | null;
 };
 
 export type MockWorkSchedule = {
@@ -82,6 +87,9 @@ export const mockEmployees: MockEmployee[] = [
     offboardedAt: null,
     offboardedBy: null,
     offboardedReason: null,
+    nickname: "Nira",
+    studentId: "672110160",
+    phoneNumber: "081-234-5678",
   },
   {
     id: "user-2",
@@ -96,6 +104,9 @@ export const mockEmployees: MockEmployee[] = [
     offboardedAt: null,
     offboardedBy: null,
     offboardedReason: null,
+    nickname: "Ploy",
+    studentId: "652110145",
+    phoneNumber: "082-345-6789",
   },
   {
     id: "user-3",
@@ -110,6 +121,9 @@ export const mockEmployees: MockEmployee[] = [
     offboardedAt: null,
     offboardedBy: null,
     offboardedReason: null,
+    nickname: "Kritsada",
+    studentId: "672110233",
+    phoneNumber: "083-456-7890",
   },
   {
     id: "user-4",
@@ -124,6 +138,9 @@ export const mockEmployees: MockEmployee[] = [
     offboardedAt: null,
     offboardedBy: null,
     offboardedReason: null,
+    nickname: "Anong",
+    studentId: null,
+    phoneNumber: "084-567-8901",
   },
   {
     id: "user-5",
@@ -138,6 +155,9 @@ export const mockEmployees: MockEmployee[] = [
     offboardedAt: "2026-06-30T00:00:00Z",
     offboardedBy: "user-4",
     offboardedReason: "Graduated",
+    nickname: "Somsak",
+    studentId: "642110198",
+    phoneNumber: "085-678-9012",
   },
 ];
 

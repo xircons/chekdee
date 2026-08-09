@@ -48,11 +48,12 @@ Status: **done**
       (hours this month, late count, absence count, leave balance) — now wired to
       `mock-data.ts` accessors (`getMonthlyAttendanceStats`, `getLeaveBalance`) keyed to
       the logged-in employee's id.
-- [x] Check-in/out screen — `(employee)/check-in/page.tsx`. UI only, as planned:
-      geofence/WiFi verification is a Phase 4 backend concern. Today's check-in/out
-      state lives in an in-memory `AttendanceProvider`
-      (`src/lib/attendance-store.tsx`), scoped to the employee layout, resets on
-      reload — there's no real persistence until Phase 4.
+- [x] Check-in/out action — folded into the dashboard status card (no standalone
+      screen) as part of the ttb-inspired redesign. UI only, as planned: geofence/WiFi
+      verification is a Phase 4 backend concern. Today's check-in/out state lives in
+      an in-memory `AttendanceProvider` (`src/lib/attendance-store.tsx`), scoped to
+      the employee layout, resets on reload — there's no real persistence until
+      Phase 4.
 - [x] Leave request form — react-hook-form + zod, validated against the leave fields
       (date range, reason) matching `leave_requests`, including the
       `end_date >= start_date` DB constraint. Built into the same `/leave` page as the
