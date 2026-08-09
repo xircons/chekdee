@@ -1,23 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-
 import { Badge } from "@/components/ui/badge";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { apiFetch } from "@/lib/api";
-import { clearAccessToken, getAccessToken } from "@/lib/auth";
-
-type Me = {
-  first_name: string | null;
-  display_name: string | null;
-  is_registered: boolean;
-};
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useMe } from "@/lib/session";
 
 const stats = [
   { label: "Hours this month", value: "128" },
@@ -26,41 +11,8 @@ const stats = [
   { label: "Leave balance", value: "6" },
 ];
 
-export default function Home() {
-  const router = useRouter();
-  const [me, setMe] = useState<Me | null>(null);
-
-  useEffect(() => {
-    if (!getAccessToken()) {
-      router.replace("/login");
-      return;
-    }
-
-    (async () => {
-      const res = await apiFetch("/auth/me");
-      if (!res.ok) {
-        clearAccessToken();
-        router.replace("/login");
-        return;
-      }
-
-      const data = (await res.json()) as Me;
-      if (!data.is_registered) {
-        router.replace("/register");
-        return;
-      }
-
-      setMe(data);
-    })();
-  }, [router]);
-
-  if (!me) {
-    return (
-      <main className="flex min-h-full flex-1 items-center justify-center p-6">
-        <p className="text-sm text-muted-foreground">Loading…</p>
-      </main>
-    );
-  }
+export default function EmployeeHome() {
+  const me = useMe();
 
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 p-6">

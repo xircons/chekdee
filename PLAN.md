@@ -1,7 +1,6 @@
 # Checkdee — Execution Plan
 
-**Current focus:** Phase 1 — frontend scaffold: layout shells (bottom tab nav / admin
-sidebar) and the mock/stub data layer.
+**Current focus:** Phase 1 done. Phase 2 (employee views) not yet started.
 
 This is a living document. Update it in place as phases and tasks complete — don't
 recreate it, don't leave stale status.
@@ -17,20 +16,29 @@ re-read it at Phase 4.
 
 ## Phase 1 — Frontend scaffold
 
-Status: **in progress**
+Status: **done**
 
 - [x] Next.js + Tailwind + shadcn/ui project in place (already scaffolded on `dev`).
 - [x] Color, typography, spacing, and radius tokens from `design.md` are wired up —
       Tailwind v4 uses CSS-based theming (`@theme` in `globals.css`), not a JS
       `tailwind.config`, so this is done there rather than in a config file.
-- [ ] Layout shell: bottom tab navigation (Home, Leave, Schedule, Profile) for the
-      employee mobile view.
-- [ ] Layout shell: left sidebar navigation for the admin panel (desktop-first), per the
-      layout patterns section of `design.md`.
-- [ ] Mock/stub data layer (fixtures + a mock API module) standing in for the backend,
+- [x] Layout shell: bottom tab navigation (Home, Leave, Schedule, Profile) for the
+      employee mobile view — `(employee)/layout.tsx` + `components/employee-nav.tsx`,
+      routes `/`, `/leave`, `/schedule`, `/profile` (Leave/Schedule are placeholder
+      pages until Phase 2).
+- [x] Layout shell: left sidebar navigation for the admin panel (desktop-first), per the
+      layout patterns section of `design.md` — `admin/layout.tsx` +
+      `components/admin-sidebar.tsx`, routes `/admin`, `/admin/employees`,
+      `/admin/schedules`, `/admin/holidays`, `/admin/leave-requests` (all placeholder
+      pages until Phase 3).
+- [x] Role-based landing: `/auth/me`'s `role` routes employees to the tab-nav shell and
+      admin/supervisor/system_owner to the sidebar shell, each redirecting away from the
+      other's routes.
+- [x] Mock/stub data layer (fixtures + typed accessors) standing in for the backend,
       structured to match the DB schema already designed on `feature/db-schema`
       (`users`/`teams`, `work_schedules`, `holidays`, `attendance_records`,
-      `leave_requests`).
+      `leave_requests`) — `src/lib/mock-data.ts`. Not yet consumed by any page; that
+      starts in Phase 2.
 
 ## Phase 2 — Employee views (mobile-first)
 
