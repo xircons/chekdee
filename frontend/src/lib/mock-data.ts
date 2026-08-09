@@ -165,6 +165,16 @@ export const mockLeaveRequests: MockLeaveRequest[] = [
 // once leave accrual is implemented (Phase 4).
 export const ANNUAL_LEAVE_DAYS = 10;
 
+export function getWorkScheduleForEmployee(employeeId: string): MockWorkSchedule[] {
+  return mockWorkSchedules
+    .filter((s) => s.employeeId === employeeId)
+    .sort((a, b) => a.dayOfWeek - b.dayOfWeek);
+}
+
+export function getUpcomingHolidays(fromDate: string): MockHoliday[] {
+  return mockHolidays.filter((h) => h.date >= fromDate).sort((a, b) => a.date.localeCompare(b.date));
+}
+
 export function getAttendanceForEmployee(employeeId: string): MockAttendanceRecord[] {
   return mockAttendanceRecords.filter((r) => r.employeeId === employeeId);
 }

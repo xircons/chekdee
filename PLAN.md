@@ -1,7 +1,7 @@
 # Checkdee — Execution Plan
 
-**Current focus:** Phase 2, in progress — dashboard, check-in/out, and the leave request
-form are done; next up is the schedule/calendar view.
+**Current focus:** Phase 2, in progress — dashboard, check-in/out, leave, and schedule
+are done; next up is the profile view (the last Phase 2 item).
 
 This is a living document. Update it in place as phases and tasks complete — don't
 recreate it, don't leave stale status.
@@ -62,7 +62,9 @@ Status: **in progress**
 - [x] My requests list — pending/approved/rejected, mock data for now. Newly submitted
       requests are held in local page state (session-only, not persisted) and prepended
       to the mock list.
-- [ ] Schedule/calendar view.
+- [x] Schedule/calendar view — weekly recurring schedule (from `work_schedules`, via
+      `getWorkScheduleForEmployee`) with today highlighted, plus an upcoming-holidays
+      list (`getUpcomingHolidays`).
 - [ ] Profile view.
 
 ## Phase 3 — Admin/HR views (desktop-first)
