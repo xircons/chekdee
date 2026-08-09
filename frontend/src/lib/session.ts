@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { apiFetch } from "@/lib/api";
 import { clearAccessToken, getAccessToken } from "@/lib/auth";
+import { clearDevSession, getDevSessionUser, isDevSessionActive } from "@/lib/dev-auth";
 
 export type Role = "system_owner" | "admin" | "supervisor" | "employee";
 
@@ -27,12 +28,19 @@ export function useSession(): { me: Me | null; loading: boolean } {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!getAccessToken()) {
+    if (!getDevSessionUser() && !getAccessToken()) {
       router.replace("/login");
       return;
     }
 
     (async () => {
+      const devUser = getDevSessionUser();
+      if (devUser) {
+        setMe(devUser);
+        setLoading(false);
+        return;
+      }
+
       const res = await apiFetch("/auth/me");
       if (!res.ok) {
         clearAccessToken();
@@ -70,6 +78,12 @@ export function useMe(): Me {
 // Clears the server-side session and local token. Callers navigate to
 // /login themselves via useRouter (this isn't a hook, so it can't).
 export async function logout(): Promise<void> {
+  if (isDevSessionActive()) {
+    clearDevSession();
+    clearAccessToken();
+    return;
+  }
+
   await apiFetch("/auth/logout", { method: "POST" });
   clearAccessToken();
 }
