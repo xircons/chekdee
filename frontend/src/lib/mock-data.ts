@@ -160,3 +160,56 @@ export const mockLeaveRequests: MockLeaveRequest[] = [
   { id: "leave-3", employeeId: "user-2", startDate: "2026-08-15", endDate: "2026-08-16", reason: "Personal", status: "pending", decidedBy: null, decidedAt: null },
   { id: "leave-4", employeeId: "user-3", startDate: "2026-06-02", endDate: "2026-06-03", reason: "Sick", status: "rejected", decidedBy: "user-4", decidedAt: "2026-06-01T03:00:00Z" },
 ];
+
+// Placeholder policy — the real annual entitlement lives in the backend
+// once leave accrual is implemented (Phase 4).
+export const ANNUAL_LEAVE_DAYS = 10;
+
+export function getAttendanceForEmployee(employeeId: string): MockAttendanceRecord[] {
+  return mockAttendanceRecords.filter((r) => r.employeeId === employeeId);
+}
+
+export function getLeaveRequestsForEmployee(employeeId: string): MockLeaveRequest[] {
+  return mockLeaveRequests
+    .filter((r) => r.employeeId === employeeId)
+    .sort((a, b) => b.startDate.localeCompare(a.startDate));
+}
+
+function inclusiveDayCount(startDate: string, endDate: string): number {
+  const ms = new Date(`${endDate}T00:00:00Z`).getTime() - new Date(`${startDate}T00:00:00Z`).getTime();
+  return Math.round(ms / 86_400_000) + 1;
+}
+
+export function getLeaveBalance(employeeId: string, year: number): number {
+  const usedDays = mockLeaveRequests
+    .filter(
+      (r) =>
+        r.employeeId === employeeId &&
+        r.status === "approved" &&
+        new Date(r.startDate).getUTCFullYear() === year
+    )
+    .reduce((sum, r) => sum + inclusiveDayCount(r.startDate, r.endDate), 0);
+  return ANNUAL_LEAVE_DAYS - usedDays;
+}
+
+export type MonthlyAttendanceStats = {
+  hours: number;
+  lateCount: number;
+  absentCount: number;
+};
+
+// yearMonth like "2026-08".
+export function getMonthlyAttendanceStats(employeeId: string, yearMonth: string): MonthlyAttendanceStats {
+  const records = getAttendanceForEmployee(employeeId).filter((r) => r.workDate.startsWith(yearMonth));
+
+  const hours = records.reduce((sum, r) => {
+    if (!r.checkInAt || !r.checkOutAt) return sum;
+    return sum + (new Date(r.checkOutAt).getTime() - new Date(r.checkInAt).getTime()) / 3_600_000;
+  }, 0);
+
+  return {
+    hours: Math.round(hours * 10) / 10,
+    lateCount: records.filter((r) => r.status === "สาย").length,
+    absentCount: records.filter((r) => r.status === "ขาด").length,
+  };
+}

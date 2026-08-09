@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 import { EmployeeNav } from "@/components/employee-nav";
+import { AttendanceProvider } from "@/lib/attendance-store";
 import { MeContext, useSession } from "@/lib/session";
 
 export default function EmployeeLayout({ children }: { children: React.ReactNode }) {
@@ -26,10 +27,12 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
 
   return (
     <MeContext.Provider value={me}>
-      <div className="mx-auto flex min-h-full w-full max-w-3xl flex-1 flex-col">
-        <div className="flex-1">{children}</div>
-        <EmployeeNav />
-      </div>
+      <AttendanceProvider>
+        <div className="mx-auto flex min-h-full w-full max-w-3xl flex-1 flex-col">
+          <div className="flex-1">{children}</div>
+          <EmployeeNav />
+        </div>
+      </AttendanceProvider>
     </MeContext.Provider>
   );
 }

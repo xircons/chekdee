@@ -1,6 +1,7 @@
 # Checkdee — Execution Plan
 
-**Current focus:** Phase 1 done. Phase 2 (employee views) not yet started.
+**Current focus:** Phase 2, in progress — dashboard and check-in/out screen are done;
+next up is the leave request form.
 
 This is a living document. Update it in place as phases and tasks complete — don't
 recreate it, don't leave stale status.
@@ -42,13 +43,17 @@ Status: **done**
 
 ## Phase 2 — Employee views (mobile-first)
 
-Status: **not started**
+Status: **in progress**
 
-- [ ] Home/dashboard: status card, 2-column stat grid (hours this month, late count,
-      absence count, leave balance) — refactor the current ad hoc version in `page.tsx`
-      into the real layout shell.
-- [ ] Check-in/out screen — UI only for now; geofence/WiFi logic is backend work, stub
-      the interaction.
+- [x] Home/dashboard: status card (today's check-in/out state), 2-column stat grid
+      (hours this month, late count, absence count, leave balance) — now wired to
+      `mock-data.ts` accessors (`getMonthlyAttendanceStats`, `getLeaveBalance`) keyed to
+      the logged-in employee's id.
+- [x] Check-in/out screen — `(employee)/check-in/page.tsx`. UI only, as planned:
+      geofence/WiFi verification is a Phase 4 backend concern. Today's check-in/out
+      state lives in an in-memory `AttendanceProvider`
+      (`src/lib/attendance-store.tsx`), scoped to the employee layout, resets on
+      reload — there's no real persistence until Phase 4.
 - [ ] Leave request form — react-hook-form + zod, validated against the leave fields
       (date range, reason) matching `leave_requests`.
 - [ ] My requests list — pending/approved/rejected, mock data for now.

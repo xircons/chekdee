@@ -1,18 +1,34 @@
 "use client";
 
+import { useRouter } from "next/navigation";
+
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { useTodayAttendance } from "@/lib/attendance-store";
+import { getLeaveBalance, getMonthlyAttendanceStats } from "@/lib/mock-data";
 import { useMe } from "@/lib/session";
 
-const stats = [
-  { label: "Hours this month", value: "128" },
-  { label: "Late (สาย)", value: "2" },
-  { label: "Absent (ขาด)", value: "0" },
-  { label: "Leave balance", value: "6" },
-];
+function formatTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
 
 export default function EmployeeHome() {
   const me = useMe();
+  const router = useRouter();
+  const { today } = useTodayAttendance();
+
+  const now = new Date();
+  const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const monthly = getMonthlyAttendanceStats(me.id, yearMonth);
+  const leaveBalance = getLeaveBalance(me.id, now.getFullYear());
+
+  const stats = [
+    { label: "Hours this month", value: String(monthly.hours) },
+    { label: "Late (สาย)", value: String(monthly.lateCount) },
+    { label: "Absent (ขาด)", value: String(monthly.absentCount) },
+    { label: "Leave balance", value: String(leaveBalance) },
+  ];
 
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 p-6">
@@ -24,6 +40,44 @@ export default function EmployeeHome() {
           Employee attendance for CAMT, Chiang Mai University
         </p>
       </div>
+
+      <Card className="rounded-2xl shadow-sm">
+        <CardContent className="flex items-center justify-between p-4">
+          <div>
+            {!today.checkInAt && (
+              <>
+                <p className="text-sm font-medium text-foreground">Not checked in</p>
+                <Badge variant="warning" className="mt-1">
+                  Pending
+                </Badge>
+              </>
+            )}
+            {today.checkInAt && !today.checkOutAt && (
+              <>
+                <p className="text-sm font-medium text-foreground">
+                  Checked in at {formatTime(today.checkInAt)}
+                </p>
+                <Badge variant="success" className="mt-1">
+                  Present
+                </Badge>
+              </>
+            )}
+            {today.checkInAt && today.checkOutAt && (
+              <>
+                <p className="text-sm font-medium text-foreground">
+                  Checked out at {formatTime(today.checkOutAt)}
+                </p>
+                <Badge variant="success" className="mt-1">
+                  Done for today
+                </Badge>
+              </>
+            )}
+          </div>
+          <Button onClick={() => router.push("/check-in")}>
+            {today.checkInAt && !today.checkOutAt ? "Check Out" : "Check In"}
+          </Button>
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-2 gap-4">
         {stats.map((stat) => (
@@ -37,18 +91,6 @@ export default function EmployeeHome() {
           </Card>
         ))}
       </div>
-
-      <Card className="rounded-2xl shadow-sm">
-        <CardHeader>
-          <CardTitle>Status badges</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-wrap gap-2">
-          <Badge variant="success">Present</Badge>
-          <Badge variant="warning">สาย</Badge>
-          <Badge variant="danger">ขาด</Badge>
-          <Badge variant="status-secondary">On leave</Badge>
-        </CardContent>
-      </Card>
     </main>
   );
 }
