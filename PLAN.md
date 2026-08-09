@@ -1,7 +1,7 @@
 # Checkdee — Execution Plan
 
-**Current focus:** Phase 2, in progress — dashboard and check-in/out screen are done;
-next up is the leave request form.
+**Current focus:** Phase 2, in progress — dashboard, check-in/out, and the leave request
+form are done; next up is the schedule/calendar view.
 
 This is a living document. Update it in place as phases and tasks complete — don't
 recreate it, don't leave stale status.
@@ -54,9 +54,14 @@ Status: **in progress**
       state lives in an in-memory `AttendanceProvider`
       (`src/lib/attendance-store.tsx`), scoped to the employee layout, resets on
       reload — there's no real persistence until Phase 4.
-- [ ] Leave request form — react-hook-form + zod, validated against the leave fields
-      (date range, reason) matching `leave_requests`.
-- [ ] My requests list — pending/approved/rejected, mock data for now.
+- [x] Leave request form — react-hook-form + zod, validated against the leave fields
+      (date range, reason) matching `leave_requests`, including the
+      `end_date >= start_date` DB constraint. Built into the same `/leave` page as the
+      requests list below (design.md's nav has one "Leave" tab, not a separate route per
+      concern).
+- [x] My requests list — pending/approved/rejected, mock data for now. Newly submitted
+      requests are held in local page state (session-only, not persisted) and prepended
+      to the mock list.
 - [ ] Schedule/calendar view.
 - [ ] Profile view.
 
