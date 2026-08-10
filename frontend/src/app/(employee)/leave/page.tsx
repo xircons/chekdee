@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { CalendarRange, ChevronDown, ChevronUp, Mail } from "lucide-react";
+import { CalendarRange, ChevronDown, ChevronUp, FileText, Image as ImageIcon, Mail, Upload, X } from "lucide-react";
 import { z } from "zod";
 
 import { DetailModal } from "@/components/detail-modal";
@@ -65,7 +66,7 @@ const VISIBLE_LEAVE_REQUESTS = 5;
 
 function EmailContentBlock({ subject, body }: { subject: string; body: string }) {
   return (
-    <div className="max-h-72 overflow-y-auto rounded-xl bg-slate-50 px-4 py-3.5">
+    <div className="min-h-0 flex-1 overflow-y-auto rounded-xl bg-slate-50 px-4 py-3.5">
       <p className="text-xs text-muted-foreground">หัวข้อ</p>
       <p className="text-sm font-semibold text-foreground">{subject}</p>
       <div className="mt-3 border-t border-border pt-3">
@@ -75,13 +76,62 @@ function EmailContentBlock({ subject, body }: { subject: string; body: string })
   );
 }
 
+type LeaveAttachment = { id: string; name: string; isImage: boolean; size: number };
+
+function formatFileSize(bytes: number) {
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+}
+
 export default function LeavePage() {
+  return (
+    <Suspense fallback={null}>
+      <LeavePageContent />
+    </Suspense>
+  );
+}
+
+function LeavePageContent() {
   const me = useMe();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [requests, setRequests] = useState<MockLeaveRequest[]>(() => getLeaveRequestsForEmployee(me.id));
   const [showPreview, setShowPreview] = useState(false);
   const [requestListExpanded, setRequestListExpanded] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<MockLeaveRequest | null>(null);
   const [requestModalOpen, setRequestModalOpen] = useState(false);
+  const [attachments, setAttachments] = useState<LeaveAttachment[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Deep-link from Home's pending-request row (?requestId=...) — open that
+  // request's detail modal once, then strip the param so closing/reopening
+  // the modal later doesn't re-trigger this.
+  useEffect(() => {
+    const requestId = searchParams.get("requestId");
+    if (!requestId) return;
+    const match = requests.find((r) => r.id === requestId);
+    if (match) {
+      setSelectedRequest(match);
+      setRequestModalOpen(true);
+    }
+    router.replace("/leave", { scroll: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleAttachmentSelect = (fileList: FileList | null) => {
+    if (!fileList || fileList.length === 0) return;
+    const newAttachments = Array.from(fileList).map((file) => ({
+      id: crypto.randomUUID(),
+      name: file.name,
+      isImage: file.type.startsWith("image/"),
+      size: file.size,
+    }));
+    setAttachments((prev) => [...prev, ...newAttachments]);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const removeAttachment = (id: string) => {
+    setAttachments((prev) => prev.filter((a) => a.id !== id));
+  };
 
   const {
     register,
@@ -117,6 +167,7 @@ export default function LeavePage() {
     startDate: startDate ?? "",
     endDate: endDate ?? "",
     reason: reason ?? "",
+    attachmentCount: attachments.length,
   });
 
   const onSubmit = (values: LeaveRequestForm) => {
@@ -133,6 +184,7 @@ export default function LeavePage() {
     };
     setRequests((prev) => [newRequest, ...prev]);
     reset();
+    setAttachments([]);
     setShowPreview(false);
   };
 
@@ -164,10 +216,11 @@ export default function LeavePage() {
             <CardTitle>ยื่นคำขอลา</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="mb-4 flex items-start gap-2 rounded-xl bg-brand-100 p-3">
+            <div className="mb-4 flex items-start gap-3 rounded-xl bg-brand-100 p-4">
               <Mail className="mt-0.5 size-4 shrink-0 text-brand-600" />
-              <p className="text-xs text-brand-600">
+              <p className="text-xs leading-relaxed text-brand-600">
                 คำขอนี้จะถูกส่งเป็นอีเมลถึงหัวหน้างานของคุณโดยตรง
+                <br />
                 กรุณาเขียนด้วยถ้อยคำสุภาพและเป็นทางการ
               </p>
             </div>
@@ -193,8 +246,8 @@ export default function LeavePage() {
                   value={autoSubject}
                   className={cn(fieldClass, "cursor-default bg-muted/60")}
                 />
-                <p className="text-xs text-muted-foreground">
-                  สร้างจากชื่อและวันที่ลาโดยอัตโนมัติ - เลือกวันที่เริ่มลา/สิ้นสุดด้านล่างแล้วหัวข้อจะอัปเดตทันที
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                  อัปเดตวันเวลาทันทีเมื่อเลือกวันที่ด้านล่าง
                 </p>
               </div>
 
@@ -247,6 +300,56 @@ export default function LeavePage() {
                 />
                 {errors.reason && (
                   <p className="text-xs text-danger-foreground">{errors.reason.message}</p>
+                )}
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*,.pdf"
+                  capture="environment"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => handleAttachmentSelect(e.target.files)}
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex h-12 items-center justify-center gap-2 rounded-xl border border-dashed border-brand-600/40 text-sm font-medium text-brand-600 transition-colors hover:bg-brand-100"
+                >
+                  <Upload className="size-4" />
+                  เพิ่มเอกสารแนบ (ถ้ามี)
+                </button>
+
+                {attachments.length > 0 && (
+                  <div className="flex flex-col gap-1.5">
+                    {attachments.map((attachment) => {
+                      const AttachmentIcon = attachment.isImage ? ImageIcon : FileText;
+                      return (
+                        <div
+                          key={attachment.id}
+                          className="flex items-center gap-2 rounded-xl bg-muted/40 px-3 py-2"
+                        >
+                          <AttachmentIcon className="size-4 shrink-0 text-brand-600" />
+                          <p className="min-w-0 flex-1 truncate text-xs text-foreground">
+                            {attachment.name}{" "}
+                            <span className="text-muted-foreground">
+                              ({formatFileSize(attachment.size)})
+                            </span>
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => removeAttachment(attachment.id)}
+                            aria-label="ลบไฟล์แนบ"
+                            className="flex size-6 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+                          >
+                            <X className="size-3.5" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
                 )}
               </div>
 

@@ -1,7 +1,5 @@
 "use client";
 
-import { PartyPopper } from "lucide-react";
-
 import { EmployeeListRow } from "@/components/employee-list-row";
 import { EmployeePageHeader } from "@/components/employee-page-header";
 import { EmployeeScheduleCalendar } from "@/components/employee-schedule-calendar";
@@ -50,7 +48,6 @@ export default function SchedulePage() {
             {holidays.map((holiday) => (
               <EmployeeListRow
                 key={holiday.id}
-                icon={PartyPopper}
                 label={holiday.name}
                 sublabel={holiday.localName ?? undefined}
                 value={formatHolidayDate(holiday.date)}

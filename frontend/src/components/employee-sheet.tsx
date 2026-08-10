@@ -57,7 +57,7 @@ function EmployeeSheetContent({
         data-slot="employee-sheet-content"
         className={cn(
           position === "bottom"
-            ? "fixed inset-x-0 bottom-0 z-50 max-h-[92vh] w-full overflow-y-auto rounded-t-3xl p-5 pb-6 duration-200 data-open:animate-in data-open:slide-in-from-bottom-8 data-closed:animate-out data-closed:slide-out-to-bottom-8 md:right-auto md:left-1/2 md:w-[520px] md:-translate-x-1/2"
+            ? "fixed inset-x-0 bottom-0 z-50 min-h-[50vh] max-h-[92vh] w-full overflow-y-auto rounded-t-3xl p-5 pb-6 duration-200 data-open:animate-in data-open:slide-in-from-bottom-8 data-closed:animate-out data-closed:slide-out-to-bottom-8 md:right-auto md:left-1/2 md:w-[520px] md:-translate-x-1/2"
             : "fixed top-1/2 left-1/2 z-50 w-[calc(100%-2.5rem)] max-w-xs -translate-x-1/2 -translate-y-1/2 rounded-3xl p-5 duration-200 data-open:animate-in data-open:slide-in-from-bottom-4 data-open:zoom-in-95 data-closed:animate-out data-closed:slide-out-to-bottom-4 data-closed:zoom-out-95",
           "bg-popover text-sm text-popover-foreground ring-1 ring-foreground/10 outline-none",
           className
@@ -89,7 +89,7 @@ function EmployeeSheetTitle({ className, ...props }: DialogPrimitive.Title.Props
   return (
     <DialogPrimitive.Title
       data-slot="employee-sheet-title"
-      className={cn("font-heading text-base leading-none font-medium", className)}
+      className={cn("pr-10 font-heading text-base leading-none font-medium", className)}
       {...props}
     />
   );

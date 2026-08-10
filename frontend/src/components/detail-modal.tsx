@@ -44,7 +44,14 @@ export function DetailModal({
     <EmployeeSheet open={open} onOpenChange={onOpenChange}>
       <EmployeeSheetContent
         position={size === "compact" ? "center" : "bottom"}
-        className="flex flex-col gap-4"
+        className={cn(
+          "flex flex-col gap-4",
+          // The email preview's content block scrolls itself (flex-1 +
+          // overflow-y-auto) and should fill the sheet's full height —
+          // the sheet itself must stop scrolling so its bound (min/max
+          // vh) actually caps the height flex-1 grows into.
+          size === "sheet" && "overflow-y-hidden"
+        )}
       >
         <EmployeeSheetHeader className="flex-row items-center gap-3">
           <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-brand-100 text-brand-600">

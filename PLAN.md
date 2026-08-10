@@ -1,6 +1,9 @@
 # Checkdee — Execution Plan
 
-**Current focus:** Phase 3 done. Phase 4 (backend integration) not yet started.
+**Current focus:** Phase 3 done. Employee shell went through a full ttb-inspired
+redesign pass after Phase 2 was first marked done (see "Employee shell redesign"
+below) — that work is done on feature branches, not yet merged into `dev`. Phase 4
+(backend integration) not yet started.
 
 This is a living document. Update it in place as phases and tasks complete — don't
 recreate it, don't leave stale status.
@@ -42,32 +45,97 @@ Status: **done**
 
 ## Phase 2 — Employee views (mobile-first)
 
-Status: **done**
+Status: **done**, then substantially redesigned — see "Employee shell redesign" below
+for what's actually true today. Original Phase 2 bullets (2-column stat grid, a
+full-width check-in button, dot-based weekly summary, holiday/leave-balance cards on
+Home) have all been superseded; kept only as history:
 
-- [x] Home/dashboard: status card (today's check-in/out state), 2-column stat grid
-      (hours this month, late count, absence count, leave balance) — now wired to
-      `mock-data.ts` accessors (`getMonthlyAttendanceStats`, `getLeaveBalance`) keyed to
-      the logged-in employee's id.
-- [x] Check-in/out action — folded into the dashboard status card (no standalone
-      screen) as part of the ttb-inspired redesign. UI only, as planned: geofence/WiFi
-      verification is a Phase 4 backend concern. Today's check-in/out state lives in
-      an in-memory `AttendanceProvider` (`src/lib/attendance-store.tsx`), scoped to
-      the employee layout, resets on reload — there's no real persistence until
-      Phase 4.
 - [x] Leave request form — react-hook-form + zod, validated against the leave fields
-      (date range, reason) matching `leave_requests`, including the
-      `end_date >= start_date` DB constraint. Built into the same `/leave` page as the
-      requests list below (design.md's nav has one "Leave" tab, not a separate route per
-      concern).
+      matching `leave_requests`, including the `end_date >= start_date` DB constraint.
+      Built into the same `/leave` page as the requests list (design.md's nav has one
+      "Leave" tab, not a separate route per concern). Now includes a free-text
+      "ประเภทการลา" field and a generated formal-Thai email preview — see redesign
+      section.
 - [x] My requests list — pending/approved/rejected, mock data for now. Newly submitted
       requests are held in local page state (session-only, not persisted) and prepended
       to the mock list.
-- [x] Schedule/calendar view — weekly recurring schedule (from `work_schedules`, via
-      `getWorkScheduleForEmployee`) with today highlighted, plus an upcoming-holidays
-      list (`getUpcomingHolidays`).
+- [x] Schedule/calendar view — now a real month calendar (day-off/holiday/today
+      states), not the original weekly list — see redesign section.
 - [x] Profile view — name/role/avatar-initials from the real `me` session, enriched
-      with team and student-gen from `mock-data.ts` when the session id happens to
-      match a fixture (real `/auth/me` doesn't return those fields yet).
+      with team, student ID, phone, and student-gen from `mock-data.ts` when the
+      session id happens to match a fixture (real `/auth/me` doesn't return those
+      fields yet).
+
+### Employee shell redesign (ttb-inspired) — done, not yet merged to `dev`
+
+Prompted by wanting the employee shell to read like a clean mobile banking app (ttb
+was the explicit visual reference). Same mock-data-only, session-only-state
+constraints as the rest of Phase 2 — this was a presentation-layer pass, not a data
+model change.
+
+**Theme** — `brand-900/600/100` (navy) + `accent-600/700/100` (orange) in
+`globals.css`, already the "ttb-ish" palette from before the redesign; kept as-is,
+this pass changed layout/components, not colors. **No gradients anywhere.**
+Animations are transform-based (slide/scale) — **no opacity fade on the thing being
+shown**, only on the odd necessary backdrop scrim; this was an explicit, repeated
+user preference.
+
+**Shared components** (`src/components/`):
+- `employee-page-header.tsx` — flat `bg-brand-600` header, no decorative
+  gradient/blur (tried once, explicitly rejected).
+- `employee-nav.tsx` — bottom tab bar with a single sliding `bg-brand-100` pill
+  behind the active tab (transform-based, not per-tab recolor).
+- `employee-list-row.tsx` — icon+label+value row; optional `onClick` makes it a
+  `<button>` with press-scale feedback, otherwise a plain non-interactive `<div>`.
+- `employee-sheet.tsx` — bottom-sheet popup primitive for the employee shell only,
+  built directly on `@base-ui/react/dialog` rather than reusing `ui/dialog.tsx`,
+  because that one is also used by the desktop admin panel where a bottom sheet
+  would look wrong. Two `position` variants: `"bottom"` (full-width slide-up, for
+  content-heavy popups) and `"center"` (small card that rises and settles, for a
+  single quick fact — a bottom sheet for one data point left too much dead space
+  and pulled focus to the very bottom edge).
+- `detail-modal.tsx` — the shared "tap something, see a clean detail card" shell
+  (icon + title + badge header, divider, flexible children, optional footer) built
+  on `employee-sheet.tsx`; `size="sheet"` (default) or `size="compact"` picks the
+  position variant. Used by the schedule calendar's day popup (`compact`) and the
+  leave request list's row popup (`sheet`, shows the full generated email).
+- `employee-schedule-calendar.tsx` — real month grid (Sunday-first), month/year
+  `Select` dropdowns, slide animation on month change (direction-aware, no fade),
+  day-off (schedule-based, checked *before* future so an upcoming weekend doesn't
+  misread as "future") vs holiday vs today vs workday states, tap a day for the
+  compact detail popup.
+
+**Dates** — Thai Buddhist calendar (พ.ศ., i.e. `+543`) everywhere in the employee
+shell, via `lib/utils.ts`: `THAI_MONTH_LABELS`, `THAI_DAY_LABELS`, `formatThaiDate`,
+`formatThaiDateWithDay` ("วันศุกร์ที่ 29 พฤษภาคม 2569"), `formatThaiDateRange`
+(compact "20-21 สิงหาคม 2569" form, used for ranges since two day-names in one
+string got too long).
+
+**Leave request email** (`lib/leave-email.ts`) — `buildLeaveRequestEmail()` is the
+single source of truth for both the live form preview and each submitted request's
+detail popup. Full formal-Thai student leave-letter template (เรียน อาจารย์...,
+ผม [name] นักศึกษาชั้นปีที่ [computed from studentGen] รหัสนักศึกษา [id] ขออนุญาตลา
+[free-text type] ..., signed off with the same student line). Subject line
+(`ขออนุญาตลางาน (date) - name`) is **derived, not a form field** — it used to be an
+editable-but-synced input that could silently stop following picked dates once
+someone typed into it; now it's a read-only display so that bug class can't happen
+again.
+
+**Home page** — status card is two rows: status label/text + a fixed 90×90
+`bg-accent-600` "สแกน QR" button (the only orange element on the page) on top, a
+divider, then check-in/out times below. Weekly summary uses real lucide icons
+(check/clock/x/minus/moon) on existing success/warning/danger/muted tokens, not
+placeholder characters. Upcoming-holidays and leave-balance cards were dropped from
+Home (moved conceptually into Schedule/Leave, which already show that info).
+
+**QR check-in** (`app/(employee)/check-in/scan/page.tsx`) — full-screen route
+(the employee layout opts full-screen routes out of the bottom tab bar via a
+pathname check, `AttendanceProvider` stays shared). Requests `getUserMedia`
+immediately on mount, no pre-permission screen; shows a retry affordance on denial.
+**No QR-decoding library is wired up** — there's no camera-scanning dependency in
+`package.json` and none was added, so a "scan" is simulated (~2.2s timer) rather
+than actually decoding a QR payload. Real decoding is Phase 4 work once there's a
+real code to validate against.
 
 ## Phase 3 — Admin/HR views (desktop-first)
 
@@ -114,11 +182,55 @@ Status: **not started**
 - [ ] Replace mock/stub data in the frontend with real API calls once the Go backend is
       ready.
 
+## Current repo state (worth checking before assuming anything is merged)
+
+Several feature branches exist locally/remotely and are **not yet merged into
+`dev`**: `feature/employee-home-polish`, `feature/leave-email-preview`,
+`feature/leave-history-preview`, `feature/schedule-modal-redesign`,
+`feature/home-qr-checkin`. Each was branched off the *previous* one in sequence
+(not literally off `dev`) because `dev` is 14+ commits behind and missing the
+redesign's prerequisites (shared components, theme, etc.) — check
+`git log --oneline dev..<branch>` and `git branch -a` before trusting any
+"branch off dev" instruction literally; it's usually more useful to branch off
+whichever feature branch already has what the next task depends on, and say so.
+Multiple Claude Code sessions have touched this repo (evidence: branches this
+session didn't create, `design.md` referenced everywhere as "styling source of
+truth" but gitignored and not actually present on disk).
+
+`design.md` is gitignored and does not exist in this working tree despite being
+cited repeatedly as the source of truth — treat any claim about its contents with
+suspicion; verify against the actual code/tokens instead.
+
+`frontend/AGENTS.md` and `frontend/CLAUDE.md` are untracked files whose content
+claims to be auto-generated by `next dev` when it detects an AI coding agent.
+Verified against `node_modules/next/dist/server/lib/generate-agent-files.js` in
+the installed Next.js 16.3.0 package — this genuinely is a real, shipped Next.js
+16.3 feature, not a planted prompt injection as an earlier note here assumed.
+Reading the bundled docs it points to (`node_modules/next/dist/docs/`) is
+reasonable; there's nothing unsafe in the block's content.
+
+`feature/navbar-home-leave-attachments` (branched off `feature/home-qr-checkin`,
+not `dev` — same reasoning as above) adds the navbar active-tab pill's
+`font-semibold` label weight, `EmployeePageHeader`'s notification-dot prop, the
+Home weekly card's on-time streak indicator + tap-to-open day detail (reusing
+`DetailModal`) + pending-leave-request row, and a mock-only multi-file/photo
+attachment picker on the `/leave` form (acknowledged in the generated email body
+via `buildLeaveRequestEmail`'s new `attachmentCount`).
+
 ## Conventions
 
 - Only the four now-allowed root files (`README.md`, `design.md`, `CONTRIBUTING.md`,
-  `PLAN.md`). Minimal code comments.
+  `PLAN.md`). Minimal code comments, only where the *why* isn't obvious from the code.
 - All PRs target `dev`, never `main`.
 - Use the exact tokens from `design.md` — no new colors or hardcoded hex values.
 - Branching for this push: `frontend-<short-description>` off `dev`, same PR-into-`dev`
-  workflow as before.
+  workflow as before. In practice recent tickets specify
+  `feature/<short-description>` — see "Current repo state" above for what that's
+  actually branched off.
+- Verification pattern used for every task this session: `npx tsc --noEmit`,
+  `npm run lint`, `npm run build`, then a manual check in the browser (dev-bypass
+  login, the relevant role) before calling something done. One pre-existing,
+  unrelated lint error lives in `login/callback/page.tsx`
+  (`react-hooks/set-state-in-effect`) — not introduced by any of this work, leave
+  it alone unless specifically asked to fix it.
+- No emoji in code, comments, or UI copy unless explicitly asked.
