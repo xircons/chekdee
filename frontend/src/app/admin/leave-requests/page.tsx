@@ -4,6 +4,7 @@ import { useState } from "react";
 import { CalendarRange, Check, X } from "lucide-react";
 
 import { AdminDetailDialog, AdminDetailInfoBlock } from "@/components/admin-detail-dialog";
+import { AdminPageHeader } from "@/components/admin-page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -88,7 +89,7 @@ export default function LeaveRequestsPage() {
 
   return (
     <main className="flex flex-1 flex-col gap-6 p-6">
-      <h1 className="text-2xl font-bold text-foreground">Leave requests</h1>
+      <AdminPageHeader title="Leave requests" subtitle="Review and approve pending requests" />
 
       <Card className="rounded-2xl">
         <CardHeader>
@@ -182,7 +183,7 @@ export default function LeaveRequestsPage() {
                 Decline
               </Button>
               <Button
-                className="cursor-pointer bg-success-foreground text-white hover:bg-success-foreground/90"
+                className="cursor-pointer bg-accent-600 text-white hover:bg-accent-700"
                 onClick={() => decide(selectedRequest.id, "approved")}
               >
                 <Check className="size-4" />

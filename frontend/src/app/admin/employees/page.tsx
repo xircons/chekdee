@@ -7,6 +7,7 @@ import { IdCard, Phone, Search, Users } from "lucide-react";
 import { z } from "zod";
 
 import { AdminDetailDialog, AdminDetailInfoBlock } from "@/components/admin-detail-dialog";
+import { AdminPageHeader } from "@/components/admin-page-header";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -141,7 +142,11 @@ function EmployeeFormFields({
         <Button type="button" variant="outline" onClick={onCancel}>
           Cancel
         </Button>
-        <Button type="submit" disabled={isSubmitting}>
+        <Button
+          type="submit"
+          disabled={isSubmitting}
+          className="bg-accent-600 text-white hover:bg-accent-700"
+        >
           {isSubmitting ? "Saving…" : "Save"}
         </Button>
       </DialogFooter>
@@ -239,7 +244,7 @@ export default function EmployeesPage() {
 
   return (
     <main className="flex flex-1 flex-col gap-6 p-6">
-      <h1 className="text-2xl font-bold text-foreground">Employees</h1>
+      <AdminPageHeader title="Employees" subtitle="Manage your team's roster and profiles" />
 
       <Card className="rounded-2xl">
         <CardHeader>

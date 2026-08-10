@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { AdminPageHeader } from "@/components/admin-page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -133,7 +134,7 @@ function ScheduleEditor({
             onSave(employeeId, days);
             setSaved(true);
           }}
-          className="self-start"
+          className="self-start bg-accent-600 text-white hover:bg-accent-700"
         >
           Save schedule
         </Button>
@@ -232,7 +233,7 @@ export default function SchedulesPage() {
 
   return (
     <main className="flex flex-1 flex-col gap-6 p-6">
-      <h1 className="text-2xl font-bold text-foreground">Schedules</h1>
+      <AdminPageHeader title="Schedules" subtitle="Manage weekly work schedules and bulk imports" />
 
       <Card className="rounded-2xl">
         <CardHeader>
@@ -284,7 +285,11 @@ export default function SchedulesPage() {
               onChange={(e) => setImportFile(e.target.files?.[0] ?? null)}
               className="w-auto"
             />
-            <Button onClick={() => void handleImport()} disabled={!importFile}>
+            <Button
+              onClick={() => void handleImport()}
+              disabled={!importFile}
+              className="bg-brand-600 text-white hover:bg-brand-900"
+            >
               Import
             </Button>
             <Button variant="outline" onClick={handleDownloadTemplate}>

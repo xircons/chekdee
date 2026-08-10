@@ -5,6 +5,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 
+import { AdminPageHeader } from "@/components/admin-page-header";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -94,7 +95,11 @@ function HolidayFormFields({
         <Button type="button" variant="outline" onClick={onCancel}>
           Cancel
         </Button>
-        <Button type="submit" disabled={isSubmitting}>
+        <Button
+          type="submit"
+          disabled={isSubmitting}
+          className="bg-accent-600 text-white hover:bg-accent-700"
+        >
           {isSubmitting ? "Saving…" : "Save"}
         </Button>
       </DialogFooter>
@@ -150,7 +155,7 @@ export default function HolidaysPage() {
 
   return (
     <main className="flex flex-1 flex-col gap-6 p-6">
-      <h1 className="text-2xl font-bold text-foreground">Holidays</h1>
+      <AdminPageHeader title="Holidays" subtitle="Company holiday calendar" />
 
       <Card className="rounded-2xl">
         <CardHeader>

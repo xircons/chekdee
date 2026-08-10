@@ -11,6 +11,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
+import { AdminPageHeader } from "@/components/admin-page-header";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -94,12 +95,10 @@ export default function AdminDashboard() {
 
   return (
     <main className="flex flex-1 flex-col gap-6 p-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">
-          Welcome, {me.first_name ?? me.display_name}
-        </h1>
-        <p className="text-sm text-muted-foreground">Here&apos;s how your team is doing today.</p>
-      </div>
+      <AdminPageHeader
+        title={`Welcome, ${me.first_name ?? me.display_name}`}
+        subtitle="Here's how your team is doing today."
+      />
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {stats.map((stat) => (
