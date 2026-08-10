@@ -78,7 +78,7 @@ export default function ScanCheckInPage() {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-black">
+    <div className="fixed inset-0 z-50 flex flex-col bg-black md:inset-y-8 md:right-auto md:left-1/2 md:w-[520px] md:-translate-x-1/2 md:overflow-hidden md:rounded-3xl md:shadow-xl">
       <div className="flex items-center justify-between bg-brand-900 px-4 py-4 text-white">
         <button
           type="button"
