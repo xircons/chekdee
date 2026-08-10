@@ -14,10 +14,16 @@ type ScanState = "requesting" | "denied" | "scanning" | "success";
 // lib.dom.d.ts capability/constraint types yet.
 type TorchCapabilities = MediaTrackCapabilities & { torch?: boolean };
 
-// Shared with the main scanning screen below — keeps both states framed
-// identically as a centered phone-width card on desktop.
-const DESKTOP_FRAME =
-  "md:inset-y-8 md:right-auto md:left-1/2 md:w-[520px] md:-translate-x-1/2 md:overflow-hidden md:rounded-3xl md:shadow-xl";
+// Shared with the main scanning screen below — same outer/inner recipe as
+// the employee shell's own framing ((employee)/layout.tsx), just wrapped in
+// `fixed inset-0` instead of sitting in normal document flow, since this
+// route bypasses that shell entirely (it's in FULL_SCREEN_ROUTES). Width is
+// derived from height via aspect-[9/19.5], not a fixed pixel width, so the
+// ratio holds at any viewport height and matches every other page exactly.
+const DESKTOP_OUTER_FRAME =
+  "fixed inset-0 z-50 flex min-h-full w-full flex-1 flex-col md:h-screen md:min-h-0 md:flex-none md:bg-muted md:py-8";
+const DESKTOP_INNER_FRAME =
+  "mx-auto flex min-h-full w-full flex-1 flex-col md:w-auto md:min-h-0 md:aspect-[9/19.5] md:max-w-none md:overflow-hidden md:rounded-3xl md:shadow-xl md:ring-1 md:ring-foreground/10";
 
 export default function ScanCheckInPage() {
   const router = useRouter();
@@ -104,136 +110,140 @@ export default function ScanCheckInPage() {
 
   if (state === "success") {
     return (
-      <div
-        className={cn(
-          "fixed inset-0 z-50 flex flex-col items-center justify-center gap-5 bg-white px-8 text-center",
-          DESKTOP_FRAME
-        )}
-      >
-        {/* Sized and positioned once, up front — the reveal blocks below reserve
-            their space from the start so this circle never has to re-center. */}
-        <div className="flex size-24 items-center justify-center rounded-full bg-success-foreground animate-dot-grow">
-          {showCheck && (
-            <Check className="size-12 animate-in text-white zoom-in-50 duration-150" strokeWidth={3} />
+      <div className={DESKTOP_OUTER_FRAME}>
+        <div
+          className={cn(
+            "flex flex-col items-center justify-center gap-5 bg-white px-8 text-center",
+            DESKTOP_INNER_FRAME
           )}
-        </div>
+        >
+          {/* Sized and positioned once, up front — the reveal blocks below reserve
+              their space from the start so this circle never has to re-center. */}
+          <div className="flex size-24 items-center justify-center rounded-full bg-success-foreground animate-dot-grow">
+            {showCheck && (
+              <Check className="size-12 animate-in text-white zoom-in-50 duration-150" strokeWidth={3} />
+            )}
+          </div>
 
-        {/* Each line reveals in priority order — the confirmation itself first,
-            supporting detail next, exit action last — fading + settling in
-            place rather than fading the whole block at once. */}
-        <div className="flex flex-col items-center gap-1">
-          <p
-            className={cn(
-              "text-xl font-bold text-brand-900",
-              showCheck
-                ? "animate-in fade-in-0 slide-in-from-bottom-1 fill-mode-both duration-300"
-                : "invisible",
-            )}
-          >
-            บันทึกเวลาสำเร็จ
-          </p>
-          <p
-            className={cn(
-              "text-sm text-muted-foreground",
-              showCheck
-                ? "animate-in fade-in-0 slide-in-from-bottom-1 fill-mode-both delay-100 duration-300"
-                : "invisible",
-            )}
-          >
-            ระบบบันทึกเวลาเข้างานของคุณเรียบร้อยแล้ว
-          </p>
-        </div>
+          {/* Each line reveals in priority order — the confirmation itself first,
+              supporting detail next, exit action last — fading + settling in
+              place rather than fading the whole block at once. */}
+          <div className="flex flex-col items-center gap-1">
+            <p
+              className={cn(
+                "text-xl font-bold text-brand-900",
+                showCheck
+                  ? "animate-in fade-in-0 slide-in-from-bottom-1 fill-mode-both duration-300"
+                  : "invisible",
+              )}
+            >
+              บันทึกเวลาสำเร็จ
+            </p>
+            <p
+              className={cn(
+                "text-sm text-muted-foreground",
+                showCheck
+                  ? "animate-in fade-in-0 slide-in-from-bottom-1 fill-mode-both delay-100 duration-300"
+                  : "invisible",
+              )}
+            >
+              ระบบบันทึกเวลาเข้างานของคุณเรียบร้อยแล้ว
+            </p>
+          </div>
 
-        <div className="flex flex-col items-center gap-3">
-          <Button
-            onClick={() => router.push("/")}
-            className={cn(
-              "rounded-full bg-brand-600 px-8 font-semibold text-white hover:bg-brand-900",
-              showCheck
-                ? "animate-in fade-in-0 slide-in-from-bottom-1 fill-mode-both delay-200 duration-300"
-                : "invisible",
-            )}
-          >
-            กลับหน้าหลัก
-          </Button>
-          <p
-            className={cn(
-              "text-xs text-muted-foreground",
-              showCheck
-                ? "animate-in fade-in-0 slide-in-from-bottom-1 fill-mode-both delay-300 duration-300"
-                : "invisible",
-            )}
-          >
-            กำลังกลับไปหน้าหลักใน {countdown} วินาที
-          </p>
+          <div className="flex flex-col items-center gap-3">
+            <Button
+              onClick={() => router.push("/")}
+              className={cn(
+                "rounded-full bg-brand-600 px-8 font-semibold text-white hover:bg-brand-900",
+                showCheck
+                  ? "animate-in fade-in-0 slide-in-from-bottom-1 fill-mode-both delay-200 duration-300"
+                  : "invisible",
+              )}
+            >
+              กลับหน้าหลัก
+            </Button>
+            <p
+              className={cn(
+                "text-xs text-muted-foreground",
+                showCheck
+                  ? "animate-in fade-in-0 slide-in-from-bottom-1 fill-mode-both delay-300 duration-300"
+                  : "invisible",
+              )}
+            >
+              กำลังกลับไปหน้าหลักใน {countdown} วินาที
+            </p>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className={cn("fixed inset-0 z-50 flex flex-col bg-white", DESKTOP_FRAME)}>
-      <div className="relative flex flex-1 flex-col overflow-hidden">
-        {state !== "denied" && (
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            muted
-            className="absolute inset-0 z-0 size-full object-cover"
-          />
-        )}
-
-        <div className="relative z-10 flex items-center justify-between rounded-b-3xl bg-brand-600 px-6 pt-6 pb-10 text-white">
-          <button
-            type="button"
-            onClick={() => router.back()}
-            aria-label="ปิด"
-            className="flex size-9 items-center justify-center rounded-full hover:bg-white/10"
-          >
-            <X className="size-5" />
-          </button>
-          <p className="text-sm font-semibold">สแกน QR เพื่อเข้างาน</p>
-          <button
-            type="button"
-            onClick={toggleTorch}
-            aria-label="ไฟฉาย"
-            className="flex size-9 items-center justify-center rounded-full hover:bg-white/10"
-          >
-            {torchOn ? <ZapOff className="size-5" /> : <Zap className="size-5" />}
-          </button>
-        </div>
-
-        <div className="relative z-10 flex flex-1 items-center justify-center overflow-hidden">
-          {state === "denied" ? (
-            <div className="flex flex-col items-center gap-4 px-8 text-center">
-              <p className="text-sm text-muted-foreground">
-                ไม่สามารถเข้าถึงกล้องได้ กรุณาอนุญาตการใช้กล้องแล้วลองใหม่อีกครั้ง
-              </p>
-              <Button
-                onClick={retry}
-                className="rounded-full bg-accent-600 px-6 font-semibold text-white hover:bg-accent-700"
-              >
-                ลองอีกครั้ง
-              </Button>
-            </div>
-          ) : (
-            <div className="relative size-[240px]">
-              <span className="absolute top-0 left-0 size-12 rounded-tl-2xl border-t-4 border-l-4 border-white" />
-              <span className="absolute top-0 right-0 size-12 rounded-tr-2xl border-t-4 border-r-4 border-white" />
-              <span className="absolute bottom-0 left-0 size-12 rounded-bl-2xl border-b-4 border-l-4 border-white" />
-              <span className="absolute right-0 bottom-0 size-12 rounded-br-2xl border-r-4 border-b-4 border-white" />
-            </div>
+    <div className={DESKTOP_OUTER_FRAME}>
+      <div className={cn("flex flex-col bg-white", DESKTOP_INNER_FRAME)}>
+        <div className="relative flex flex-1 flex-col overflow-hidden">
+          {state !== "denied" && (
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              className="absolute inset-0 z-0 size-full object-cover"
+            />
           )}
-        </div>
-      </div>
 
-      {state !== "denied" && (
-        <div className="flex flex-col items-center gap-1 px-6 pt-4 pb-10 text-center">
-          <p className="text-base font-bold text-foreground">วางกล้องให้ตรงกับ QR</p>
-          <p className="text-sm text-muted-foreground">สแกนเพื่อบันทึกเวลาเข้างานอัตโนมัติ</p>
+          <div className="relative z-10 flex items-center justify-between rounded-b-3xl bg-brand-600 px-6 pt-6 pb-10 text-white">
+            <button
+              type="button"
+              onClick={() => router.back()}
+              aria-label="ปิด"
+              className="flex size-9 cursor-pointer items-center justify-center rounded-full hover:bg-white/10"
+            >
+              <X className="size-5" />
+            </button>
+            <p className="text-sm font-semibold">สแกน QR เพื่อเข้างาน</p>
+            <button
+              type="button"
+              onClick={toggleTorch}
+              aria-label="ไฟฉาย"
+              className="flex size-9 cursor-pointer items-center justify-center rounded-full hover:bg-white/10"
+            >
+              {torchOn ? <ZapOff className="size-5" /> : <Zap className="size-5" />}
+            </button>
+          </div>
+
+          <div className="relative z-10 flex flex-1 items-center justify-center overflow-hidden">
+            {state === "denied" ? (
+              <div className="flex flex-col items-center gap-4 px-8 text-center">
+                <p className="text-sm text-muted-foreground">
+                  ไม่สามารถเข้าถึงกล้องได้ กรุณาอนุญาตการใช้กล้องแล้วลองใหม่อีกครั้ง
+                </p>
+                <Button
+                  onClick={retry}
+                  className="rounded-full bg-accent-600 px-6 font-semibold text-white hover:bg-accent-700"
+                >
+                  ลองอีกครั้ง
+                </Button>
+              </div>
+            ) : (
+              <div className="relative size-[240px]">
+                <span className="absolute top-0 left-0 size-12 rounded-tl-2xl border-t-4 border-l-4 border-white" />
+                <span className="absolute top-0 right-0 size-12 rounded-tr-2xl border-t-4 border-r-4 border-white" />
+                <span className="absolute bottom-0 left-0 size-12 rounded-bl-2xl border-b-4 border-l-4 border-white" />
+                <span className="absolute right-0 bottom-0 size-12 rounded-br-2xl border-r-4 border-b-4 border-white" />
+              </div>
+            )}
+          </div>
         </div>
-      )}
+
+        {state !== "denied" && (
+          <div className="flex flex-col items-center gap-1 px-6 pt-4 pb-10 text-center">
+            <p className="text-base font-bold text-foreground">วางกล้องให้ตรงกับ QR</p>
+            <p className="text-sm text-muted-foreground">สแกนเพื่อบันทึกเวลาเข้างานอัตโนมัติ</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -17,20 +17,34 @@ export type LeaveRequestEmail = {
   body: string;
 };
 
+// Static formal-letter template shown in the live "ตัวอย่างอีเมล" preview —
+// deliberately not bound to any form/profile data (see buildLeaveRequestEmail
+// below for why), so it's just a fixed reference string.
+const STATIC_BODY_TEMPLATE = [
+  "เรียน อาจารย์ และผู้ที่เกี่ยวข้อง",
+  "",
+  "ผม [ชื่อ-นามสกุล] นักศึกษาชั้นปีที่ [ชั้นปี] รหัสนักศึกษา [รหัสนักศึกษา] ขออนุญาตลา [ประเภทการลา] ในวันที่ [วัน/วันที่] [ช่วงเวลา/ตลอดทั้งวัน] เนื่องจาก [ระบุเหตุผลหรือความจำเป็นในการลาโดยสังเขป]",
+  "",
+  "ในช่วงเวลาดังกล่าว หากมีงานหรือภารกิจที่จำเป็นต้องดำเนินการ สามารถติดต่อผมได้ที่ [เบอร์โทรศัพท์] และผมจะดำเนินการในส่วนที่เกี่ยวข้องให้เรียบร้อยตามความเหมาะสม",
+  "",
+  "จึงเรียนมาเพื่อโปรดพิจารณาอนุญาต",
+  "",
+  "ขอแสดงความนับถือ",
+  "[ชื่อ-นามสกุล]",
+  "นักศึกษาชั้นปีที่ [ชั้นปี]",
+  "รหัสนักศึกษา [รหัสนักศึกษา]"
+].join("\n");
+
 // Shared by the /leave inline preview and (eventually) the real outbound
 // email in Phase 4 — keep both in sync by always going through this.
+//
+// User-flow: the subject still auto-fills from real data (name + the
+// selected start/end date) so it's always accurate at a glance. The body is
+// a fixed template, not bound to form/profile data — the employee fills in
+// the bracketed fields themselves when actually sending, so the preview
+// never shows stale or half-typed values.
 export function buildLeaveRequestEmail(input: LeaveRequestEmailInput): LeaveRequestEmail {
-  const {
-    employeeName,
-    yearOfStudy,
-    studentId,
-    phoneNumber,
-    leaveType,
-    startDate,
-    endDate,
-    reason,
-    attachmentCount = 0,
-  } = input;
+  const { employeeName, startDate, endDate } = input;
 
   // Single day reads naturally with the day name ("วันอังคารที่ 11 สิงหาคม
   // 2569"); a range with two day names gets long fast, so ranges fall back
@@ -41,26 +55,8 @@ export function buildLeaveRequestEmail(input: LeaveRequestEmailInput): LeaveRequ
         ? formatThaiDateWithDay(parseIsoDateLocal(startDate))
         : formatThaiDateRange(startDate, endDate)
       : "วันที่";
-  const studentLine = `นักศึกษาชั้นปีที่ ${yearOfStudy} รหัสนักศึกษา ${studentId}`;
 
   const subject = `ขออนุญาตลางาน (${dateWithDay}) - ${employeeName}`;
 
-  const body = [
-    "เรียน อาจารย์ และผู้ที่เกี่ยวข้อง",
-    "",
-    `ผม ${employeeName} ${studentLine} ขออนุญาตลา ${leaveType.trim() || "-"} ในวันที่ ${dateWithDay} ตลอดทั้งวัน เนื่องจาก${reason.trim() || "-"}`,
-    "",
-    `ในช่วงเวลาดังกล่าว หากมีงานหรือภารกิจที่จำเป็นต้องดำเนินการ สามารถติดต่อผมได้ที่ ${phoneNumber} และผมจะดำเนินการในส่วนที่เกี่ยวข้องให้เรียบร้อยตามความเหมาะสม`,
-    "",
-    ...(attachmentCount > 0
-      ? [`ทั้งนี้ ผมได้แนบเอกสารประกอบการลาจำนวน ${attachmentCount} ไฟล์มาพร้อมนี้`, ""]
-      : []),
-    "จึงเรียนมาเพื่อโปรดพิจารณาอนุญาต",
-    "",
-    "ขอแสดงความนับถือ",
-    employeeName,
-    studentLine,
-  ].join("\n");
-
-  return { subject, body };
+  return { subject, body: STATIC_BODY_TEMPLATE };
 }

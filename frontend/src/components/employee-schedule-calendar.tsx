@@ -166,7 +166,7 @@ export function EmployeeScheduleCalendar({ employeeId }: { employeeId: string })
           type="button"
           aria-label="เดือนก่อนหน้า"
           onClick={() => goToMonth(viewYear, viewMonth - 1)}
-          className="flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted"
+          className="flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted-foreground hover:bg-muted"
         >
           <ChevronLeft className="size-4" />
         </button>
@@ -209,7 +209,7 @@ export function EmployeeScheduleCalendar({ employeeId }: { employeeId: string })
           type="button"
           aria-label="เดือนถัดไป"
           onClick={() => goToMonth(viewYear, viewMonth + 1)}
-          className="flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted"
+          className="flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted-foreground hover:bg-muted"
         >
           <ChevronRight className="size-4" />
         </button>
@@ -263,7 +263,7 @@ export function EmployeeScheduleCalendar({ employeeId }: { employeeId: string })
                           setDayModalOpen(true);
                         }}
                         className={cn(
-                          "relative z-10 mx-auto flex size-9 items-center justify-center rounded-full text-sm tabular-nums transition-[transform,background-color]",
+                          "relative z-10 mx-auto flex size-9 cursor-pointer items-center justify-center rounded-full text-sm tabular-nums transition-[transform,background-color] disabled:cursor-default",
                           day.inMonth ? STATUS_TEXT[day.status] : "text-muted-foreground/30",
                           day.inMonth && "hover:bg-brand-600/10 active:scale-90",
                           day.isToday && "font-bold ring-2 ring-brand-600"

@@ -1,7 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useRef, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { CalendarRange, ChevronDown, ChevronUp, FileText, Image as ImageIcon, Mail, Upload, X } from "lucide-react";
@@ -82,40 +81,45 @@ function formatFileSize(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-export default function LeavePage() {
+function AttachmentRow({
+  attachment,
+  onRemove,
+}: {
+  attachment: LeaveAttachment;
+  onRemove?: () => void;
+}) {
+  const AttachmentIcon = attachment.isImage ? ImageIcon : FileText;
   return (
-    <Suspense fallback={null}>
-      <LeavePageContent />
-    </Suspense>
+    <div className="flex items-center gap-2 rounded-xl bg-muted/40 px-3 py-2">
+      <AttachmentIcon className="size-4 shrink-0 text-brand-600" />
+      <p className="min-w-0 flex-1 truncate text-xs text-foreground">
+        {attachment.name}{" "}
+        <span className="text-muted-foreground">({formatFileSize(attachment.size)})</span>
+      </p>
+      {onRemove && (
+        <button
+          type="button"
+          onClick={onRemove}
+          aria-label="ลบไฟล์แนบ"
+          className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+        >
+          <X className="size-3.5" />
+        </button>
+      )}
+    </div>
   );
 }
 
-function LeavePageContent() {
+export default function LeavePage() {
   const me = useMe();
-  const router = useRouter();
-  const searchParams = useSearchParams();
   const [requests, setRequests] = useState<MockLeaveRequest[]>(() => getLeaveRequestsForEmployee(me.id));
   const [showPreview, setShowPreview] = useState(false);
   const [requestListExpanded, setRequestListExpanded] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<MockLeaveRequest | null>(null);
   const [requestModalOpen, setRequestModalOpen] = useState(false);
   const [attachments, setAttachments] = useState<LeaveAttachment[]>([]);
+  const [attachmentsByRequestId, setAttachmentsByRequestId] = useState<Record<string, LeaveAttachment[]>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Deep-link from Home's pending-request row (?requestId=...) — open that
-  // request's detail modal once, then strip the param so closing/reopening
-  // the modal later doesn't re-trigger this.
-  useEffect(() => {
-    const requestId = searchParams.get("requestId");
-    if (!requestId) return;
-    const match = requests.find((r) => r.id === requestId);
-    if (match) {
-      setSelectedRequest(match);
-      setRequestModalOpen(true);
-    }
-    router.replace("/leave", { scroll: false });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const handleAttachmentSelect = (fileList: FileList | null) => {
     if (!fileList || fileList.length === 0) return;
@@ -183,6 +187,9 @@ function LeavePageContent() {
       decidedAt: null,
     };
     setRequests((prev) => [newRequest, ...prev]);
+    if (attachments.length > 0) {
+      setAttachmentsByRequestId((prev) => ({ ...prev, [newRequest.id]: attachments }));
+    }
     reset();
     setAttachments([]);
     setShowPreview(false);
@@ -193,7 +200,16 @@ function LeavePageContent() {
     : requests.slice(0, VISIBLE_LEAVE_REQUESTS);
   const hiddenRequestCount = requests.length - VISIBLE_LEAVE_REQUESTS;
 
-  const selectedRequestEmail = selectedRequest
+  const selectedRequestAttachments = selectedRequest
+    ? (attachmentsByRequestId[selectedRequest.id] ?? [])
+    : [];
+
+  // The full formal-letter body (buildLeaveRequestEmail) is only for the
+  // form's live "ตัวอย่างอีเมล" preview below. Once a request is submitted,
+  // its detail view shows the subject alongside the reason exactly as
+  // typed — not re-wrapped in the letter template — so what you see there
+  // always matches what you wrote, verbatim.
+  const selectedRequestSubject = selectedRequest
     ? buildLeaveRequestEmail({
       employeeName,
       yearOfStudy,
@@ -203,8 +219,9 @@ function LeavePageContent() {
       startDate: selectedRequest.startDate,
       endDate: selectedRequest.endDate,
       reason: selectedRequest.reason ?? "",
-    })
-    : null;
+      attachmentCount: selectedRequestAttachments.length,
+    }).subject
+    : "";
 
   return (
     <div className="flex w-full flex-1 flex-col">
@@ -234,7 +251,7 @@ function LeavePageContent() {
                   <button
                     type="button"
                     onClick={() => setShowPreview(true)}
-                    className="flex items-center gap-1 text-xs font-medium text-brand-600"
+                    className="flex items-center gap-1 text-xs font-medium text-brand-600 cursor-pointer"
                   >
                     <Mail className="size-3.5" />
                     ตัวอย่างอีเมล
@@ -253,7 +270,7 @@ function LeavePageContent() {
 
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="leave_type" className="text-xs text-muted-foreground">
-                  ประเภทการลา
+                  ประเภทการลา<span className="text-danger-foreground">*</span>
                 </Label>
                 <Input
                   id="leave_type"
@@ -269,7 +286,7 @@ function LeavePageContent() {
               <div className="grid grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1.5">
                   <Label htmlFor="start_date" className="text-xs text-muted-foreground">
-                    วันที่เริ่มลา
+                    วันที่เริ่มลา<span className="text-danger-foreground">*</span>
                   </Label>
                   <Input id="start_date" type="date" className={fieldClass} {...register("start_date")} />
                   {errors.start_date && (
@@ -279,7 +296,7 @@ function LeavePageContent() {
 
                 <div className="flex flex-col gap-1.5">
                   <Label htmlFor="end_date" className="text-xs text-muted-foreground">
-                    วันที่สิ้นสุด
+                    วันที่สิ้นสุด<span className="text-danger-foreground">*</span>
                   </Label>
                   <Input id="end_date" type="date" className={fieldClass} {...register("end_date")} />
                   {errors.end_date && (
@@ -290,7 +307,7 @@ function LeavePageContent() {
 
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="reason" className="text-xs text-muted-foreground">
-                  เหตุผล
+                  เหตุผล<span className="text-danger-foreground">*</span>
                 </Label>
                 <Textarea
                   id="reason"
@@ -316,7 +333,7 @@ function LeavePageContent() {
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="flex h-12 items-center justify-center gap-2 rounded-xl border border-dashed border-brand-600/40 text-sm font-medium text-brand-600 transition-colors hover:bg-brand-100"
+                  className="flex h-12 cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-brand-600/40 text-sm font-medium text-brand-600 transition-colors hover:bg-brand-100"
                 >
                   <Upload className="size-4" />
                   เพิ่มเอกสารแนบ (ถ้ามี)
@@ -324,31 +341,13 @@ function LeavePageContent() {
 
                 {attachments.length > 0 && (
                   <div className="flex flex-col gap-1.5">
-                    {attachments.map((attachment) => {
-                      const AttachmentIcon = attachment.isImage ? ImageIcon : FileText;
-                      return (
-                        <div
-                          key={attachment.id}
-                          className="flex items-center gap-2 rounded-xl bg-muted/40 px-3 py-2"
-                        >
-                          <AttachmentIcon className="size-4 shrink-0 text-brand-600" />
-                          <p className="min-w-0 flex-1 truncate text-xs text-foreground">
-                            {attachment.name}{" "}
-                            <span className="text-muted-foreground">
-                              ({formatFileSize(attachment.size)})
-                            </span>
-                          </p>
-                          <button
-                            type="button"
-                            onClick={() => removeAttachment(attachment.id)}
-                            aria-label="ลบไฟล์แนบ"
-                            className="flex size-6 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
-                          >
-                            <X className="size-3.5" />
-                          </button>
-                        </div>
-                      );
-                    })}
+                    {attachments.map((attachment) => (
+                      <AttachmentRow
+                        key={attachment.id}
+                        attachment={attachment}
+                        onRemove={() => removeAttachment(attachment.id)}
+                      />
+                    ))}
                   </div>
                 )}
               </div>
@@ -410,7 +409,7 @@ function LeavePageContent() {
               <button
                 type="button"
                 onClick={() => setRequestListExpanded((v) => !v)}
-                className="mt-3 flex items-center gap-1 self-start text-xs font-medium text-brand-600"
+                className="mt-3 flex cursor-pointer items-center gap-1 self-start text-xs font-medium text-brand-600"
               >
                 {requestListExpanded ? "ย่อกลับ" : `ดูเพิ่มเติม (${hiddenRequestCount} รายการ)`}
                 {requestListExpanded ? (
@@ -428,12 +427,19 @@ function LeavePageContent() {
         open={requestModalOpen}
         onOpenChange={setRequestModalOpen}
         icon={CalendarRange}
-        title={selectedRequestEmail?.subject ?? ""}
+        title={selectedRequestSubject}
         badgeText={selectedRequest ? statusLabelTh[selectedRequest.status] : ""}
         badgeVariant={selectedRequest ? statusBadgeVariant[selectedRequest.status] : "warning"}
       >
-        {selectedRequestEmail && (
-          <EmailContentBlock subject={selectedRequestEmail.subject} body={selectedRequestEmail.body} />
+        {selectedRequest && (
+          <EmailContentBlock subject={selectedRequestSubject} body={selectedRequest.reason ?? ""} />
+        )}
+        {selectedRequestAttachments.length > 0 && (
+          <div className="flex flex-col gap-1.5">
+            {selectedRequestAttachments.map((attachment) => (
+              <AttachmentRow key={attachment.id} attachment={attachment} />
+            ))}
+          </div>
         )}
       </DetailModal>
 

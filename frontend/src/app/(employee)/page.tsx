@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import {
   Calendar,
   CalendarRange,
@@ -24,6 +23,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useTodayAttendance, type TodayAttendance } from "@/lib/attendance-store";
+import { buildLeaveRequestEmail } from "@/lib/leave-email";
 import {
   getAttendanceForEmployee,
   getLeaveRequestsForEmployee,
@@ -158,10 +158,10 @@ function computeOnTimeStreak(weekDays: WeekDay[]): number {
 
 export default function EmployeeHome() {
   const me = useMe();
-  const router = useRouter();
   const { today } = useTodayAttendance();
   const [selectedDay, setSelectedDay] = useState<WeekDay | null>(null);
   const [dayModalOpen, setDayModalOpen] = useState(false);
+  const [requestModalOpen, setRequestModalOpen] = useState(false);
 
   const now = new Date();
   const todayIso = toIsoDateLocal(now);
@@ -193,6 +193,19 @@ export default function EmployeeHome() {
   const pendingRequest = getLeaveRequestsForEmployee(me.id)
     .filter((r) => r.status === "pending")
     .sort((a, b) => a.startDate.localeCompare(b.startDate))[0];
+
+  const pendingRequestSubject = pendingRequest
+    ? buildLeaveRequestEmail({
+      employeeName: fullName,
+      yearOfStudy: "",
+      studentId: "",
+      phoneNumber: "",
+      leaveType: pendingRequest.leaveType ?? "",
+      startDate: pendingRequest.startDate,
+      endDate: pendingRequest.endDate,
+      reason: pendingRequest.reason ?? "",
+    }).subject
+    : "";
 
   return (
     <div className="flex w-full flex-1 flex-col">
@@ -295,7 +308,7 @@ export default function EmployeeHome() {
                       setSelectedDay(day);
                       setDayModalOpen(true);
                     }}
-                    className="flex flex-col items-center gap-1.5 transition-transform active:scale-90"
+                    className="flex flex-col items-center gap-1.5 transition-transform active:scale-90 cursor-pointer"
                   >
                     <div
                       className={cn(
@@ -319,7 +332,7 @@ export default function EmployeeHome() {
                   label={`คำขอลา ${formatThaiDateRange(pendingRequest.startDate, pendingRequest.endDate)}`}
                   sublabel={pendingRequest.reason ?? undefined}
                   trailing={<Badge variant="warning">รอดำเนินการ</Badge>}
-                  onClick={() => router.push(`/leave?requestId=${pendingRequest.id}`)}
+                  onClick={() => setRequestModalOpen(true)}
                   className="border-b-0 py-0"
                 />
               </>
@@ -375,6 +388,26 @@ export default function EmployeeHome() {
             valueSize="sm"
           />
         )}
+      </DetailModal>
+
+      <DetailModal
+        open={requestModalOpen}
+        onOpenChange={setRequestModalOpen}
+        size="compact"
+        icon={CalendarRange}
+        title={pendingRequestSubject}
+        badgeText="รอดำเนินการ"
+        badgeVariant="warning"
+        footer={
+          <Button
+            className="h-11 w-full rounded-full bg-accent-600 font-semibold text-white hover:bg-accent-700"
+            onClick={() => setRequestModalOpen(false)}
+          >
+            ตกลง
+          </Button>
+        }
+      >
+        <DetailModalInfoBlock label="เหตุผล" value={pendingRequest?.reason ?? "-"} valueSize="sm" />
       </DetailModal>
     </div>
   );
