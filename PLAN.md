@@ -210,12 +210,48 @@ Reading the bundled docs it points to (`node_modules/next/dist/docs/`) is
 reasonable; there's nothing unsafe in the block's content.
 
 `feature/navbar-home-leave-attachments` (branched off `feature/home-qr-checkin`,
-not `dev` — same reasoning as above) adds the navbar active-tab pill's
+not `dev` — same reasoning as above) added the navbar active-tab pill's
 `font-semibold` label weight, `EmployeePageHeader`'s notification-dot prop, the
 Home weekly card's on-time streak indicator + tap-to-open day detail (reusing
-`DetailModal`) + pending-leave-request row, and a mock-only multi-file/photo
+`DetailModal`) + pending-leave-request row, a mock-only multi-file/photo
 attachment picker on the `/leave` form (acknowledged in the generated email body
-via `buildLeaveRequestEmail`'s new `attachmentCount`).
+via `buildLeaveRequestEmail`'s new `attachmentCount`), the scan page's white-bg
+redesign with a staggered dot-grow success animation + countdown, and several
+polish fixes (email-preview sheet using full sheet height, weekly-summary card
+no longer stretching with dead space, attachment file-size display). **This
+branch is now superseded** — see below.
+
+`feature/navbar-elevation-pill` (branched off `feature/home-qr-checkin`'s tip,
+`aa5f1b5` — see "why not built on navbar-home-leave-attachments" below) gave the
+bottom nav a soft upward shadow instead of a flat border-top, rounded its top
+corners, swapped the active tab's pill to a solid `bg-brand-600` fill with white
+icon/label, and removed the header notification bell everywhere (the shared
+`EmployeePageHeader` no longer renders one at all).
+
+`feature/desktop-responsive-shell` (branched off `feature/navbar-elevation-pill`'s
+tip) is **the current leaf branch — build on this one, not the others above.**
+It makes the employee shell usable at `md:` and up: the shell is framed as a
+phone-proportioned (9:19.5 aspect-ratio) card on a neutral backdrop, pinned to
+exactly one viewport tall so the page itself never scrolls (excess content
+scrolls inside the card instead, with its scrollbar hidden but still
+functional), with matching `md:` treatment on the QR scan overlay and the
+portal-rendered bottom sheets. Every change is `md:`-prefixed on top of the
+existing mobile classes — mobile is pixel-identical to before. It also carries
+forward everything from `feature/navbar-home-leave-attachments` above, reconciled
+in via `git stash apply` after that work was stashed mid-session and needed to
+be merged back in by hand (see the note below on why that happened).
+
+**Why not built on `navbar-home-leave-attachments` directly:** two later tasks
+in the same session explicitly asked for dedicated branches (`feature/navbar-elevation-pill`, `feature/desktop-responsive-shell`) "off `dev`" — `dev` doesn't
+have `employee-nav.tsx` at all, so both were cut from `feature/home-qr-checkin`'s
+tip instead (flagged at the time), and `navbar-home-leave-attachments`'s
+in-progress uncommitted work was stashed to keep those branches clean. That
+stash didn't get carried forward automatically and caused real confusion
+(the running dev server appeared to have "reverted" several already-approved
+changes) until it was explicitly reconciled back in. **Lesson for next time:**
+when a task's branch instruction conflicts with the branch that has your
+current uncommitted work, either commit that work first or explicitly say
+you're stashing it and will restore it — don't let it go silently missing.
 
 ## Conventions
 
