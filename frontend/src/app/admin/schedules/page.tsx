@@ -234,7 +234,7 @@ export default function SchedulesPage() {
     <main className="flex flex-1 flex-col gap-6 p-6">
       <h1 className="text-2xl font-bold text-foreground">Schedules</h1>
 
-      <Card className="rounded-2xl shadow-sm">
+      <Card className="rounded-2xl">
         <CardHeader>
           <CardTitle>Weekly schedule editor</CardTitle>
         </CardHeader>
@@ -266,7 +266,7 @@ export default function SchedulesPage() {
         </CardContent>
       </Card>
 
-      <Card className="rounded-2xl shadow-sm">
+      <Card className="rounded-2xl">
         <CardHeader>
           <CardTitle>Bulk import (CSV)</CardTitle>
         </CardHeader>

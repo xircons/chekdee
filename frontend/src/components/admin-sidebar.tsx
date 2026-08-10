@@ -27,13 +27,18 @@ export function AdminSidebar() {
   const router = useRouter();
 
   return (
-    <aside className="flex h-full w-56 shrink-0 flex-col border-r border-border bg-card">
-      <div className="px-4 py-5">
-        <p className="text-lg font-bold text-foreground">Checkdee</p>
-        <p className="text-xs text-muted-foreground">Admin panel</p>
+    <aside className="flex h-full w-60 shrink-0 flex-col border-r border-slate-200 bg-card">
+      <div className="flex items-center gap-2.5 px-4 py-5">
+        <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-brand-600 text-sm font-bold text-white">
+          C
+        </div>
+        <div>
+          <p className="text-sm font-bold text-foreground">Checkdee</p>
+          <p className="text-xs text-muted-foreground">Admin panel</p>
+        </div>
       </div>
 
-      <nav className="flex flex-1 flex-col gap-0.5 px-2">
+      <nav className="flex flex-1 flex-col gap-1 px-3">
         {links.map((link) => {
           const active =
             link.href === "/admin" ? pathname === "/admin" : pathname.startsWith(link.href);
@@ -43,10 +48,10 @@ export function AdminSidebar() {
               key={link.href}
               href={link.href}
               className={cn(
-                "flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium",
+                "flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm transition-colors",
                 active
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  ? "bg-brand-100 font-semibold text-brand-600"
+                  : "font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
               )}
             >
               <Icon className="size-4" />
@@ -61,7 +66,7 @@ export function AdminSidebar() {
         onClick={() => {
           void logout().then(() => router.push("/login"));
         }}
-        className="mx-2 mb-4 flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+        className="mx-3 mb-4 flex cursor-pointer items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
       >
         <LogOut className="size-4" />
         Log out

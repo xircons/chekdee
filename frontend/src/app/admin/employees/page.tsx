@@ -1,10 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { IdCard, Phone, Search, Users } from "lucide-react";
 import { z } from "zod";
 
+import { AdminDetailDialog, AdminDetailInfoBlock } from "@/components/admin-detail-dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -42,7 +44,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { mockEmployees, type MockEmployee, type Role } from "@/lib/mock-data";
+import { getMonthlyAttendanceStats, mockEmployees, type MockEmployee, type Role } from "@/lib/mock-data";
 import { useMe } from "@/lib/session";
 
 const directoryRoles: Role[] = ["employee", "supervisor", "admin"];
@@ -64,6 +66,10 @@ function statusBadge(employee: MockEmployee) {
     return <Badge variant="success">Active</Badge>;
   }
   return <Badge variant="secondary">Inactive</Badge>;
+}
+
+function initials(employee: MockEmployee): string {
+  return `${employee.firstName[0] ?? ""}${employee.lastName[0] ?? ""}`.toUpperCase();
 }
 
 function EmployeeFormFields({
@@ -149,6 +155,20 @@ export default function EmployeesPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<MockEmployee | null>(null);
   const [offboardTarget, setOffboardTarget] = useState<MockEmployee | null>(null);
+  const [detailEmployee, setDetailEmployee] = useState<MockEmployee | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState<Role | "all">("all");
+
+  const filteredEmployees = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return employees.filter((e) => {
+      const matchesQuery =
+        query.length === 0 || `${e.firstName} ${e.lastName}`.toLowerCase().includes(query);
+      const matchesRole = roleFilter === "all" || e.role === roleFilter;
+      return matchesQuery && matchesRole;
+    });
+  }, [employees, search, roleFilter]);
 
   const openCreateForm = () => {
     setEditingEmployee(null);
@@ -158,6 +178,11 @@ export default function EmployeesPage() {
   const openEditForm = (employee: MockEmployee) => {
     setEditingEmployee(employee);
     setFormOpen(true);
+  };
+
+  const openDetail = (employee: MockEmployee) => {
+    setDetailEmployee(employee);
+    setDetailOpen(true);
   };
 
   const handleSubmit = (values: EmployeeForm) => {
@@ -208,20 +233,49 @@ export default function EmployeesPage() {
     setOffboardTarget(null);
   };
 
+  const monthStats = detailEmployee
+    ? getMonthlyAttendanceStats(detailEmployee.id, new Date().toISOString().slice(0, 7))
+    : null;
+
   return (
     <main className="flex flex-1 flex-col gap-6 p-6">
       <h1 className="text-2xl font-bold text-foreground">Employees</h1>
 
-      <Card className="rounded-2xl shadow-sm">
+      <Card className="rounded-2xl">
         <CardHeader>
           <CardTitle>Directory</CardTitle>
           <CardAction>
-            <Button size="sm" onClick={openCreateForm}>
+            <Button size="sm" className="bg-accent-600 text-white hover:bg-accent-700" onClick={openCreateForm}>
               Add employee
             </Button>
           </CardAction>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex flex-col gap-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative w-64">
+              <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search by name"
+                className="pl-8"
+              />
+            </div>
+            <Select value={roleFilter} onValueChange={(v) => setRoleFilter(v as Role | "all")}>
+              <SelectTrigger className="w-40">
+                <SelectValue placeholder="All roles" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All roles</SelectItem>
+                {directoryRoles.map((role) => (
+                  <SelectItem key={role} value={role} className="capitalize">
+                    {role}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           <Table>
             <TableHeader>
               <TableRow>
@@ -233,8 +287,12 @@ export default function EmployeesPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {employees.map((employee) => (
-                <TableRow key={employee.id}>
+              {filteredEmployees.map((employee) => (
+                <TableRow
+                  key={employee.id}
+                  className="cursor-pointer"
+                  onClick={() => openDetail(employee)}
+                >
                   <TableCell className="font-medium text-foreground">
                     {employee.firstName} {employee.lastName}
                   </TableCell>
@@ -243,7 +301,7 @@ export default function EmployeesPage() {
                   <TableCell>{employee.studentGen ?? "—"}</TableCell>
                   <TableCell className="text-right">
                     {!employee.offboardedAt && (
-                      <div className="flex justify-end gap-2">
+                      <div className="flex justify-end gap-2" onClick={(e) => e.stopPropagation()}>
                         <Button size="sm" variant="outline" onClick={() => openEditForm(employee)}>
                           Edit
                         </Button>
@@ -259,6 +317,13 @@ export default function EmployeesPage() {
                   </TableCell>
                 </TableRow>
               ))}
+              {filteredEmployees.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center text-muted-foreground">
+                    No employees match your search.
+                  </TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </CardContent>
@@ -301,6 +366,48 @@ export default function EmployeesPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <AdminDetailDialog
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
+        icon={Users}
+        title={detailEmployee ? `${detailEmployee.firstName} ${detailEmployee.lastName}` : ""}
+        badgeText={detailEmployee?.role ?? ""}
+        badgeVariant="default"
+        footer={
+          <Button variant="outline" className="w-full" onClick={() => setDetailOpen(false)}>
+            Close
+          </Button>
+        }
+      >
+        {detailEmployee && (
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center gap-3 rounded-xl bg-slate-50 px-4 py-3.5">
+              <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-brand-100 text-sm font-semibold text-brand-600">
+                {initials(detailEmployee)}
+              </div>
+              <div className="flex flex-col gap-0.5 text-sm">
+                <div className="flex items-center gap-1.5 text-foreground">
+                  <IdCard className="size-3.5 text-muted-foreground" />
+                  {detailEmployee.studentId ?? "No student ID on file"}
+                </div>
+                <div className="flex items-center gap-1.5 text-foreground">
+                  <Phone className="size-3.5 text-muted-foreground" />
+                  {detailEmployee.phoneNumber ?? "No phone on file"}
+                </div>
+              </div>
+            </div>
+
+            {monthStats && (
+              <div className="grid grid-cols-3 gap-2">
+                <AdminDetailInfoBlock label="Hours (mo.)" value={String(monthStats.hours)} valueSize="sm" />
+                <AdminDetailInfoBlock label="Late" value={String(monthStats.lateCount)} valueSize="sm" />
+                <AdminDetailInfoBlock label="Absent" value={String(monthStats.absentCount)} valueSize="sm" />
+              </div>
+            )}
+          </div>
+        )}
+      </AdminDetailDialog>
     </main>
   );
 }

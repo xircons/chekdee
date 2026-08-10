@@ -152,11 +152,11 @@ export default function HolidaysPage() {
     <main className="flex flex-1 flex-col gap-6 p-6">
       <h1 className="text-2xl font-bold text-foreground">Holidays</h1>
 
-      <Card className="rounded-2xl shadow-sm">
+      <Card className="rounded-2xl">
         <CardHeader>
           <CardTitle>Company calendar</CardTitle>
           <CardAction>
-            <Button size="sm" onClick={openCreateForm}>
+            <Button size="sm" className="bg-accent-600 text-white hover:bg-accent-700" onClick={openCreateForm}>
               Add holiday
             </Button>
           </CardAction>
