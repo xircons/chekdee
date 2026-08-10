@@ -1,22 +1,32 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { Calendar, Clock, FileText, Umbrella, User } from "lucide-react";
+import {
+  Calendar,
+  Check,
+  Clock,
+  FileText,
+  Minus,
+  Moon,
+  QrCode,
+  User,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 
 import { EmployeePageHeader } from "@/components/employee-page-header";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { useTodayAttendance } from "@/lib/attendance-store";
+import { useTodayAttendance, type TodayAttendance } from "@/lib/attendance-store";
 import {
-  ANNUAL_LEAVE_DAYS,
-  getLeaveBalance,
-  getUpcomingHolidays,
+  getAttendanceForEmployee,
+  getWorkScheduleForEmployee,
   mockEmployees,
   ROLE_LABEL_TH,
+  type MockAttendanceRecord,
 } from "@/lib/mock-data";
 import { useMe } from "@/lib/session";
+import { cn } from "@/lib/utils";
 
 const QUICK_ACTIONS = [
   { href: "/leave", label: "ขอลา", icon: FileText },
@@ -24,13 +34,29 @@ const QUICK_ACTIONS = [
   { href: "/profile", label: "โปรไฟล์", icon: User },
 ];
 
+const WEEKDAY_LABELS_TH = ["จ", "อ", "พ", "พฤ", "ศ", "ส", "อา"];
+
+type DayIconStatus = "present" | "late" | "absent" | "future" | "dayoff";
+
+const DAY_ICON: Record<DayIconStatus, LucideIcon> = {
+  present: Check,
+  late: Clock,
+  absent: X,
+  future: Minus,
+  dayoff: Moon,
+};
+
+const DAY_ICON_STYLE: Record<DayIconStatus, string> = {
+  present: "bg-success text-success-foreground",
+  late: "bg-warning text-warning-foreground",
+  absent: "bg-danger text-danger-foreground",
+  future: "bg-muted text-muted-foreground",
+  dayoff: "bg-muted/40 text-muted-foreground/50",
+};
+
 function formatTime(iso: string | null): string {
   if (!iso) return "--:--";
   return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}
-
-function formatHolidayDate(date: string): string {
-  return new Date(`${date}T00:00:00Z`).toLocaleDateString([], { month: "short", day: "numeric" });
 }
 
 function initials(first: string | null, last: string | null, fallback: string | null): string {
@@ -40,22 +66,66 @@ function initials(first: string | null, last: string | null, fallback: string | 
   return (fallback ?? "?").slice(0, 2).toUpperCase();
 }
 
+function toIsoDateLocal(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+// Monday-first dates for the week containing `reference`.
+function getWeekDates(reference: Date): Date[] {
+  const mondayOffset = reference.getDay() === 0 ? -6 : 1 - reference.getDay();
+  const monday = new Date(reference);
+  monday.setDate(reference.getDate() + mondayOffset);
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    return d;
+  });
+}
+
+function classifyDay(
+  date: Date,
+  todayIso: string,
+  workingDays: Set<number>,
+  attendanceByDate: Map<string, MockAttendanceRecord>,
+  todayAttendance: TodayAttendance
+): DayIconStatus {
+  const iso = toIsoDateLocal(date);
+  // Day-off is a schedule fact independent of time; "future" only means a
+  // scheduled workday that hasn't happened yet, so day-off takes priority
+  // even for days later in the week.
+  if (!workingDays.has(date.getDay())) return "dayoff";
+  if (iso > todayIso) return "future";
+  if (iso === todayIso) return todayAttendance.checkInAt ? "present" : "future";
+
+  const record = attendanceByDate.get(iso);
+  if (record?.status === "present") return "present";
+  if (record?.status === "สาย") return "late";
+  if (record?.status === "ขาด") return "absent";
+  return "future";
+}
+
 export default function EmployeeHome() {
   const me = useMe();
-  const router = useRouter();
-  const { today, checkIn, checkOut } = useTodayAttendance();
+  const { today } = useTodayAttendance();
 
   const now = new Date();
-  const leaveBalance = getLeaveBalance(me.id, now.getFullYear());
-  const upcomingHolidays = getUpcomingHolidays(now.toISOString().slice(0, 10));
-  const nextHoliday = upcomingHolidays[0];
+  const todayIso = toIsoDateLocal(now);
 
   const mockProfile = mockEmployees.find((e) => e.id === me.id);
   const fullName = [me.first_name, me.last_name].filter(Boolean).join(" ") || me.display_name || "—";
 
-  const isDone = Boolean(today.checkInAt && today.checkOutAt);
   const statusLabel = !today.checkInAt ? "ยังไม่เข้างาน" : !today.checkOutAt ? "เข้างานแล้ว" : "ออกงานแล้ว";
-  const ctaLabel = today.checkInAt && !today.checkOutAt ? "ออกงาน" : "เข้างาน";
+
+  const workingDays = new Set(getWorkScheduleForEmployee(me.id).map((s) => s.dayOfWeek));
+  const attendanceByDate = new Map(getAttendanceForEmployee(me.id).map((r) => [r.workDate, r]));
+  const weekDays = getWeekDates(now).map((date, i) => ({
+    date,
+    label: WEEKDAY_LABELS_TH[i],
+    status: classifyDay(date, todayIso, workingDays, attendanceByDate, today),
+  }));
 
   return (
     <div className="flex w-full flex-1 flex-col">
@@ -106,30 +176,28 @@ export default function EmployeeHome() {
           <CardContent className="flex flex-col gap-4 p-5">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-muted-foreground">สถานะ</p>
+                <p className="text-xs text-muted-foreground">สถานะวันนี้</p>
                 <p className="text-base font-bold text-foreground">{statusLabel}</p>
               </div>
-              {isDone && <Badge variant="success">เสร็จสิ้นวันนี้</Badge>}
+              <Link
+                href="/check-in/scan"
+                className="flex size-[90px] shrink-0 flex-col items-center justify-center gap-1 rounded-2xl bg-accent-600 text-white transition-transform active:scale-95"
+              >
+                <QrCode className="size-6" />
+                <span className="text-xs font-semibold">สแกน QR</span>
+              </Link>
             </div>
 
-            {!isDone && (
-              <Button
-                className="h-14 w-full gap-2 rounded-2xl bg-accent-600 px-6 text-base font-semibold text-white hover:bg-accent-700"
-                onClick={today.checkInAt ? checkOut : checkIn}
-              >
-                <Clock className="size-5" />
-                {ctaLabel}
-              </Button>
-            )}
+            <div className="border-t border-border" />
 
-            <div className="grid grid-cols-2 gap-4 border-t border-border pt-4">
+            <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs text-muted-foreground">เวลาเข้างาน</p>
                 <p className="text-sm font-semibold tabular-nums text-foreground">
                   {formatTime(today.checkInAt)}
                 </p>
               </div>
-              <div>
+              <div className="text-right">
                 <p className="text-xs text-muted-foreground">เวลาออกงาน</p>
                 <p className="text-sm font-semibold tabular-nums text-foreground">
                   {formatTime(today.checkOutAt)}
@@ -139,50 +207,29 @@ export default function EmployeeHome() {
           </CardContent>
         </Card>
 
-        <div className="grid grid-cols-2 gap-4">
-          <Card className="rounded-2xl bg-brand-900 text-white">
-            <CardContent className="flex flex-col p-5">
-              <p className="text-xs text-white/70">วันหยุดที่จะถึง</p>
-              <p className="mt-1 text-3xl font-bold tabular-nums">{upcomingHolidays.length}</p>
-              {nextHoliday ? (
-                <p className="mt-2 text-sm font-medium">
-                  {nextHoliday.localName ?? nextHoliday.name} · {formatHolidayDate(nextHoliday.date)}
-                </p>
-              ) : (
-                <p className="mt-2 text-sm text-white/70">ไม่มีวันหยุดที่จะถึง</p>
-              )}
-              <Button
-                variant="ghost"
-                size="sm"
-                className="mt-3 w-fit self-start text-white hover:bg-white/10 hover:text-white"
-                onClick={() => router.push("/schedule")}
-              >
-                ดูทั้งหมด
-              </Button>
-            </CardContent>
-          </Card>
-
-          <Card className="rounded-2xl">
-            <CardContent className="flex flex-col p-5">
-              <div className="flex items-center gap-1.5 text-brand-600">
-                <Umbrella className="size-4" />
-                <p className="text-xs font-medium text-muted-foreground">วันลาคงเหลือ</p>
-              </div>
-              <p className="mt-1 text-2xl font-bold tabular-nums text-foreground">
-                {leaveBalance}
-                <span className="text-sm font-normal text-muted-foreground"> / {ANNUAL_LEAVE_DAYS} วัน</span>
-              </p>
-              <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                <div
-                  className="h-full rounded-full bg-brand-600"
-                  style={{
-                    width: `${Math.max(0, Math.min(100, (leaveBalance / ANNUAL_LEAVE_DAYS) * 100))}%`,
-                  }}
-                />
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+        <Card className="rounded-2xl">
+          <CardContent className="flex flex-col gap-4 p-5">
+            <p className="text-sm font-semibold text-foreground">สรุปการเข้างานสัปดาห์นี้</p>
+            <div className="flex justify-between">
+              {weekDays.map((day) => {
+                const Icon = DAY_ICON[day.status];
+                return (
+                  <div key={day.label + day.date.getDate()} className="flex flex-col items-center gap-1.5">
+                    <div
+                      className={cn(
+                        "flex size-8 items-center justify-center rounded-full",
+                        DAY_ICON_STYLE[day.status]
+                      )}
+                    >
+                      <Icon className="size-4" />
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">{day.label}</p>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
