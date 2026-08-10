@@ -33,6 +33,14 @@
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
 
+  /* brand colors — ttb-inspired dashboard redesign, see design.md */
+  --color-brand-900: var(--brand-900);
+  --color-brand-600: var(--brand-600);
+  --color-brand-100: var(--brand-100);
+  --color-accent-600: var(--accent-600);
+  --color-accent-700: var(--accent-700);
+  --color-accent-100: var(--accent-100);
+
   /* status colors — badges/status cards only, see design.md */
   --color-success: var(--success);
   --color-success-foreground: var(--success-foreground);
@@ -40,14 +48,27 @@
   --color-warning-foreground: var(--warning-foreground);
   --color-danger: var(--danger);
   --color-danger-foreground: var(--danger-foreground);
-  --color-status-secondary: var(--status-secondary);
-  --color-status-secondary-foreground: var(--status-secondary-foreground);
 
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 16px;
   --radius-xl: 20px;
   --radius-2xl: 20px;
+
+  /* pure scale grow, no skew/stretch — QR check-in success dot */
+  --animate-dot-grow: dot-grow 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes dot-grow {
+  0% {
+    transform: scale(0.1);
+  }
+  70% {
+    transform: scale(1.08);
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 
 /* Light mode only — see design.md. No .dark theme is defined. */
@@ -82,8 +103,6 @@
   --warning-foreground: #ea580c;
   --danger: #fee2e2;
   --danger-foreground: #dc2626;
-  --status-secondary: #f3e8ff;
-  --status-secondary-foreground: #9333ea;
 
   --sidebar: #ffffff;
   --sidebar-foreground: #0f172a;
@@ -93,6 +112,13 @@
   --sidebar-accent-foreground: #1e293b;
   --sidebar-border: #e2e8f0;
   --sidebar-ring: #1e293b;
+
+  --brand-900: #0f2a5c;
+  --brand-600: #1b4b91;
+  --brand-100: #e8f0fc;
+  --accent-600: #f7941d;
+  --accent-700: #d97b0a;
+  --accent-100: #fef1e0;
 }
 
 @layer base {
