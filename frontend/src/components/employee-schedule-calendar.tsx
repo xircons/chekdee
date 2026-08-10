@@ -3,7 +3,8 @@
 import { useMemo, useState } from "react";
 import { CalendarOff, ChevronLeft, ChevronRight, Clock, PartyPopper } from "lucide-react";
 
-import { ScheduleDayModal, type ScheduleDayModalBadgeTone } from "@/components/schedule-day-modal";
+import { DetailModal, DetailModalInfoBlock, type DetailModalBadgeVariant } from "@/components/detail-modal";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -89,9 +90,9 @@ const STATUS_ICON: Record<DayStatus, typeof Clock> = {
   holiday: PartyPopper,
 };
 
-const STATUS_BADGE_TONE: Record<DayStatus, ScheduleDayModalBadgeTone> = {
-  workday: "brand",
-  dayoff: "muted",
+const STATUS_BADGE_VARIANT: Record<DayStatus, DetailModalBadgeVariant> = {
+  workday: "default",
+  dayoff: "secondary",
   holiday: "warning",
 };
 
@@ -303,33 +304,44 @@ export function EmployeeScheduleCalendar({ employeeId }: { employeeId: string })
         </div>
       )}
 
-      <ScheduleDayModal
+      <DetailModal
         open={selectedDay !== null}
         onOpenChange={(open) => !open && setSelectedDay(null)}
         icon={selectedDay ? STATUS_ICON[selectedDay.status] : Clock}
-        dateLabel={selectedDay ? formatThaiDate(selectedDay.date) : ""}
+        title={selectedDay ? formatThaiDate(selectedDay.date) : ""}
         badgeText={
           selectedDay
             ? STATUS_LABEL_TH[selectedDay.status] + (selectedDay.isToday ? " · วันนี้" : "")
             : ""
         }
-        badgeTone={selectedDay ? STATUS_BADGE_TONE[selectedDay.status] : "brand"}
-        infoLabel={
-          selectedDay?.status === "workday"
-            ? "เวลาทำงาน"
-            : selectedDay?.status === "holiday"
-              ? "ชื่อวันหยุด"
-              : "สถานะ"
+        badgeVariant={selectedDay ? STATUS_BADGE_VARIANT[selectedDay.status] : "default"}
+        footer={
+          <Button
+            className="h-11 w-full rounded-full bg-accent-600 font-semibold text-white hover:bg-accent-700"
+            onClick={() => setSelectedDay(null)}
+          >
+            ตกลง
+          </Button>
         }
-        infoValue={
-          selectedDay?.status === "workday" && selectedDay.hours
-            ? `${selectedDay.hours.start} – ${selectedDay.hours.end}`
-            : selectedDay?.status === "holiday" && selectedDay.holidayName
-              ? selectedDay.holidayName
-              : "ไม่มีตารางทำงานในวันนี้"
-        }
-        infoValueSize={selectedDay?.status === "workday" ? "lg" : "sm"}
-      />
+      >
+        <DetailModalInfoBlock
+          label={
+            selectedDay?.status === "workday"
+              ? "เวลาทำงาน"
+              : selectedDay?.status === "holiday"
+                ? "ชื่อวันหยุด"
+                : "สถานะ"
+          }
+          value={
+            selectedDay?.status === "workday" && selectedDay.hours
+              ? `${selectedDay.hours.start} – ${selectedDay.hours.end}`
+              : selectedDay?.status === "holiday" && selectedDay.holidayName
+                ? selectedDay.holidayName
+                : "ไม่มีตารางทำงานในวันนี้"
+          }
+          valueSize={selectedDay?.status === "workday" ? "lg" : "sm"}
+        />
+      </DetailModal>
     </div>
   );
 }

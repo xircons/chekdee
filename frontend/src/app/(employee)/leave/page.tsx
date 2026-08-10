@@ -3,9 +3,10 @@
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { CalendarRange, Mail } from "lucide-react";
+import { CalendarRange, ChevronDown, ChevronUp, Mail } from "lucide-react";
 import { z } from "zod";
 
+import { DetailModal, DetailModalInfoBlock } from "@/components/detail-modal";
 import { EmployeeListRow } from "@/components/employee-list-row";
 import { EmployeePageHeader } from "@/components/employee-page-header";
 import { Badge } from "@/components/ui/badge";
@@ -24,7 +25,7 @@ import {
   type MockLeaveRequest,
 } from "@/lib/mock-data";
 import { useMe } from "@/lib/session";
-import { cn } from "@/lib/utils";
+import { cn, formatThaiDateRange } from "@/lib/utils";
 
 const fieldClass =
   "h-12 rounded-xl border-border bg-muted/40 px-3 text-sm placeholder:text-sm focus-visible:border-brand-600 focus-visible:bg-card focus-visible:ring-brand-600/20";
@@ -55,16 +56,15 @@ const statusLabelTh: Record<LeaveStatus, string> = {
   rejected: "ไม่อนุมัติ",
 };
 
-function formatDateRange(startDate: string, endDate: string): string {
-  const format = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString([], { month: "short", day: "numeric" });
-  return startDate === endDate ? format(startDate) : `${format(startDate)} – ${format(endDate)}`;
-}
+const VISIBLE_LEAVE_REQUESTS = 5;
 
 export default function LeavePage() {
   const me = useMe();
   const [requests, setRequests] = useState<MockLeaveRequest[]>(() => getLeaveRequestsForEmployee(me.id));
   const [showPreview, setShowPreview] = useState(false);
   const [subjectEdited, setSubjectEdited] = useState(false);
+  const [requestListExpanded, setRequestListExpanded] = useState(false);
+  const [selectedRequest, setSelectedRequest] = useState<MockLeaveRequest | null>(null);
 
   const {
     register,
@@ -116,6 +116,11 @@ export default function LeavePage() {
     setSubjectEdited(false);
     setShowPreview(false);
   };
+
+  const visibleRequests = requestListExpanded
+    ? requests
+    : requests.slice(0, VISIBLE_LEAVE_REQUESTS);
+  const hiddenRequestCount = requests.length - VISIBLE_LEAVE_REQUESTS;
 
   return (
     <div className="flex w-full flex-1 flex-col">
@@ -216,22 +221,57 @@ export default function LeavePage() {
             {requests.length === 0 && (
               <p className="text-sm text-muted-foreground">ยังไม่มีคำขอลา</p>
             )}
-            {requests.map((request) => (
+            {visibleRequests.map((request, index) => (
               <EmployeeListRow
                 key={request.id}
                 icon={CalendarRange}
-                label={formatDateRange(request.startDate, request.endDate)}
+                label={formatThaiDateRange(request.startDate, request.endDate)}
                 sublabel={request.reason ?? undefined}
                 trailing={
                   <Badge variant={statusBadgeVariant[request.status]}>
                     {statusLabelTh[request.status]}
                   </Badge>
                 }
+                onClick={() => setSelectedRequest(request)}
+                className={
+                  index >= VISIBLE_LEAVE_REQUESTS
+                    ? "duration-200 animate-in fade-in-0 slide-in-from-top-2"
+                    : undefined
+                }
               />
             ))}
+            {hiddenRequestCount > 0 && (
+              <button
+                type="button"
+                onClick={() => setRequestListExpanded((v) => !v)}
+                className="mt-3 flex items-center gap-1 self-start text-xs font-medium text-brand-600"
+              >
+                {requestListExpanded ? "ย่อกลับ" : `ดูเพิ่มเติม (${hiddenRequestCount} รายการ)`}
+                {requestListExpanded ? (
+                  <ChevronUp className="size-3.5" />
+                ) : (
+                  <ChevronDown className="size-3.5" />
+                )}
+              </button>
+            )}
           </CardContent>
         </Card>
       </div>
+
+      <DetailModal
+        open={selectedRequest !== null}
+        onOpenChange={(open) => !open && setSelectedRequest(null)}
+        icon={CalendarRange}
+        title={selectedRequest ? formatThaiDateRange(selectedRequest.startDate, selectedRequest.endDate) : ""}
+        badgeText={selectedRequest ? statusLabelTh[selectedRequest.status] : ""}
+        badgeVariant={selectedRequest ? statusBadgeVariant[selectedRequest.status] : "warning"}
+      >
+        <DetailModalInfoBlock
+          label="เหตุผล"
+          value={selectedRequest?.reason?.trim() || "-"}
+          valueSize="sm"
+        />
+      </DetailModal>
 
       <Dialog open={showPreview} onOpenChange={setShowPreview}>
         <DialogContent className="max-w-xs gap-4">

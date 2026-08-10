@@ -11,6 +11,7 @@ export function EmployeeListRow({
   trailing,
   accent,
   className,
+  onClick,
 }: {
   icon?: LucideIcon;
   label: string;
@@ -19,15 +20,17 @@ export function EmployeeListRow({
   trailing?: ReactNode;
   accent?: boolean;
   className?: string;
+  onClick?: () => void;
 }) {
-  return (
-    <div
-      className={cn(
-        "flex items-center gap-3 border-b border-border py-3 last:border-b-0",
-        accent && "-ml-(--card-spacing) border-l-2 border-l-accent-600 pl-[calc(var(--card-spacing)-2px)]",
-        className
-      )}
-    >
+  const rowClassName = cn(
+    "flex w-full items-center gap-3 border-b border-border py-3 text-left last:border-b-0",
+    onClick && "transition-colors hover:bg-muted/40 active:bg-muted/60",
+    accent && "-ml-(--card-spacing) border-l-2 border-l-accent-600 pl-[calc(var(--card-spacing)-2px)]",
+    className
+  );
+
+  const content = (
+    <>
       {Icon && (
         <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-brand-100 text-brand-600">
           <Icon className="size-4" />
@@ -39,6 +42,16 @@ export function EmployeeListRow({
       </div>
       {value && <p className="shrink-0 text-sm text-muted-foreground">{value}</p>}
       {trailing}
-    </div>
+    </>
   );
+
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} className={rowClassName}>
+        {content}
+      </button>
+    );
+  }
+
+  return <div className={rowClassName}>{content}</div>;
 }

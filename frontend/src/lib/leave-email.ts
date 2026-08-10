@@ -1,4 +1,4 @@
-import { formatThaiDate, THAI_MONTH_LABELS } from "@/lib/utils";
+import { formatThaiDateRange } from "@/lib/utils";
 
 export type LeaveRequestEmailInput = {
   employeeName: string;
@@ -8,26 +8,6 @@ export type LeaveRequestEmailInput = {
   endDate: string;
   reason: string;
 };
-
-function parseIsoDateLocal(iso: string): Date {
-  return new Date(`${iso}T00:00:00`);
-}
-
-// "20-21 สิงหาคม 2569" when the range stays within one month, otherwise
-// falls back to the full "20 สิงหาคม 2569 ถึง 3 กันยายน 2569" form.
-function formatDateRangeTh(startIso: string, endIso: string): string {
-  const start = parseIsoDateLocal(startIso);
-  if (startIso === endIso) return formatThaiDate(start);
-
-  const end = parseIsoDateLocal(endIso);
-  const sameMonth =
-    start.getMonth() === end.getMonth() && start.getFullYear() === end.getFullYear();
-
-  if (sameMonth) {
-    return `${start.getDate()}-${end.getDate()} ${THAI_MONTH_LABELS[start.getMonth()]} ${start.getFullYear() + 543}`;
-  }
-  return `${formatThaiDate(start)} ถึง ${formatThaiDate(end)}`;
-}
 
 export type LeaveRequestEmail = {
   subject: string;
@@ -39,7 +19,7 @@ export type LeaveRequestEmail = {
 export function buildLeaveRequestEmail(input: LeaveRequestEmailInput): LeaveRequestEmail {
   const { employeeName, position, team, startDate, endDate, reason } = input;
 
-  const dateRange = startDate && endDate ? formatDateRangeTh(startDate, endDate) : "-";
+  const dateRange = startDate && endDate ? formatThaiDateRange(startDate, endDate) : "-";
 
   const subject = `คำขอลา - ${employeeName} - ${dateRange}`;
 

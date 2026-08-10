@@ -24,3 +24,23 @@ export const THAI_MONTH_LABELS = [
 export function formatThaiDate(date: Date): string {
   return `${date.getDate()} ${THAI_MONTH_LABELS[date.getMonth()]} ${date.getFullYear() + 543}`
 }
+
+export function parseIsoDateLocal(iso: string): Date {
+  return new Date(`${iso}T00:00:00`)
+}
+
+// "20-21 สิงหาคม 2569" when the range stays within one month, otherwise
+// falls back to the full "20 สิงหาคม 2569 ถึง 3 กันยายน 2569" form.
+export function formatThaiDateRange(startIso: string, endIso: string): string {
+  const start = parseIsoDateLocal(startIso)
+  if (startIso === endIso) return formatThaiDate(start)
+
+  const end = parseIsoDateLocal(endIso)
+  const sameMonth =
+    start.getMonth() === end.getMonth() && start.getFullYear() === end.getFullYear()
+
+  if (sameMonth) {
+    return `${start.getDate()}-${end.getDate()} ${THAI_MONTH_LABELS[start.getMonth()]} ${start.getFullYear() + 543}`
+  }
+  return `${formatThaiDate(start)} ถึง ${formatThaiDate(end)}`
+}
