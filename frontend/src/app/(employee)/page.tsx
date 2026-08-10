@@ -14,15 +14,9 @@ import {
   getLeaveBalance,
   getUpcomingHolidays,
   mockEmployees,
+  ROLE_LABEL_TH,
 } from "@/lib/mock-data";
-import { useMe, type Role } from "@/lib/session";
-
-const ROLE_LABEL_TH: Record<Role, string> = {
-  employee: "พนักงาน",
-  supervisor: "หัวหน้างาน",
-  admin: "ผู้ดูแลระบบ",
-  system_owner: "เจ้าของระบบ",
-};
+import { useMe } from "@/lib/session";
 
 const QUICK_ACTIONS = [
   { href: "/leave", label: "ขอลา", icon: FileText },

@@ -8,15 +8,8 @@ import { EmployeePageHeader } from "@/components/employee-page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { mockEmployees } from "@/lib/mock-data";
-import { useMe, logout, type Role } from "@/lib/session";
-
-const ROLE_LABEL_TH: Record<Role, string> = {
-  employee: "พนักงาน",
-  supervisor: "หัวหน้างาน",
-  admin: "ผู้ดูแลระบบ",
-  system_owner: "เจ้าของระบบ",
-};
+import { mockEmployees, ROLE_LABEL_TH } from "@/lib/mock-data";
+import { useMe, logout } from "@/lib/session";
 
 // studentGen stores the admission year (e.g. "2026") to match the admin
 // employee form; the profile view shows it as a generation ordinal instead.

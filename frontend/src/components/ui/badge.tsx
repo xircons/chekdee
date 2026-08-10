@@ -22,7 +22,6 @@ const badgeVariants = cva(
         success: "bg-success text-success-foreground",
         warning: "bg-warning text-warning-foreground",
         danger: "bg-danger text-danger-foreground",
-        "status-secondary": "bg-status-secondary text-status-secondary-foreground",
       },
     },
     defaultVariants: {

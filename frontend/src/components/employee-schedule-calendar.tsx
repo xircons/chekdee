@@ -3,14 +3,7 @@
 import { useMemo, useState } from "react";
 import { CalendarOff, ChevronLeft, ChevronRight, Clock, PartyPopper } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { ScheduleDayModal, type ScheduleDayModalBadgeTone } from "@/components/schedule-day-modal";
 import {
   Select,
   SelectContent,
@@ -19,23 +12,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { getWorkScheduleForEmployee, mockHolidays } from "@/lib/mock-data";
-import { cn } from "@/lib/utils";
+import { cn, formatThaiDate, THAI_MONTH_LABELS } from "@/lib/utils";
 
 const WEEKDAY_LABELS_TH = ["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"];
-const MONTH_LABELS_TH = [
-  "มกราคม",
-  "กุมภาพันธ์",
-  "มีนาคม",
-  "เมษายน",
-  "พฤษภาคม",
-  "มิถุนายน",
-  "กรกฎาคม",
-  "สิงหาคม",
-  "กันยายน",
-  "ตุลาคม",
-  "พฤศจิกายน",
-  "ธันวาคม",
-];
 
 type DayStatus = "workday" | "dayoff" | "holiday";
 
@@ -54,10 +33,6 @@ function toIsoDate(date: Date): string {
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
-}
-
-function formatThaiDate(date: Date): string {
-  return `${date.getDate()} ${MONTH_LABELS_TH[date.getMonth()]} ${date.getFullYear() + 543}`;
 }
 
 // Sunday-first month grid, padded with the leading/trailing days needed to
@@ -93,13 +68,13 @@ function runPosition(week: DayStatus[], index: number): { isStart: boolean; isEn
 const STATUS_PILL: Record<DayStatus, string> = {
   workday: "",
   dayoff: "bg-muted",
-  holiday: "bg-status-secondary",
+  holiday: "bg-warning",
 };
 
 const STATUS_TEXT: Record<DayStatus, string> = {
   workday: "text-foreground",
   dayoff: "text-muted-foreground",
-  holiday: "text-status-secondary-foreground",
+  holiday: "text-warning-foreground",
 };
 
 const STATUS_LABEL_TH: Record<DayStatus, string> = {
@@ -114,16 +89,10 @@ const STATUS_ICON: Record<DayStatus, typeof Clock> = {
   holiday: PartyPopper,
 };
 
-const STATUS_ICON_BG: Record<DayStatus, string> = {
-  workday: "bg-brand-100 text-brand-600",
-  dayoff: "bg-muted text-muted-foreground",
-  holiday: "bg-status-secondary text-status-secondary-foreground",
-};
-
-const STATUS_BADGE_VARIANT: Record<DayStatus, "outline" | "secondary" | "status-secondary"> = {
-  workday: "outline",
-  dayoff: "secondary",
-  holiday: "status-secondary",
+const STATUS_BADGE_TONE: Record<DayStatus, ScheduleDayModalBadgeTone> = {
+  workday: "brand",
+  dayoff: "muted",
+  holiday: "warning",
 };
 
 export function EmployeeScheduleCalendar({ employeeId }: { employeeId: string }) {
@@ -200,16 +169,16 @@ export function EmployeeScheduleCalendar({ employeeId }: { employeeId: string })
           <ChevronLeft className="size-4" />
         </button>
 
-        <div className="flex flex-1 items-stretch justify-center divide-x divide-border overflow-hidden rounded-full border border-border bg-muted/40">
+        <div className="flex flex-1 items-center justify-center gap-2">
           <Select
             value={String(viewMonth)}
             onValueChange={(value) => goToMonth(viewYear, Number(value))}
           >
-            <SelectTrigger className="flex-1 justify-center rounded-none border-0 bg-transparent px-3">
-              <SelectValue>{(value: string) => MONTH_LABELS_TH[Number(value)]}</SelectValue>
+            <SelectTrigger className="justify-center rounded-full border border-border bg-muted/40 px-4 font-medium">
+              <SelectValue>{(value: string) => THAI_MONTH_LABELS[Number(value)]}</SelectValue>
             </SelectTrigger>
             <SelectContent>
-              {MONTH_LABELS_TH.map((label, index) => (
+              {THAI_MONTH_LABELS.map((label, index) => (
                 <SelectItem key={label} value={String(index)}>
                   {label}
                 </SelectItem>
@@ -221,7 +190,7 @@ export function EmployeeScheduleCalendar({ employeeId }: { employeeId: string })
             value={String(viewYear)}
             onValueChange={(value) => goToMonth(Number(value), viewMonth)}
           >
-            <SelectTrigger className="justify-center rounded-none border-0 bg-transparent px-3">
+            <SelectTrigger className="justify-center rounded-full border border-border bg-muted/40 px-4 font-medium">
               <SelectValue>{(value: string) => Number(value) + 543}</SelectValue>
             </SelectTrigger>
             <SelectContent>
@@ -314,7 +283,7 @@ export function EmployeeScheduleCalendar({ employeeId }: { employeeId: string })
           <span className="size-2.5 rounded-full bg-muted" /> วันหยุด
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="size-2.5 rounded-full bg-status-secondary" /> วันหยุดนักขัตฤกษ์
+          <span className="size-2.5 rounded-full bg-warning" /> วันหยุดนักขัตฤกษ์
         </span>
         <span className="flex items-center gap-1.5">
           <span className="size-2.5 rounded-full ring-2 ring-brand-600" /> วันนี้
@@ -334,63 +303,33 @@ export function EmployeeScheduleCalendar({ employeeId }: { employeeId: string })
         </div>
       )}
 
-      <Dialog open={selectedDay !== null} onOpenChange={(open) => !open && setSelectedDay(null)}>
-        <DialogContent className="max-w-xs gap-5">
-          {selectedDay &&
-            (() => {
-              const StatusIcon = STATUS_ICON[selectedDay.status];
-              return (
-                <>
-                  <DialogHeader className="items-center gap-3 text-center">
-                    <div
-                      className={cn(
-                        "flex size-16 items-center justify-center rounded-full",
-                        STATUS_ICON_BG[selectedDay.status]
-                      )}
-                    >
-                      <StatusIcon className="size-7" />
-                    </div>
-                    <div className="flex flex-col items-center gap-1.5">
-                      <DialogTitle className="text-lg font-bold">
-                        {formatThaiDate(selectedDay.date)}
-                      </DialogTitle>
-                      <Badge variant={STATUS_BADGE_VARIANT[selectedDay.status]}>
-                        {STATUS_LABEL_TH[selectedDay.status]}
-                        {selectedDay.isToday && " · วันนี้"}
-                      </Badge>
-                    </div>
-                  </DialogHeader>
-
-                  <div className="flex flex-col items-center gap-1 text-center">
-                    {selectedDay.status === "workday" && selectedDay.hours && (
-                      <>
-                        <p className="text-xs text-muted-foreground">เวลาทำงาน</p>
-                        <p className="text-2xl font-bold tabular-nums text-foreground">
-                          {selectedDay.hours.start} – {selectedDay.hours.end}
-                        </p>
-                      </>
-                    )}
-                    {selectedDay.status === "holiday" && selectedDay.holidayName && (
-                      <p className="text-base font-medium text-foreground">
-                        {selectedDay.holidayName}
-                      </p>
-                    )}
-                    {selectedDay.status === "dayoff" && (
-                      <p className="text-sm text-muted-foreground">ไม่มีตารางทำงานในวันนี้</p>
-                    )}
-                  </div>
-
-                  <Button
-                    className="h-11 w-full rounded-full bg-accent-600 font-semibold text-white hover:bg-accent-700"
-                    onClick={() => setSelectedDay(null)}
-                  >
-                    ตกลง
-                  </Button>
-                </>
-              );
-            })()}
-        </DialogContent>
-      </Dialog>
+      <ScheduleDayModal
+        open={selectedDay !== null}
+        onOpenChange={(open) => !open && setSelectedDay(null)}
+        icon={selectedDay ? STATUS_ICON[selectedDay.status] : Clock}
+        dateLabel={selectedDay ? formatThaiDate(selectedDay.date) : ""}
+        badgeText={
+          selectedDay
+            ? STATUS_LABEL_TH[selectedDay.status] + (selectedDay.isToday ? " · วันนี้" : "")
+            : ""
+        }
+        badgeTone={selectedDay ? STATUS_BADGE_TONE[selectedDay.status] : "brand"}
+        infoLabel={
+          selectedDay?.status === "workday"
+            ? "เวลาทำงาน"
+            : selectedDay?.status === "holiday"
+              ? "ชื่อวันหยุด"
+              : "สถานะ"
+        }
+        infoValue={
+          selectedDay?.status === "workday" && selectedDay.hours
+            ? `${selectedDay.hours.start} – ${selectedDay.hours.end}`
+            : selectedDay?.status === "holiday" && selectedDay.holidayName
+              ? selectedDay.holidayName
+              : "ไม่มีตารางทำงานในวันนี้"
+        }
+        infoValueSize={selectedDay?.status === "workday" ? "lg" : "sm"}
+      />
     </div>
   );
 }

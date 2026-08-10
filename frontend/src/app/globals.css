@@ -48,8 +48,6 @@
   --color-warning-foreground: var(--warning-foreground);
   --color-danger: var(--danger);
   --color-danger-foreground: var(--danger-foreground);
-  --color-status-secondary: var(--status-secondary);
-  --color-status-secondary-foreground: var(--status-secondary-foreground);
 
   --radius-sm: 8px;
   --radius-md: 12px;
@@ -90,8 +88,6 @@
   --warning-foreground: #ea580c;
   --danger: #fee2e2;
   --danger-foreground: #dc2626;
-  --status-secondary: #f3e8ff;
-  --status-secondary-foreground: #9333ea;
 
   --sidebar: #ffffff;
   --sidebar-foreground: #0f172a;

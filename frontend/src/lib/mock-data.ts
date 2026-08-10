@@ -8,6 +8,13 @@
 export type Role = "system_owner" | "admin" | "supervisor" | "employee";
 export type UserStatus = "active" | "inactive";
 
+export const ROLE_LABEL_TH: Record<Role, string> = {
+  employee: "พนักงาน",
+  supervisor: "หัวหน้างาน",
+  admin: "ผู้ดูแลระบบ",
+  system_owner: "เจ้าของระบบ",
+};
+
 export type MockEmployee = {
   id: string;
   role: Role;
