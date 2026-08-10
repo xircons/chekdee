@@ -61,7 +61,7 @@ export default function EmployeeHome() {
     <div className="flex w-full flex-1 flex-col">
       <EmployeePageHeader
         title={`สวัสดี, ${me.first_name ?? me.display_name}`}
-        subtitle="ระบบบันทึกเวลาทำงาน CAMT, Chiang Mai University"
+        subtitle="ระบบบันทึกเวลาทำงาน turnPRO, Chiang Mai University"
       />
 
       <div className="flex flex-col gap-6 px-6 pb-6">
@@ -91,7 +91,7 @@ export default function EmployeeHome() {
               <Link
                 key={action.href}
                 href={action.href}
-                className="flex flex-col items-center gap-2 rounded-2xl bg-card p-3 text-center ring-1 ring-foreground/10"
+                className="flex flex-col items-center gap-2 rounded-2xl bg-card p-3 text-center ring-1 ring-foreground/10 transition-transform active:scale-95"
               >
                 <div className="flex size-11 items-center justify-center rounded-full bg-brand-100 text-brand-600">
                   <Icon className="size-5" />

@@ -24,7 +24,7 @@ export function EmployeeListRow({
 }) {
   const rowClassName = cn(
     "flex w-full items-center gap-3 border-b border-border py-3 text-left last:border-b-0",
-    onClick && "transition-colors hover:bg-muted/40 active:bg-muted/60",
+    onClick && "transition-[transform,background-color] hover:bg-muted/40 active:scale-[0.98] active:bg-muted/60",
     accent && "-ml-(--card-spacing) border-l-2 border-l-accent-600 pl-[calc(var(--card-spacing)-2px)]",
     className
   );

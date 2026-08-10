@@ -1,38 +1,43 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { CalendarRange, ChevronDown, ChevronUp, Mail } from "lucide-react";
 import { z } from "zod";
 
-import { DetailModal, DetailModalInfoBlock } from "@/components/detail-modal";
+import { DetailModal } from "@/components/detail-modal";
 import { EmployeeListRow } from "@/components/employee-list-row";
 import { EmployeePageHeader } from "@/components/employee-page-header";
+import {
+  EmployeeSheet,
+  EmployeeSheetContent,
+  EmployeeSheetHeader,
+  EmployeeSheetTitle,
+} from "@/components/employee-sheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { buildLeaveRequestEmail } from "@/lib/leave-email";
 import {
   getLeaveRequestsForEmployee,
-  mockTeam,
-  ROLE_LABEL_TH,
+  getYearOfStudy,
+  mockEmployees,
   type LeaveStatus,
   type MockLeaveRequest,
 } from "@/lib/mock-data";
 import { useMe } from "@/lib/session";
-import { cn, formatThaiDateRange } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
 const fieldClass =
   "h-12 rounded-xl border-border bg-muted/40 px-3 text-sm placeholder:text-sm focus-visible:border-brand-600 focus-visible:bg-card focus-visible:ring-brand-600/20";
 
 const leaveRequestSchema = z
   .object({
-    subject: z.string().trim().min(1, "กรุณาระบุหัวข้อ"),
+    leave_type: z.string().trim().min(1, "กรุณาระบุประเภทการลา"),
     start_date: z.string().min(1, "กรุณาระบุวันที่เริ่มลา"),
     end_date: z.string().min(1, "กรุณาระบุวันที่สิ้นสุด"),
     reason: z.string().trim().min(1, "กรุณาระบุเหตุผล"),
@@ -58,52 +63,67 @@ const statusLabelTh: Record<LeaveStatus, string> = {
 
 const VISIBLE_LEAVE_REQUESTS = 5;
 
+function EmailContentBlock({ subject, body }: { subject: string; body: string }) {
+  return (
+    <div className="max-h-72 overflow-y-auto rounded-xl bg-slate-50 px-4 py-3.5">
+      <p className="text-xs text-muted-foreground">หัวข้อ</p>
+      <p className="text-sm font-semibold text-foreground">{subject}</p>
+      <div className="mt-3 border-t border-border pt-3">
+        <p className="text-sm leading-relaxed whitespace-pre-line text-foreground">{body}</p>
+      </div>
+    </div>
+  );
+}
+
 export default function LeavePage() {
   const me = useMe();
   const [requests, setRequests] = useState<MockLeaveRequest[]>(() => getLeaveRequestsForEmployee(me.id));
   const [showPreview, setShowPreview] = useState(false);
-  const [subjectEdited, setSubjectEdited] = useState(false);
   const [requestListExpanded, setRequestListExpanded] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<MockLeaveRequest | null>(null);
+  const [requestModalOpen, setRequestModalOpen] = useState(false);
 
   const {
     register,
     handleSubmit,
     reset,
     watch,
-    setValue,
     formState: { errors, isSubmitting },
   } = useForm<LeaveRequestForm>({
     resolver: zodResolver(leaveRequestSchema),
   });
 
-  const subject = watch("subject");
+  const leaveType = watch("leave_type");
   const startDate = watch("start_date");
   const endDate = watch("end_date");
   const reason = watch("reason");
 
+  const mockProfile = mockEmployees.find((e) => e.id === me.id);
   const employeeName = [me.first_name, me.last_name].filter(Boolean).join(" ") || me.display_name || "-";
+  const yearOfStudy = getYearOfStudy(mockProfile?.studentGen ?? null);
+  const studentId = mockProfile?.studentId ?? "-";
+  const phoneNumber = mockProfile?.phoneNumber ?? "-";
+
+  // The subject is fully derived from the name/dates/type below — not a
+  // form field — so it can never go stale the way an editable-but-synced
+  // field would (e.g. silently stop following the picked dates after
+  // someone types into it).
   const { subject: autoSubject, body: emailBody } = buildLeaveRequestEmail({
     employeeName,
-    position: ROLE_LABEL_TH[me.role],
-    team: mockTeam.name,
+    yearOfStudy,
+    studentId,
+    phoneNumber,
+    leaveType: leaveType ?? "",
     startDate: startDate ?? "",
     endDate: endDate ?? "",
     reason: reason ?? "",
   });
 
-  // Keep the subject field in sync with the auto-generated one until the
-  // person edits it by hand — then their wording wins.
-  useEffect(() => {
-    if (!subjectEdited) {
-      setValue("subject", autoSubject);
-    }
-  }, [autoSubject, subjectEdited, setValue]);
-
   const onSubmit = (values: LeaveRequestForm) => {
     const newRequest: MockLeaveRequest = {
       id: `leave-local-${crypto.randomUUID()}`,
       employeeId: me.id,
+      leaveType: values.leave_type,
       startDate: values.start_date,
       endDate: values.end_date,
       reason: values.reason,
@@ -113,7 +133,6 @@ export default function LeavePage() {
     };
     setRequests((prev) => [newRequest, ...prev]);
     reset();
-    setSubjectEdited(false);
     setShowPreview(false);
   };
 
@@ -121,6 +140,19 @@ export default function LeavePage() {
     ? requests
     : requests.slice(0, VISIBLE_LEAVE_REQUESTS);
   const hiddenRequestCount = requests.length - VISIBLE_LEAVE_REQUESTS;
+
+  const selectedRequestEmail = selectedRequest
+    ? buildLeaveRequestEmail({
+      employeeName,
+      yearOfStudy,
+      studentId,
+      phoneNumber,
+      leaveType: selectedRequest.leaveType ?? "",
+      startDate: selectedRequest.startDate,
+      endDate: selectedRequest.endDate,
+      reason: selectedRequest.reason ?? "",
+    })
+    : null;
 
   return (
     <div className="flex w-full flex-1 flex-col">
@@ -157,11 +189,27 @@ export default function LeavePage() {
                 </div>
                 <Input
                   id="subject"
-                  className={fieldClass}
-                  {...register("subject", { onChange: () => setSubjectEdited(true) })}
+                  readOnly
+                  value={autoSubject}
+                  className={cn(fieldClass, "cursor-default bg-muted/60")}
                 />
-                {errors.subject && (
-                  <p className="text-xs text-danger-foreground">{errors.subject.message}</p>
+                <p className="text-xs text-muted-foreground">
+                  สร้างจากชื่อและวันที่ลาโดยอัตโนมัติ - เลือกวันที่เริ่มลา/สิ้นสุดด้านล่างแล้วหัวข้อจะอัปเดตทันที
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="leave_type" className="text-xs text-muted-foreground">
+                  ประเภทการลา
+                </Label>
+                <Input
+                  id="leave_type"
+                  placeholder="เช่น ป่วย, กิจส่วนตัว, พักร้อน"
+                  className={fieldClass}
+                  {...register("leave_type")}
+                />
+                {errors.leave_type && (
+                  <p className="text-xs text-danger-foreground">{errors.leave_type.message}</p>
                 )}
               </div>
 
@@ -221,25 +269,40 @@ export default function LeavePage() {
             {requests.length === 0 && (
               <p className="text-sm text-muted-foreground">ยังไม่มีคำขอลา</p>
             )}
-            {visibleRequests.map((request, index) => (
-              <EmployeeListRow
-                key={request.id}
-                icon={CalendarRange}
-                label={formatThaiDateRange(request.startDate, request.endDate)}
-                sublabel={request.reason ?? undefined}
-                trailing={
-                  <Badge variant={statusBadgeVariant[request.status]}>
-                    {statusLabelTh[request.status]}
-                  </Badge>
-                }
-                onClick={() => setSelectedRequest(request)}
-                className={
-                  index >= VISIBLE_LEAVE_REQUESTS
-                    ? "duration-200 animate-in fade-in-0 slide-in-from-top-2"
-                    : undefined
-                }
-              />
-            ))}
+            {visibleRequests.map((request, index) => {
+              const { subject: requestSubject } = buildLeaveRequestEmail({
+                employeeName,
+                yearOfStudy,
+                studentId,
+                phoneNumber,
+                leaveType: request.leaveType ?? "",
+                startDate: request.startDate,
+                endDate: request.endDate,
+                reason: request.reason ?? "",
+              });
+              return (
+                <EmployeeListRow
+                  key={request.id}
+                  icon={CalendarRange}
+                  label={requestSubject}
+                  sublabel={request.reason ?? undefined}
+                  trailing={
+                    <Badge variant={statusBadgeVariant[request.status]}>
+                      {statusLabelTh[request.status]}
+                    </Badge>
+                  }
+                  onClick={() => {
+                    setSelectedRequest(request);
+                    setRequestModalOpen(true);
+                  }}
+                  className={
+                    index >= VISIBLE_LEAVE_REQUESTS
+                      ? "duration-200 animate-in slide-in-from-top-2"
+                      : undefined
+                  }
+                />
+              );
+            })}
             {hiddenRequestCount > 0 && (
               <button
                 type="button"
@@ -259,43 +322,33 @@ export default function LeavePage() {
       </div>
 
       <DetailModal
-        open={selectedRequest !== null}
-        onOpenChange={(open) => !open && setSelectedRequest(null)}
+        open={requestModalOpen}
+        onOpenChange={setRequestModalOpen}
         icon={CalendarRange}
-        title={selectedRequest ? formatThaiDateRange(selectedRequest.startDate, selectedRequest.endDate) : ""}
+        title={selectedRequestEmail?.subject ?? ""}
         badgeText={selectedRequest ? statusLabelTh[selectedRequest.status] : ""}
         badgeVariant={selectedRequest ? statusBadgeVariant[selectedRequest.status] : "warning"}
       >
-        <DetailModalInfoBlock
-          label="เหตุผล"
-          value={selectedRequest?.reason?.trim() || "-"}
-          valueSize="sm"
-        />
+        {selectedRequestEmail && (
+          <EmailContentBlock subject={selectedRequestEmail.subject} body={selectedRequestEmail.body} />
+        )}
       </DetailModal>
 
-      <Dialog open={showPreview} onOpenChange={setShowPreview}>
-        <DialogContent className="max-w-xs gap-4">
-          <DialogHeader className="flex-row items-center gap-3">
+      <EmployeeSheet open={showPreview} onOpenChange={setShowPreview}>
+        <EmployeeSheetContent className="flex flex-col gap-4">
+          <EmployeeSheetHeader className="flex-row items-center gap-3">
             <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-brand-100 text-brand-600">
               <Mail className="size-5" />
             </div>
             <div className="flex flex-col items-start gap-1">
-              <DialogTitle className="text-base font-bold">ตัวอย่างอีเมล</DialogTitle>
+              <EmployeeSheetTitle className="text-base font-bold">ตัวอย่างอีเมล</EmployeeSheetTitle>
               <Badge>จะส่งถึงหัวหน้างานของคุณ</Badge>
             </div>
-          </DialogHeader>
+          </EmployeeSheetHeader>
 
           <div className="border-t border-border" />
 
-          <div className="max-h-72 overflow-y-auto rounded-xl bg-slate-50 px-4 py-3.5">
-            <p className="text-xs text-muted-foreground">หัวข้อ</p>
-            <p className="text-sm font-semibold text-foreground">{subject}</p>
-            <div className="mt-3 border-t border-border pt-3">
-              <p className="text-sm leading-relaxed whitespace-pre-line text-foreground">
-                {emailBody}
-              </p>
-            </div>
-          </div>
+          <EmailContentBlock subject={autoSubject} body={emailBody} />
 
           <Button
             className="h-11 w-full rounded-full bg-accent-600 font-semibold text-white hover:bg-accent-700"
@@ -303,8 +356,8 @@ export default function LeavePage() {
           >
             ปิด
           </Button>
-        </DialogContent>
-      </Dialog>
+        </EmployeeSheetContent>
+      </EmployeeSheet>
     </div>
   );
 }

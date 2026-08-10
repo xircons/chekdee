@@ -4,8 +4,13 @@ import type { VariantProps } from "class-variance-authority";
 import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
+import {
+  EmployeeSheet,
+  EmployeeSheetContent,
+  EmployeeSheetHeader,
+  EmployeeSheetTitle,
+} from "@/components/employee-sheet";
 import { Badge, badgeVariants } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
 export type DetailModalBadgeVariant = NonNullable<VariantProps<typeof badgeVariants>["variant"]>;
@@ -23,6 +28,7 @@ export function DetailModal({
   badgeVariant = "default",
   footer,
   children,
+  size = "sheet",
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -32,16 +38,20 @@ export function DetailModal({
   badgeVariant?: DetailModalBadgeVariant;
   footer?: ReactNode;
   children: ReactNode;
+  size?: "sheet" | "compact";
 }) {
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xs gap-4">
-        <DialogHeader className="flex-row items-center gap-3">
+    <EmployeeSheet open={open} onOpenChange={onOpenChange}>
+      <EmployeeSheetContent
+        position={size === "compact" ? "center" : "bottom"}
+        className="flex flex-col gap-4"
+      >
+        <EmployeeSheetHeader className="flex-row items-center gap-3">
           <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-brand-100 text-brand-600">
             <Icon className="size-5" />
           </div>
           <div className="flex flex-col items-start gap-1">
-            <DialogTitle className="text-base font-bold">{title}</DialogTitle>
+            <EmployeeSheetTitle className="text-base font-bold">{title}</EmployeeSheetTitle>
             <Badge
               variant={badgeVariant}
               className={cn(badgeVariant === "default" && "bg-brand-600 text-white")}
@@ -49,15 +59,15 @@ export function DetailModal({
               {badgeText}
             </Badge>
           </div>
-        </DialogHeader>
+        </EmployeeSheetHeader>
 
         <div className="border-t border-border" />
 
         {children}
 
         {footer}
-      </DialogContent>
-    </Dialog>
+      </EmployeeSheetContent>
+    </EmployeeSheet>
   );
 }
 

@@ -102,6 +102,7 @@ export function EmployeeScheduleCalendar({ employeeId }: { employeeId: string })
   const [viewMonth, setViewMonth] = useState(today.getMonth());
   const [slideDirection, setSlideDirection] = useState<"next" | "prev" | null>(null);
   const [selectedDay, setSelectedDay] = useState<CalendarDay | null>(null);
+  const [dayModalOpen, setDayModalOpen] = useState(false);
 
   const schedule = useMemo(() => getWorkScheduleForEmployee(employeeId), [employeeId]);
   const scheduleByDayOfWeek = useMemo(
@@ -229,7 +230,7 @@ export function EmployeeScheduleCalendar({ employeeId }: { employeeId: string })
         <div
           key={`${viewYear}-${viewMonth}`}
           className={cn(
-            "flex flex-col duration-300 animate-in fade-in-0",
+            "flex flex-col duration-300 animate-in",
             slideDirection === "next" && "slide-in-from-right-8",
             slideDirection === "prev" && "slide-in-from-left-8"
           )}
@@ -257,11 +258,14 @@ export function EmployeeScheduleCalendar({ employeeId }: { employeeId: string })
                       <button
                         type="button"
                         disabled={!day.inMonth}
-                        onClick={() => setSelectedDay(day)}
+                        onClick={() => {
+                          setSelectedDay(day);
+                          setDayModalOpen(true);
+                        }}
                         className={cn(
-                          "relative z-10 mx-auto flex size-9 items-center justify-center rounded-full text-sm tabular-nums transition-colors",
+                          "relative z-10 mx-auto flex size-9 items-center justify-center rounded-full text-sm tabular-nums transition-[transform,background-color]",
                           day.inMonth ? STATUS_TEXT[day.status] : "text-muted-foreground/30",
-                          day.inMonth && "hover:bg-brand-600/10",
+                          day.inMonth && "hover:bg-brand-600/10 active:scale-90",
                           day.isToday && "font-bold ring-2 ring-brand-600"
                         )}
                       >
@@ -305,8 +309,9 @@ export function EmployeeScheduleCalendar({ employeeId }: { employeeId: string })
       )}
 
       <DetailModal
-        open={selectedDay !== null}
-        onOpenChange={(open) => !open && setSelectedDay(null)}
+        open={dayModalOpen}
+        onOpenChange={setDayModalOpen}
+        size="compact"
         icon={selectedDay ? STATUS_ICON[selectedDay.status] : Clock}
         title={selectedDay ? formatThaiDate(selectedDay.date) : ""}
         badgeText={
@@ -318,7 +323,7 @@ export function EmployeeScheduleCalendar({ employeeId }: { employeeId: string })
         footer={
           <Button
             className="h-11 w-full rounded-full bg-accent-600 font-semibold text-white hover:bg-accent-700"
-            onClick={() => setSelectedDay(null)}
+            onClick={() => setDayModalOpen(false)}
           >
             ตกลง
           </Button>

@@ -70,6 +70,7 @@ export type LeaveStatus = "pending" | "approved" | "rejected";
 export type MockLeaveRequest = {
   id: string;
   employeeId: string;
+  leaveType: string | null;
   startDate: string;
   endDate: string;
   reason: string | null;
@@ -196,11 +197,19 @@ export const mockAttendanceRecords: MockAttendanceRecord[] = [
 ];
 
 export const mockLeaveRequests: MockLeaveRequest[] = [
-  { id: "leave-1", employeeId: "user-1", startDate: "2026-08-20", endDate: "2026-08-21", reason: "Family event", status: "pending", decidedBy: null, decidedAt: null },
-  { id: "leave-2", employeeId: "user-1", startDate: "2026-07-14", endDate: "2026-07-14", reason: "Doctor's appointment", status: "approved", decidedBy: "user-4", decidedAt: "2026-07-10T03:00:00Z" },
-  { id: "leave-3", employeeId: "user-2", startDate: "2026-08-15", endDate: "2026-08-16", reason: "Personal", status: "pending", decidedBy: null, decidedAt: null },
-  { id: "leave-4", employeeId: "user-3", startDate: "2026-06-02", endDate: "2026-06-03", reason: "Sick", status: "rejected", decidedBy: "user-4", decidedAt: "2026-06-01T03:00:00Z" },
+  { id: "leave-1", employeeId: "user-1", leaveType: "กิจส่วนตัว", startDate: "2026-08-20", endDate: "2026-08-21", reason: "Family event", status: "pending", decidedBy: null, decidedAt: null },
+  { id: "leave-2", employeeId: "user-1", leaveType: "ป่วย", startDate: "2026-07-14", endDate: "2026-07-14", reason: "Doctor's appointment", status: "approved", decidedBy: "user-4", decidedAt: "2026-07-10T03:00:00Z" },
+  { id: "leave-3", employeeId: "user-2", leaveType: "กิจส่วนตัว", startDate: "2026-08-15", endDate: "2026-08-16", reason: "Personal", status: "pending", decidedBy: null, decidedAt: null },
+  { id: "leave-4", employeeId: "user-3", leaveType: "ป่วย", startDate: "2026-06-02", endDate: "2026-06-03", reason: "Sick", status: "rejected", decidedBy: "user-4", decidedAt: "2026-06-01T03:00:00Z" },
 ];
+
+// "ชั้นปี" isn't stored directly — derive it from studentGen (the admission
+// year already used to compute the profile page's Gen ordinal).
+export function getYearOfStudy(studentGen: string | null): string {
+  const admissionYear = Number(studentGen);
+  if (!studentGen || Number.isNaN(admissionYear)) return "-";
+  return String(Math.max(1, new Date().getFullYear() - admissionYear + 1));
+}
 
 // Placeholder policy — the real annual entitlement lives in the backend
 // once leave accrual is implemented (Phase 4).

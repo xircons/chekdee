@@ -5,6 +5,16 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+export const THAI_DAY_LABELS = [
+  "อาทิตย์",
+  "จันทร์",
+  "อังคาร",
+  "พุธ",
+  "พฤหัสบดี",
+  "ศุกร์",
+  "เสาร์",
+]
+
 export const THAI_MONTH_LABELS = [
   "มกราคม",
   "กุมภาพันธ์",
@@ -27,6 +37,11 @@ export function formatThaiDate(date: Date): string {
 
 export function parseIsoDateLocal(iso: string): Date {
   return new Date(`${iso}T00:00:00`)
+}
+
+// "วันศุกร์ที่ 29 พฤษภาคม 2569"
+export function formatThaiDateWithDay(date: Date): string {
+  return `วัน${THAI_DAY_LABELS[date.getDay()]}ที่ ${formatThaiDate(date)}`
 }
 
 // "20-21 สิงหาคม 2569" when the range stays within one month, otherwise
