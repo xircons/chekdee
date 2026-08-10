@@ -82,6 +82,26 @@ export type MockLeaveRequest = {
 
 export const mockTeam = { id: "team-1", name: "CAMT Front Desk" };
 
+// [firstName, lastName] pairs appended to the 5 fixture employees below to
+// reach a realistic team size for testing the admin dashboard's roster
+// list. Change the length of this list to grow/shrink the mock team.
+const EXTRA_ROSTER_NAMES: [string, string][] = [
+  ["Chatchai", "Boonmee"],
+  ["Suda", "Panyawong"],
+  ["Anan", "Ratanakul"],
+  ["Wipada", "Srisawat"],
+  ["Somchai", "Thongdee"],
+  ["Napaporn", "Chaiyasit"],
+  ["Kittipong", "Uraiwan"],
+  ["Ratree", "Phromma"],
+  ["Decha", "Wongsa"],
+  ["Malee", "Sukjai"],
+  ["Prasert", "Kamnoon"],
+  ["Siriporn", "Tangsiri"],
+  ["Boonrod", "Yodkhun"],
+  ["Kanya", "Intharak"],
+];
+
 export const mockEmployees: MockEmployee[] = [
   {
     id: "user-1",
@@ -168,17 +188,52 @@ export const mockEmployees: MockEmployee[] = [
     studentId: "642110198",
     phoneNumber: "085-678-9012",
   },
+  // Extra roster for testing the admin dashboard's "today's roster" list at
+  // a realistic team size — adjust EXTRA_ROSTER_NAMES.length to grow/shrink
+  // the mock team without touching anything else.
+  ...EXTRA_ROSTER_NAMES.map(
+    ([firstName, lastName], i): MockEmployee => ({
+      id: `user-${6 + i}`,
+      role: "employee",
+      status: "active",
+      teamId: mockTeam.id,
+      firstName,
+      lastName,
+      studentGen: String(2023 + (i % 4)),
+      displayName: `${firstName} ${lastName[0]}.`,
+      pictureUrl: null,
+      offboardedAt: null,
+      offboardedBy: null,
+      offboardedReason: null,
+      nickname: firstName,
+      studentId: String(660000000 + i * 137),
+      phoneNumber: null,
+    })
+  ),
 ];
 
-export const mockWorkSchedules: MockWorkSchedule[] = [1, 2, 3, 4, 5].map((day) => ({
-  id: `sched-${day}`,
-  employeeId: "user-1",
-  dayOfWeek: day,
-  startTime: "09:00",
-  endTime: "17:00",
-  effectiveFrom: "2026-06-01",
-  effectiveTo: null,
-}));
+// Rough shift-start spread so a Monday-Friday roster sorts into a
+// realistic staggered list rather than everyone at the same time.
+const SHIFT_START_TIMES = ["08:00", "08:30", "09:00", "09:30", "10:00"];
+
+export const mockWorkSchedules: MockWorkSchedule[] = mockEmployees
+  .filter((e) => e.status === "active" && e.offboardedAt === null)
+  .flatMap((employee, employeeIndex) =>
+    [1, 2, 3, 4, 5].map((day) => {
+      const startTime = SHIFT_START_TIMES[employeeIndex % SHIFT_START_TIMES.length];
+      const [h, m] = startTime.split(":").map(Number);
+      const endTime = `${String((h + 8) % 24).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+      return {
+        id: `sched-${employee.id}-${day}`,
+        employeeId: employee.id,
+        dayOfWeek: day,
+        startTime,
+        endTime,
+        effectiveFrom: "2026-06-01",
+        effectiveTo: null,
+      };
+    })
+  );
 
 export const mockHolidays: MockHoliday[] = [
   { id: "hol-1", date: "2026-08-12", name: "Mother's Day", localName: "วันแม่แห่งชาติ", source: "nager_date" },
