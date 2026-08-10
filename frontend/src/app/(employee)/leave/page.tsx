@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { CalendarRange, Mail } from "lucide-react";
@@ -31,6 +31,7 @@ const fieldClass =
 
 const leaveRequestSchema = z
   .object({
+    subject: z.string().trim().min(1, "กรุณาระบุหัวข้อ"),
     start_date: z.string().min(1, "กรุณาระบุวันที่เริ่มลา"),
     end_date: z.string().min(1, "กรุณาระบุวันที่สิ้นสุด"),
     reason: z.string().trim().min(1, "กรุณาระบุเหตุผล"),
@@ -63,23 +64,26 @@ export default function LeavePage() {
   const me = useMe();
   const [requests, setRequests] = useState<MockLeaveRequest[]>(() => getLeaveRequestsForEmployee(me.id));
   const [showPreview, setShowPreview] = useState(false);
+  const [subjectEdited, setSubjectEdited] = useState(false);
 
   const {
     register,
     handleSubmit,
     reset,
     watch,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<LeaveRequestForm>({
     resolver: zodResolver(leaveRequestSchema),
   });
 
+  const subject = watch("subject");
   const startDate = watch("start_date");
   const endDate = watch("end_date");
   const reason = watch("reason");
 
   const employeeName = [me.first_name, me.last_name].filter(Boolean).join(" ") || me.display_name || "-";
-  const emailPreview = buildLeaveRequestEmail({
+  const { subject: autoSubject, body: emailBody } = buildLeaveRequestEmail({
     employeeName,
     position: ROLE_LABEL_TH[me.role],
     team: mockTeam.name,
@@ -87,6 +91,14 @@ export default function LeavePage() {
     endDate: endDate ?? "",
     reason: reason ?? "",
   });
+
+  // Keep the subject field in sync with the auto-generated one until the
+  // person edits it by hand — then their wording wins.
+  useEffect(() => {
+    if (!subjectEdited) {
+      setValue("subject", autoSubject);
+    }
+  }, [autoSubject, subjectEdited, setValue]);
 
   const onSubmit = (values: LeaveRequestForm) => {
     const newRequest: MockLeaveRequest = {
@@ -101,6 +113,7 @@ export default function LeavePage() {
     };
     setRequests((prev) => [newRequest, ...prev]);
     reset();
+    setSubjectEdited(false);
     setShowPreview(false);
   };
 
@@ -123,6 +136,30 @@ export default function LeavePage() {
             </div>
 
             <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="subject" className="text-xs text-muted-foreground">
+                    หัวข้อ
+                  </Label>
+                  <button
+                    type="button"
+                    onClick={() => setShowPreview(true)}
+                    className="flex items-center gap-1 text-xs font-medium text-brand-600"
+                  >
+                    <Mail className="size-3.5" />
+                    ตัวอย่างอีเมล
+                  </button>
+                </div>
+                <Input
+                  id="subject"
+                  className={fieldClass}
+                  {...register("subject", { onChange: () => setSubjectEdited(true) })}
+                />
+                {errors.subject && (
+                  <p className="text-xs text-danger-foreground">{errors.subject.message}</p>
+                )}
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1.5">
                   <Label htmlFor="start_date" className="text-xs text-muted-foreground">
@@ -146,19 +183,9 @@ export default function LeavePage() {
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="reason" className="text-xs text-muted-foreground">
-                    เหตุผล
-                  </Label>
-                  <button
-                    type="button"
-                    onClick={() => setShowPreview(true)}
-                    className="flex items-center gap-1 text-xs font-medium text-brand-600"
-                  >
-                    <Mail className="size-3.5" />
-                    ตัวอย่างอีเมล
-                  </button>
-                </div>
+                <Label htmlFor="reason" className="text-xs text-muted-foreground">
+                  เหตุผล
+                </Label>
                 <Textarea
                   id="reason"
                   placeholder="เรียนหัวหน้างาน..."
@@ -221,9 +248,13 @@ export default function LeavePage() {
           <div className="border-t border-border" />
 
           <div className="max-h-72 overflow-y-auto rounded-xl bg-slate-50 px-4 py-3.5">
-            <p className="text-sm leading-relaxed whitespace-pre-line text-foreground">
-              {emailPreview}
-            </p>
+            <p className="text-xs text-muted-foreground">หัวข้อ</p>
+            <p className="text-sm font-semibold text-foreground">{subject}</p>
+            <div className="mt-3 border-t border-border pt-3">
+              <p className="text-sm leading-relaxed whitespace-pre-line text-foreground">
+                {emailBody}
+              </p>
+            </div>
           </div>
 
           <Button

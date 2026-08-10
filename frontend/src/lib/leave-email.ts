@@ -29,14 +29,21 @@ function formatDateRangeTh(startIso: string, endIso: string): string {
   return `${formatThaiDate(start)} ถึง ${formatThaiDate(end)}`;
 }
 
+export type LeaveRequestEmail = {
+  subject: string;
+  body: string;
+};
+
 // Shared by the /leave inline preview and (eventually) the real outbound
 // email in Phase 4 — keep both in sync by always going through this.
-export function buildLeaveRequestEmail(input: LeaveRequestEmailInput): string {
+export function buildLeaveRequestEmail(input: LeaveRequestEmailInput): LeaveRequestEmail {
   const { employeeName, position, team, startDate, endDate, reason } = input;
 
   const dateRange = startDate && endDate ? formatDateRangeTh(startDate, endDate) : "-";
 
-  return [
+  const subject = `คำขอลา - ${employeeName} - ${dateRange}`;
+
+  const body = [
     "เรียน หัวหน้างาน",
     "",
     `กระผม/ดิฉัน ${employeeName} ${position} แผนก ${team} ขอลาในวันที่ ${dateRange} เนื่องจาก${reason.trim() || "-"}`,
@@ -46,4 +53,6 @@ export function buildLeaveRequestEmail(input: LeaveRequestEmailInput): string {
     "ขอแสดงความนับถือ",
     employeeName,
   ].join("\n");
+
+  return { subject, body };
 }
