@@ -181,7 +181,7 @@ export default function AdminDashboard() {
               <CardContent className="p-5">
                 <div
                   className={cn(
-                    "flex size-10 items-center justify-center rounded-2xl",
+                    "flex size-10 items-center justify-center rounded-md",
                     stat.variant === "success" && "bg-success text-success-foreground",
                     stat.variant === "warning" && "bg-accent-100 text-accent-700",
                     stat.variant === "neutral" && "bg-brand-100 text-brand-600"
@@ -191,7 +191,7 @@ export default function AdminDashboard() {
                 </div>
                 <p
                   className={cn(
-                    "mt-4 text-2xl font-bold tabular-nums",
+                    "mt-3 text-2xl font-bold tabular-nums",
                     stat.variant === "warning" ? "text-accent-700" : "text-brand-900"
                   )}
                 >
