@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { QrCode } from "lucide-react";
+import { AlertTriangle, FileText, Gift, QrCode, Users } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -114,9 +114,9 @@ export default function AdminDashboard() {
   const nextHoliday = getUpcomingHolidays(todayIso)[0];
   const daysToHoliday = nextHoliday
     ? Math.round(
-        (new Date(`${nextHoliday.date}T00:00:00`).getTime() - new Date(`${todayIso}T00:00:00`).getTime()) /
-          86_400_000
-      )
+      (new Date(`${nextHoliday.date}T00:00:00`).getTime() - new Date(`${todayIso}T00:00:00`).getTime()) /
+      86_400_000
+    )
     : null;
 
   const recentCheckins = checkedInEntries
@@ -128,31 +128,35 @@ export default function AdminDashboard() {
     {
       label: "จำนวนผู้เข้างานวันนี้",
       value: `${checkedInEntries.length}/${employees.length}`,
-      tint: false,
+      icon: Users,
+      variant: "success" as const,
     },
     {
       label: "คำขอลารออนุมัติ",
       value: String(pendingRequests.length),
-      tint: false,
+      icon: FileText,
+      variant: "neutral" as const,
     },
     {
       label: "เลยเวลาเข้างานแล้ว",
       value: String(overdueCount),
-      tint: true,
+      icon: AlertTriangle,
+      variant: "warning" as const,
     },
     {
       label: "วันหยุดถัดไป",
       value: nextHoliday
         ? `${nextHoliday.localName ?? nextHoliday.name} · อีก ${daysToHoliday} วัน`
         : "ไม่มีวันหยุดที่จะถึง",
-      tint: false,
+      icon: Gift,
+      variant: "neutral" as const,
     },
   ];
 
   return (
-    <main className="flex flex-1 flex-col gap-6 p-6">
+    <main className="flex flex-1 flex-col gap-5 px-6 pb-6">
       <header className="relative overflow-hidden rounded-b-[20px] bg-brand-600 px-6 py-6 text-white">
-        <div className="absolute top-0 right-0 size-40 -translate-y-1/3 translate-x-1/4 rounded-full bg-white/10" />
+        <div className="absolute top-0 right-0 size-48 -translate-y-1/3 translate-x-1/4 rounded-full bg-white/15" />
         <div className="relative flex items-start justify-between gap-6">
           <div>
             <h1 className="text-2xl font-bold">
@@ -170,21 +174,41 @@ export default function AdminDashboard() {
       </header>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        {stats.map((stat) => (
-          <Card key={stat.label} className={cn("rounded-2xl border border-slate-200", stat.tint && "bg-accent-100")}>
-            <CardContent className="p-4">
-              <p
-                className={cn(
-                  "text-2xl font-bold tabular-nums",
-                  stat.tint ? "text-accent-700" : "text-brand-900"
-                )}
-              >
-                {stat.value}
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">{stat.label}</p>
-            </CardContent>
-          </Card>
-        ))}
+        {stats.map((stat) => {
+          const Icon = stat.icon;
+          return (
+            <Card
+              key={stat.label}
+              className={cn(
+                "rounded-2xl border border-slate-200",
+                stat.variant === "success" && "border-transparent bg-success",
+                stat.variant === "warning" && "border-transparent bg-accent-100"
+              )}
+            >
+              <CardContent className="p-4">
+                <div
+                  className={cn(
+                    "flex size-8 items-center justify-center rounded-xl",
+                    stat.variant === "success" && "bg-white/60 text-success-foreground",
+                    stat.variant === "warning" && "bg-white/60 text-accent-700",
+                    stat.variant === "neutral" && "bg-brand-100 text-brand-600"
+                  )}
+                >
+                  <Icon className="size-4" />
+                </div>
+                <p
+                  className={cn(
+                    "mt-3 text-2xl font-bold tabular-nums",
+                    stat.variant === "warning" ? "text-accent-700" : "text-brand-900"
+                  )}
+                >
+                  {stat.value}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">{stat.label}</p>
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
@@ -249,8 +273,10 @@ export default function AdminDashboard() {
         <div className="flex flex-col gap-4">
           <Card className="rounded-2xl border border-slate-200">
             <CardContent className="flex flex-col items-center gap-3 p-5 text-center">
-              <div className="flex size-28 items-center justify-center rounded-2xl border-2 border-dashed border-brand-600/40 text-brand-600">
-                <QrCode className="size-14" />
+              <div className="flex size-28 items-center justify-center rounded-2xl border-2 border-dashed border-brand-600/40 bg-brand-100 p-3">
+                <div className="flex size-full items-center justify-center rounded-xl bg-white text-brand-600">
+                  <QrCode className="size-11" />
+                </div>
               </div>
               <p className="text-sm font-semibold text-foreground">สแกนเพื่อบันทึกเวลาเข้างาน</p>
             </CardContent>
@@ -269,7 +295,7 @@ export default function AdminDashboard() {
                         index === 0 && "bg-brand-100"
                       )}
                     >
-                      <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-100 text-xs font-semibold text-brand-600">
+                      <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-success text-xs font-semibold text-success-foreground">
                         {initials(employee)}
                       </div>
                       <p className="flex-1 truncate text-sm font-medium text-foreground">
