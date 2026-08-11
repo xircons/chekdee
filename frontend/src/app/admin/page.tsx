@@ -173,32 +173,25 @@ export default function AdminDashboard() {
         </div>
       </header>
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-5 lg:grid-cols-4">
         {stats.map((stat) => {
           const Icon = stat.icon;
           return (
-            <Card
-              key={stat.label}
-              className={cn(
-                "rounded-2xl border border-slate-200",
-                stat.variant === "success" && "border-transparent bg-success",
-                stat.variant === "warning" && "border-transparent bg-accent-100"
-              )}
-            >
-              <CardContent className="p-4">
+            <Card key={stat.label} className="rounded-2xl border border-slate-200">
+              <CardContent className="p-5">
                 <div
                   className={cn(
-                    "flex size-8 items-center justify-center rounded-xl",
-                    stat.variant === "success" && "bg-white/60 text-success-foreground",
-                    stat.variant === "warning" && "bg-white/60 text-accent-700",
+                    "flex size-10 items-center justify-center rounded-2xl",
+                    stat.variant === "success" && "bg-success text-success-foreground",
+                    stat.variant === "warning" && "bg-accent-100 text-accent-700",
                     stat.variant === "neutral" && "bg-brand-100 text-brand-600"
                   )}
                 >
-                  <Icon className="size-4" />
+                  <Icon className="size-5" />
                 </div>
                 <p
                   className={cn(
-                    "mt-3 text-2xl font-bold tabular-nums",
+                    "mt-4 text-2xl font-bold tabular-nums",
                     stat.variant === "warning" ? "text-accent-700" : "text-brand-900"
                   )}
                 >
