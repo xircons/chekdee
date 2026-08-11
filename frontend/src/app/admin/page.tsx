@@ -1,11 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, FileText, Gift, QrCode, Users } from "lucide-react";
+import { QrCode } from "lucide-react";
 
+import { AdminBubbleChart, type BubbleEntry } from "@/components/admin-bubble-chart";
 import { Card, CardContent } from "@/components/ui/card";
 import {
+  MOCK_MONTHLY_ON_TIME,
   getActiveEmployees,
+  getEmployeesOnLeave,
   getPendingLeaveRequests,
   getUpcomingHolidays,
   getWorkScheduleForEmployee,
@@ -54,8 +57,10 @@ type RosterEntry = {
   checkInAt: Date | null;
 };
 
-const ROSTER_SCROLL_THRESHOLD = 8;
-const RECENT_CHECKIN_LIMIT = 8;
+const RECENT_CHECKIN_LIMIT = 6;
+const ON_TIME_RING_SIZE = 80;
+const ON_TIME_RING_RADIUS = 34;
+const ON_TIME_RING_STROKE = 8;
 
 export default function AdminDashboard() {
   const me = useMe();
@@ -104,12 +109,10 @@ export default function AdminDashboard() {
   }, [employees, now, todayIso, todayDow]);
 
   const checkedInEntries = roster.filter((r) => r.checkedIn);
-  const notYetEntries = roster
-    .filter((r) => !r.checkedIn)
-    .sort((a, b) => a.scheduledStart.getTime() - b.scheduledStart.getTime());
-  const overdueCount = notYetEntries.filter((r) => r.scheduledStart < now).length;
+  const overdueCount = roster.filter((r) => !r.checkedIn && r.scheduledStart < now).length;
 
   const pendingRequests = getPendingLeaveRequests();
+  const leaveTodayCount = getEmployeesOnLeave(todayIso).length;
 
   const nextHoliday = getUpcomingHolidays(todayIso)[0];
   const daysToHoliday = nextHoliday
@@ -124,38 +127,34 @@ export default function AdminDashboard() {
     .sort((a, b) => b.checkInAt.getTime() - a.checkInAt.getTime())
     .slice(0, RECENT_CHECKIN_LIMIT);
 
-  const stats = [
-    {
-      label: "จำนวนผู้เข้างานวันนี้",
-      value: `${checkedInEntries.length}/${employees.length}`,
-      icon: Users,
-      variant: "success" as const,
-    },
-    {
-      label: "คำขอลารออนุมัติ",
-      value: String(pendingRequests.length),
-      icon: FileText,
-      variant: "neutral" as const,
-    },
-    {
-      label: "เลยเวลาเข้างานแล้ว",
-      value: String(overdueCount),
-      icon: AlertTriangle,
-      variant: "warning" as const,
-    },
-    {
-      label: "วันหยุดถัดไป",
-      value: nextHoliday
-        ? `${nextHoliday.localName ?? nextHoliday.name} · อีก ${daysToHoliday} วัน`
-        : "ไม่มีวันหยุดที่จะถึง",
-      icon: Gift,
-      variant: "neutral" as const,
-    },
+  // Bubble-pack visualization: one bubble per person who's either already
+  // checked in (green) or scheduled but late (amber). Anyone whose start
+  // time hasn't arrived yet gets no bubble.
+  const bubbleEntries: BubbleEntry[] = useMemo(
+    () =>
+      roster
+        .filter((r) => r.checkedIn || r.scheduledStart < now)
+        .map((r) => ({
+          id: r.employee.id,
+          initials: initials(r.employee),
+          pictureUrl: r.employee.pictureUrl,
+          status: r.checkedIn ? ("checked-in" as const) : ("late" as const),
+        })),
+    [roster, now]
+  );
+
+  const quickStats = [
+    { label: "เข้างานวันนี้", value: `${checkedInEntries.length}/${employees.length}` },
+    { label: "คำขอลารออนุมัติ", value: String(pendingRequests.length) },
+    { label: "เลยเวลาเข้างาน", value: String(overdueCount) },
   ];
 
+  const onTimeCircumference = 2 * Math.PI * ON_TIME_RING_RADIUS;
+  const onTimeOffset = onTimeCircumference * (1 - MOCK_MONTHLY_ON_TIME.percent / 100);
+
   return (
-    <main className="flex flex-1 flex-col gap-5 px-6 pb-6">
-      <header className="relative overflow-hidden rounded-b-[20px] bg-brand-600 px-6 py-6 text-white">
+    <main className="flex h-full min-h-0 flex-1 flex-col gap-5 px-6 pb-6">
+      <header className="relative shrink-0 overflow-hidden rounded-b-[20px] bg-brand-600 px-6 py-6 text-white">
         <div className="absolute top-0 right-0 size-48 -translate-y-1/3 translate-x-1/4 rounded-full bg-white/15" />
         <div className="relative flex items-start justify-between gap-6">
           <div>
@@ -163,6 +162,15 @@ export default function AdminDashboard() {
               ยินดีต้อนรับ, {me.first_name ?? me.display_name}
             </h1>
             <p className="mt-1 text-sm text-white/80">สรุปข้อมูลการเข้างานของทีมประจำวันนี้</p>
+
+            <div className="mt-4 flex items-center gap-6">
+              {quickStats.map((stat) => (
+                <div key={stat.label}>
+                  <p className="text-xl font-bold tabular-nums">{stat.value}</p>
+                  <p className="text-xs text-white/80">{stat.label}</p>
+                </div>
+              ))}
+            </div>
           </div>
           <div className="shrink-0 text-right">
             <p className="text-3xl font-bold tabular-nums">
@@ -173,113 +181,88 @@ export default function AdminDashboard() {
         </div>
       </header>
 
-      <div className="grid grid-cols-2 gap-5 lg:grid-cols-4">
-        {stats.map((stat) => {
-          const Icon = stat.icon;
-          return (
-            <Card key={stat.label} className="rounded-2xl border border-slate-200">
-              <CardContent className="p-5">
-                <div
-                  className={cn(
-                    "flex size-10 items-center justify-center rounded-md",
-                    stat.variant === "success" && "bg-success text-success-foreground",
-                    stat.variant === "warning" && "bg-accent-100 text-accent-700",
-                    stat.variant === "neutral" && "bg-brand-100 text-brand-600"
-                  )}
-                >
-                  <Icon className="size-5" />
-                </div>
-                <p
-                  className={cn(
-                    "mt-3 text-2xl font-bold tabular-nums",
-                    stat.variant === "warning" ? "text-accent-700" : "text-brand-900"
-                  )}
-                >
-                  {stat.value}
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">{stat.label}</p>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Card className="rounded-2xl border border-slate-200 lg:col-span-2">
-          <CardContent className="flex flex-col gap-3 p-5">
-            <p className="text-sm font-semibold text-foreground">รายชื่อพนักงานวันนี้</p>
-
-            {roster.length === 0 ? (
-              <p className="py-4 text-sm text-muted-foreground">ไม่มีพนักงานที่มีตารางงานในวันนี้</p>
-            ) : (
-              <>
-                {checkedInEntries.length > 0 && (
-                  <div className="flex items-center gap-2 rounded-xl bg-success px-3.5 py-2.5 text-success-foreground">
-                    <div className="flex size-6 items-center justify-center rounded-full bg-white/60 text-xs font-bold">
-                      {checkedInEntries.length}
-                    </div>
-                    <p className="text-sm font-medium">เช็คอินแล้ว {checkedInEntries.length} คน</p>
-                  </div>
-                )}
-
-                <div
-                  className={cn(
-                    "flex flex-col",
-                    notYetEntries.length > ROSTER_SCROLL_THRESHOLD && "max-h-[420px] overflow-y-auto"
-                  )}
-                >
-                  {notYetEntries.map(({ employee, scheduledStart }) => {
-                    const overdueMinutes = Math.round((now.getTime() - scheduledStart.getTime()) / 60_000);
-                    return (
-                      <div
-                        key={employee.id}
-                        className="flex items-center gap-3 border-b border-slate-100 py-2.5 last:border-b-0"
-                      >
-                        <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-100 text-xs font-semibold text-brand-600">
-                          {initials(employee)}
-                        </div>
-                        <p className="flex-1 text-sm font-medium text-foreground">
-                          {employeeName(employee)}
-                        </p>
-                        <p
-                          className={cn(
-                            "text-xs",
-                            overdueMinutes > 0 ? "font-medium text-accent-700" : "text-muted-foreground"
-                          )}
-                        >
-                          {overdueMinutes > 0
-                            ? `เลยเวลา ${overdueMinutes} นาที`
-                            : scheduledStart.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })}
-                        </p>
-                      </div>
-                    );
-                  })}
-                  {notYetEntries.length === 0 && (
-                    <p className="py-4 text-sm text-muted-foreground">ทุกคนเช็คอินแล้ว</p>
-                  )}
-                </div>
-              </>
-            )}
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-3">
+        <Card className="flex min-h-0 flex-col rounded-2xl border border-slate-200 lg:col-span-2">
+          <CardContent className="flex min-h-0 flex-1 flex-col p-5">
+            <p className="text-sm font-semibold text-foreground">แผนผังการแสดงตน</p>
+            <AdminBubbleChart entries={bubbleEntries} />
           </CardContent>
         </Card>
 
-        <div className="flex flex-col gap-4">
-          <Card className="rounded-2xl border border-slate-200">
-            <CardContent className="flex flex-col items-center gap-3 p-5 text-center">
-              <div className="flex size-28 items-center justify-center rounded-2xl border-2 border-dashed border-brand-600/40 bg-brand-100 p-3">
-                <div className="flex size-full items-center justify-center rounded-xl bg-white text-brand-600">
-                  <QrCode className="size-11" />
-                </div>
+        <div className="flex min-h-0 flex-col gap-4">
+          <Card className="rounded-2xl border border-brand-600/10 bg-brand-100">
+            <CardContent className="flex items-center gap-4 p-4">
+              <div className="flex size-16 shrink-0 items-center justify-center rounded-xl border-2 border-dashed border-brand-600/40 bg-white text-brand-600">
+                <QrCode className="size-9" />
               </div>
-              <p className="text-sm font-semibold text-foreground">สแกนเพื่อบันทึกเวลาเข้างาน</p>
+              <p className="text-sm font-semibold text-brand-900">สแกนเพื่อบันทึกเวลาเข้างาน</p>
             </CardContent>
           </Card>
 
           <Card className="rounded-2xl border border-slate-200">
-            <CardContent className="flex flex-col gap-3 p-5">
-              <p className="text-sm font-semibold text-foreground">เช็คอินล่าสุด</p>
+            <CardContent className="flex items-center gap-4 p-4">
+              <div className="relative shrink-0" style={{ width: ON_TIME_RING_SIZE, height: ON_TIME_RING_SIZE }}>
+                <svg
+                  viewBox={`0 0 ${ON_TIME_RING_SIZE} ${ON_TIME_RING_SIZE}`}
+                  className="-rotate-90"
+                  width={ON_TIME_RING_SIZE}
+                  height={ON_TIME_RING_SIZE}
+                >
+                  <circle
+                    cx={ON_TIME_RING_SIZE / 2}
+                    cy={ON_TIME_RING_SIZE / 2}
+                    r={ON_TIME_RING_RADIUS}
+                    stroke="var(--border)"
+                    strokeWidth={ON_TIME_RING_STROKE}
+                    fill="none"
+                  />
+                  <circle
+                    cx={ON_TIME_RING_SIZE / 2}
+                    cy={ON_TIME_RING_SIZE / 2}
+                    r={ON_TIME_RING_RADIUS}
+                    stroke="var(--success-foreground)"
+                    strokeWidth={ON_TIME_RING_STROKE}
+                    strokeLinecap="round"
+                    fill="none"
+                    strokeDasharray={onTimeCircumference}
+                    strokeDashoffset={onTimeOffset}
+                  />
+                </svg>
+                <div className="absolute inset-0 flex items-center justify-center text-sm font-bold text-brand-900">
+                  {MOCK_MONTHLY_ON_TIME.percent}%
+                </div>
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-foreground">ตรงเวลาเดือนนี้</p>
+                <p className="mt-1 text-xs text-muted-foreground">{MOCK_MONTHLY_ON_TIME.totalCheckIns} ครั้ง</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="grid grid-cols-2 gap-4">
+            <Card className="rounded-2xl border border-slate-200">
+              <CardContent className="p-4">
+                <p className="text-xs text-muted-foreground">ลาวันนี้</p>
+                <p className="mt-1 text-lg font-bold text-brand-900">{leaveTodayCount} คน</p>
+              </CardContent>
+            </Card>
+            <Card className="rounded-2xl border border-slate-200">
+              <CardContent className="p-4">
+                <p className="text-xs text-muted-foreground">วันหยุดถัดไป</p>
+                <p className="mt-1 text-sm font-semibold text-brand-900">
+                  {nextHoliday
+                    ? `${nextHoliday.localName ?? nextHoliday.name} · อีก ${daysToHoliday} วัน`
+                    : "ไม่มีวันหยุดที่จะถึง"}
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card className="flex min-h-0 flex-1 flex-col rounded-2xl border border-slate-200">
+            <CardContent className="flex min-h-0 flex-1 flex-col gap-3 p-5">
+              <p className="shrink-0 text-sm font-semibold text-foreground">เช็คอินล่าสุด</p>
               {recentCheckins.length > 0 ? (
-                <div className="flex max-h-[320px] flex-col gap-1.5 overflow-y-auto">
+                <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto">
                   {recentCheckins.map(({ employee, checkInAt }, index) => (
                     <div
                       key={employee.id}

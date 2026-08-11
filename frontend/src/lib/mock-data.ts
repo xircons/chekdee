@@ -271,6 +271,12 @@ export function getYearOfStudy(studentGen: string | null): string {
 // once leave accrual is implemented (Phase 4).
 export const ANNUAL_LEAVE_DAYS = 10;
 
+// Placeholder org-wide metric for the admin dashboard's on-time ring stat.
+// The fixture attendance records above are too sparse to aggregate a
+// believable month-to-date figure from — this will come from a real
+// summary endpoint once attendance_records has full-month data (Phase 4).
+export const MOCK_MONTHLY_ON_TIME = { percent: 94, totalCheckIns: 120 };
+
 export function getWorkScheduleForEmployee(employeeId: string): MockWorkSchedule[] {
   return mockWorkSchedules
     .filter((s) => s.employeeId === employeeId)
