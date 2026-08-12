@@ -273,20 +273,17 @@ export default function EmployeesPage() {
 
   return (
     <main className="flex flex-1 flex-col gap-6 p-6">
-      <header className="relative overflow-hidden rounded-b-[20px] bg-brand-600 px-6 py-6 text-white">
-        <div className="absolute top-0 right-0 size-48 -translate-y-1/3 translate-x-1/4 rounded-full bg-white/15" />
-        <div className="relative">
-          <h1 className="text-2xl font-bold">Employees</h1>
-          <p className="mt-1 text-sm text-white/80">Manage your team&apos;s roster and profiles</p>
+      <header className="rounded-b-[20px] bg-brand-600 px-6 py-6 text-white">
+        <h1 className="text-2xl font-bold">Employees</h1>
+        <p className="mt-1 text-sm text-white/80">Manage your team&apos;s roster and profiles</p>
 
-          <div className="mt-4 flex items-center gap-6">
-            {bannerStats.map((stat) => (
-              <div key={stat.label}>
-                <p className="text-xl font-bold tabular-nums">{stat.value}</p>
-                <p className="text-xs text-white/80">{stat.label}</p>
-              </div>
-            ))}
-          </div>
+        <div className="mt-4 flex items-center gap-6">
+          {bannerStats.map((stat) => (
+            <div key={stat.label}>
+              <p className="text-xl font-bold tabular-nums">{stat.value}</p>
+              <p className="text-xs text-white/80">{stat.label}</p>
+            </div>
+          ))}
         </div>
       </header>
 
