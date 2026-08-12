@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { Copy, Search, Upload } from "lucide-react";
+import { CheckCircle2, Circle, Copy, Search, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -175,6 +175,18 @@ export default function SchedulesPage() {
   const [schedules, setSchedules] = useState<MockWorkSchedule[]>(mockWorkSchedules);
   const [scheduleVersion, setScheduleVersion] = useState(0);
   const [search, setSearch] = useState("");
+  // Session-only "reviewed today" marker, so the admin can track who they've
+  // already worked through in the list — not persisted to mock data.
+  const [doneIds, setDoneIds] = useState<Set<string>>(new Set());
+
+  const toggleDone = (id: string) => {
+    setDoneIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
@@ -285,7 +297,17 @@ export default function SchedulesPage() {
         </div>
       </header>
 
-      <div className="flex w-fit shrink-0 gap-1 rounded-xl bg-muted p-1">
+      <div className="relative flex w-full shrink-0 overflow-hidden rounded-xl border border-brand-600/30">
+        {/* Sliding fill left square (no own rounding) — the container's
+            rounded overflow clips its outer corners, so the two halves meet
+            flush at center instead of reading as a floating pill. */}
+        <div
+          className={cn(
+            "absolute inset-y-0 left-0 w-1/2 bg-brand-600 transition-transform duration-300 ease-out",
+            tab === "import" && "translate-x-full"
+          )}
+        />
+        <div className="pointer-events-none absolute inset-y-2 left-1/2 w-px -translate-x-1/2 bg-brand-600/15" />
         {(
           [
             { id: "individual", label: "แก้ไขทีละคน" },
@@ -297,8 +319,8 @@ export default function SchedulesPage() {
             type="button"
             onClick={() => setTab(t.id)}
             className={cn(
-              "cursor-pointer rounded-lg px-4 py-1.5 text-sm font-medium transition-colors",
-              tab === t.id ? "bg-brand-600 text-white" : "text-muted-foreground hover:text-foreground"
+              "relative z-10 flex-1 cursor-pointer py-2 text-sm font-medium transition-colors duration-300",
+              tab === t.id ? "text-white" : "text-brand-600"
             )}
           >
             {t.label}
@@ -322,26 +344,48 @@ export default function SchedulesPage() {
               <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto">
                 {filteredEmployees.map((employee) => {
                   const active = employee.id === selectedId;
+                  const done = doneIds.has(employee.id);
                   return (
-                    <button
+                    <div
                       key={employee.id}
-                      type="button"
-                      onClick={() => setSelectedId(employee.id)}
                       className={cn(
-                        "flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2 text-left transition-colors",
-                        active ? "bg-brand-100 text-brand-600" : "hover:bg-muted"
+                        "flex items-center gap-1 rounded-xl pr-1 transition-colors",
+                        active ? "bg-brand-100" : "hover:bg-muted"
                       )}
                     >
-                      <div
+                      <button
+                        type="button"
+                        onClick={() => setSelectedId(employee.id)}
                         className={cn(
-                          "flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
-                          active ? "bg-brand-600 text-white" : "bg-brand-100 text-brand-600"
+                          "flex flex-1 cursor-pointer items-center gap-3 px-3 py-2 text-left",
+                          active ? "text-brand-600" : "text-foreground",
+                          done && "opacity-50"
                         )}
                       >
-                        {initials(employee)}
-                      </div>
-                      <span className="truncate text-sm font-medium">{employeeName(employee)}</span>
-                    </button>
+                        <div
+                          className={cn(
+                            "flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
+                            active ? "bg-brand-600 text-white" : "bg-brand-100 text-brand-600"
+                          )}
+                        >
+                          {initials(employee)}
+                        </div>
+                        <span className="truncate text-sm font-medium">{employeeName(employee)}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => toggleDone(employee.id)}
+                        aria-label={done ? "ยกเลิกการทำเครื่องหมายว่าเสร็จ" : "ทำเครื่องหมายว่าเสร็จ"}
+                        aria-pressed={done}
+                        className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full"
+                      >
+                        {done ? (
+                          <CheckCircle2 className="size-5 text-success-foreground" />
+                        ) : (
+                          <Circle className="size-5 text-muted-foreground/50" />
+                        )}
+                      </button>
+                    </div>
                   );
                 })}
                 {filteredEmployees.length === 0 && (
