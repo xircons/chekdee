@@ -248,13 +248,13 @@ export default function EmployeesPage() {
         prev.map((e) =>
           e.id === editingEmployee.id
             ? {
-                ...e,
-                firstName: values.firstName,
-                lastName: values.lastName,
-                role: values.role,
-                studentGen: values.studentGen || null,
-                displayName: `${values.firstName} ${values.lastName[0]}.`,
-              }
+              ...e,
+              firstName: values.firstName,
+              lastName: values.lastName,
+              role: values.role,
+              studentGen: values.studentGen || null,
+              displayName: `${values.firstName} ${values.lastName[0]}.`,
+            }
             : e
         )
       );
@@ -318,7 +318,7 @@ export default function EmployeesPage() {
 
       <Card className="rounded-2xl">
         <CardHeader>
-          <CardTitle>ทำเนียบพนักงาน</CardTitle>
+          <CardTitle>รายชื่อพนักงาน</CardTitle>
           <CardAction>
             <Button size="sm" className="bg-accent-600 text-white hover:bg-accent-700" onClick={openCreateForm}>
               เพิ่มพนักงาน
