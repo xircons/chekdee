@@ -60,3 +60,40 @@ export function packCirclesInCircle(count: number, containerRadius: number): Cir
 
   return { radius, positions };
 }
+
+// Finds a random non-overlapping spot for one more circle of `bubbleRadius`
+// among `existing` circles of the same radius, inside a disk of
+// `usableRadius` (i.e. containerRadius - bubbleRadius, so the new circle's
+// edge stays inside the container). Falls back to a fine spiral scan if
+// random sampling can't find a free spot at high density. Returns null if
+// neither finds room — that means the existing (fixed) circles are
+// arranged in a way that can't fit one more without moving any of them,
+// which callers should handle by repacking everyone.
+export function findBubblePosition(
+  existing: PackedCircle[],
+  bubbleRadius: number,
+  usableRadius: number
+): PackedCircle | null {
+  const minDistance = bubbleRadius * 2;
+  const fits = (candidate: PackedCircle) =>
+    existing.every((p) => Math.hypot(p.x - candidate.x, p.y - candidate.y) >= minDistance);
+
+  for (let attempt = 0; attempt < 400; attempt++) {
+    const angle = Math.random() * 2 * Math.PI;
+    // sqrt(random) samples uniformly over the disk's area, not just its radius.
+    const distance = Math.sqrt(Math.random()) * usableRadius;
+    const candidate = { x: distance * Math.cos(angle), y: distance * Math.sin(angle) };
+    if (fits(candidate)) return candidate;
+  }
+
+  const step = Math.max(bubbleRadius * 0.4, 1);
+  for (let r = 0; r <= usableRadius; r += step) {
+    const angleStep = Math.max(step / Math.max(r, step), Math.PI / 90);
+    for (let angle = 0; angle < 2 * Math.PI; angle += angleStep) {
+      const candidate = { x: r * Math.cos(angle), y: r * Math.sin(angle) };
+      if (fits(candidate)) return candidate;
+    }
+  }
+
+  return null;
+}
