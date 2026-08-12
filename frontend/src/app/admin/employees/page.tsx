@@ -150,7 +150,11 @@ function EmployeeFormFields({
               <SelectTrigger id="role" className="w-full">
                 <SelectValue placeholder="เลือกตำแหน่ง" />
               </SelectTrigger>
-              <SelectContent>
+              {/* alignItemWithTrigger off: the default centers the selected
+                  item over the trigger, which can push the list down far
+                  enough to overlap the field below instead of anchoring
+                  cleanly under the trigger. */}
+              <SelectContent alignItemWithTrigger={false} sideOffset={4}>
                 {directoryRoles.map((role) => (
                   <SelectItem key={role} value={role}>
                     {ROLE_LABEL_TH[role]}
@@ -168,13 +172,13 @@ function EmployeeFormFields({
       </div>
 
       <DialogFooter>
-        <Button type="button" variant="outline" onClick={onCancel}>
+        <Button type="button" variant="outline" className="h-11 px-6 text-base" onClick={onCancel}>
           ยกเลิก
         </Button>
         <Button
           type="submit"
           disabled={isSubmitting}
-          className="bg-accent-600 text-white hover:bg-accent-700"
+          className="h-11 bg-accent-600 px-6 text-base text-white hover:bg-accent-700"
         >
           {isSubmitting ? "กำลังบันทึก..." : "บันทึก"}
         </Button>
@@ -462,7 +466,7 @@ export default function EmployeesPage() {
       </Card>
 
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
-        <DialogContent>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingEmployee ? "แก้ไขข้อมูลพนักงาน" : "เพิ่มพนักงาน"}</DialogTitle>
           </DialogHeader>
@@ -507,7 +511,7 @@ export default function EmployeesPage() {
         badgeText={detailEmployee ? ROLE_LABEL_TH[detailEmployee.role] : ""}
         badgeVariant="default"
         footer={
-          <Button variant="outline" className="w-full" onClick={() => setDetailOpen(false)}>
+          <Button variant="outline" className="h-11 w-full text-base" onClick={() => setDetailOpen(false)}>
             ปิด
           </Button>
         }
