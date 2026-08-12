@@ -324,7 +324,7 @@ export default function EmployeesPage() {
         <CardHeader>
           <CardTitle>รายชื่อพนักงาน</CardTitle>
           <CardAction>
-            <Button size="sm" className="bg-accent-600 text-white hover:bg-accent-700" onClick={openCreateForm}>
+            <Button className="h-11 bg-accent-600 px-6 text-base text-white hover:bg-accent-700" onClick={openCreateForm}>
               เพิ่มพนักงาน
             </Button>
           </CardAction>
@@ -391,17 +391,15 @@ export default function EmployeesPage() {
                     ) : (
                       <div className="flex justify-end gap-2" onClick={(e) => e.stopPropagation()}>
                         <Button
-                          size="sm"
                           variant="outline"
-                          className="border-slate-200 text-muted-foreground"
+                          className="h-11 border-slate-200 px-6 text-base text-muted-foreground"
                           onClick={() => openEditForm(employee)}
                         >
                           แก้ไข
                         </Button>
                         <Button
-                          size="sm"
                           variant="outline"
-                          className="border-danger-foreground/30 text-danger-foreground hover:bg-danger hover:text-danger-foreground"
+                          className="h-11 border-danger-foreground/30 px-6 text-base text-danger-foreground hover:bg-danger hover:text-danger-foreground"
                           onClick={() => setOffboardTarget(employee)}
                         >
                           พ้นสภาพ
