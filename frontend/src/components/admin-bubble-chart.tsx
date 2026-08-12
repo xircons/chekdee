@@ -2,7 +2,12 @@
 
 import { useState } from "react";
 
-import { findBubblePosition, packCirclesInCircle, type PackedCircle } from "@/lib/circle-pack";
+import {
+  assignRankedShellPositions,
+  findBubblePosition,
+  packCirclesInCircle,
+  type PackedCircle,
+} from "@/lib/circle-pack";
 import { cn } from "@/lib/utils";
 
 export type BubbleEntry = {
@@ -48,27 +53,40 @@ export function AdminBubbleChart({ entries }: { entries: BubbleEntry[] }) {
 
   if (idsKey !== knownIdsKey) {
     const activeSet = new Set(activeIds);
+    // Insertion order of the Map (preserved by JS) is the arrival order —
+    // oldest survivors first — which is exactly the center-to-edge rank.
     const kept = new Map<string, PackedCircle>();
+    const survivorRank: string[] = [];
     positions.forEach((pos, id) => {
-      if (activeSet.has(id)) kept.set(id, pos);
+      if (activeSet.has(id)) {
+        kept.set(id, pos);
+        survivorRank.push(id);
+      }
     });
 
+    const newIds = shuffle(activeIds.filter((id) => !kept.has(id)));
+    const rankedIds = [...survivorRank, ...newIds];
+    const totalCount = rankedIds.length;
     const usableRadius = packRadius - bubbleRadius;
+
     let needsRepack = false;
-    for (const id of shuffle(activeIds.filter((existingId) => !kept.has(existingId)))) {
-      const pos = findBubblePosition(Array.from(kept.values()), bubbleRadius, usableRadius);
+    for (let i = 0; i < newIds.length; i++) {
+      const rank = survivorRank.length + i;
+      // 0 = center (oldest), 1 = outer edge (newest).
+      const targetFraction = totalCount > 1 ? rank / (totalCount - 1) : 0;
+      const pos = findBubblePosition(Array.from(kept.values()), bubbleRadius, usableRadius, targetFraction);
       if (!pos) {
         // The fixed existing positions leave no room for one more circle —
-        // reflow everyone at once using the proven-correct ring layout
-        // instead of leaving a bubble unplaced or overlapping.
+        // reflow everyone at once, still oldest-innermost, using the
+        // proven-correct ring layout instead of leaving a bubble unplaced.
         needsRepack = true;
         break;
       }
-      kept.set(id, pos);
+      kept.set(newIds[i], pos);
     }
 
     const finalPositions = needsRepack
-      ? new Map(shuffle(activeIds.slice()).map((id, i) => [id, ringPositions[i]]))
+      ? assignRankedShellPositions(rankedIds, ringPositions, shuffle)
       : kept;
 
     setPositions(finalPositions);

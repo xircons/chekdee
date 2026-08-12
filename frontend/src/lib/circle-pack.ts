@@ -64,27 +64,46 @@ export function packCirclesInCircle(count: number, containerRadius: number): Cir
 // Finds a random non-overlapping spot for one more circle of `bubbleRadius`
 // among `existing` circles of the same radius, inside a disk of
 // `usableRadius` (i.e. containerRadius - bubbleRadius, so the new circle's
-// edge stays inside the container). Falls back to a fine spiral scan if
-// random sampling can't find a free spot at high density. Returns null if
-// neither finds room — that means the existing (fixed) circles are
-// arranged in a way that can't fit one more without moving any of them,
-// which callers should handle by repacking everyone.
+// edge stays inside the container).
+//
+// `targetFraction` (0 = center, 1 = outer edge) biases the search toward an
+// annular band around that radius first, so earlier-ranked bubbles cluster
+// near the center and later ones toward the edge, while still landing at a
+// randomized spot rather than a fixed slot. Falls back to the full disk,
+// then a fine spiral scan, if that band is too crowded. Returns null if
+// nothing works — that means the existing (fixed) circles are arranged in
+// a way that can't fit one more without moving any of them, which callers
+// should handle by repacking everyone.
 export function findBubblePosition(
   existing: PackedCircle[],
   bubbleRadius: number,
-  usableRadius: number
+  usableRadius: number,
+  targetFraction: number
 ): PackedCircle | null {
   const minDistance = bubbleRadius * 2;
   const fits = (candidate: PackedCircle) =>
     existing.every((p) => Math.hypot(p.x - candidate.x, p.y - candidate.y) >= minDistance);
 
-  for (let attempt = 0; attempt < 400; attempt++) {
-    const angle = Math.random() * 2 * Math.PI;
-    // sqrt(random) samples uniformly over the disk's area, not just its radius.
-    const distance = Math.sqrt(Math.random()) * usableRadius;
-    const candidate = { x: distance * Math.cos(angle), y: distance * Math.sin(angle) };
-    if (fits(candidate)) return candidate;
-  }
+  const sampleAnnulus = (loFraction: number, hiFraction: number, attempts: number): PackedCircle | null => {
+    const lo = Math.max(0, loFraction) * usableRadius;
+    const hi = Math.max(lo, Math.min(1, hiFraction) * usableRadius);
+    const loSq = lo * lo;
+    const hiSq = hi * hi;
+    for (let attempt = 0; attempt < attempts; attempt++) {
+      const angle = Math.random() * 2 * Math.PI;
+      // sqrt samples uniformly over the annulus's area, not just its radius.
+      const distance = Math.sqrt(loSq + Math.random() * (hiSq - loSq));
+      const candidate = { x: distance * Math.cos(angle), y: distance * Math.sin(angle) };
+      if (fits(candidate)) return candidate;
+    }
+    return null;
+  };
+
+  const banded = sampleAnnulus(targetFraction - 0.3, targetFraction + 0.3, 250);
+  if (banded) return banded;
+
+  const anywhere = sampleAnnulus(0, 1, 250);
+  if (anywhere) return anywhere;
 
   const step = Math.max(bubbleRadius * 0.4, 1);
   for (let r = 0; r <= usableRadius; r += step) {
@@ -96,4 +115,43 @@ export function findBubblePosition(
   }
 
   return null;
+}
+
+// Groups ring-layout positions by their distance from center — each group
+// is one ring (the deterministic layout places a whole ring at the same
+// distance before moving to the next), ordered innermost first.
+function groupIntoShells(ringPositions: PackedCircle[]): PackedCircle[][] {
+  const shells: PackedCircle[][] = [];
+  let lastDistance = -1;
+  for (const p of ringPositions) {
+    const distance = Math.round(Math.hypot(p.x, p.y) * 100);
+    if (distance !== lastDistance) {
+      shells.push([]);
+      lastDistance = distance;
+    }
+    shells[shells.length - 1].push(p);
+  }
+  return shells;
+}
+
+// Full-repack fallback that still respects rank order: `rankedIds` must be
+// oldest-first, and gets assigned to `ringPositions`' shells innermost
+// first, so a forced reflow keeps early arrivals central and late arrivals
+// outward instead of scattering everyone randomly. Positions are shuffled
+// within each shell so same-age bubbles don't land in a fixed grid slot.
+export function assignRankedShellPositions(
+  rankedIds: string[],
+  ringPositions: PackedCircle[],
+  shuffle: <T>(list: T[]) => T[]
+): Map<string, PackedCircle> {
+  const shells = groupIntoShells(ringPositions);
+  const map = new Map<string, PackedCircle>();
+  let cursor = 0;
+  for (const shell of shells) {
+    const idsForShell = rankedIds.slice(cursor, cursor + shell.length);
+    const shellPositions = shuffle(shell.slice());
+    idsForShell.forEach((id, i) => map.set(id, shellPositions[i]));
+    cursor += shell.length;
+  }
+  return map;
 }
