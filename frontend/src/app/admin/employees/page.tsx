@@ -3,11 +3,10 @@
 import { useMemo, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { IdCard, Phone, Search, Users } from "lucide-react";
+import { ChevronLeft, ChevronRight, IdCard, Phone, Search, Users } from "lucide-react";
 import { z } from "zod";
 
 import { AdminDetailDialog, AdminDetailInfoBlock } from "@/components/admin-detail-dialog";
-import { AdminPageHeader } from "@/components/admin-page-header";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -49,6 +48,7 @@ import { getMonthlyAttendanceStats, mockEmployees, type MockEmployee, type Role 
 import { useMe } from "@/lib/session";
 
 const directoryRoles: Role[] = ["employee", "supervisor", "admin"];
+const PAGE_SIZE = 20;
 
 const employeeSchema = z.object({
   firstName: z.string().trim().min(1, "First name is required"),
@@ -164,6 +164,8 @@ export default function EmployeesPage() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<Role | "all">("all");
+  const [page, setPage] = useState(1);
+  const [pageResetKey, setPageResetKey] = useState("");
 
   const filteredEmployees = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -174,6 +176,27 @@ export default function EmployeesPage() {
       return matchesQuery && matchesRole;
     });
   }, [employees, search, roleFilter]);
+
+  // Jump back to page 1 whenever the search/filter criteria change, so a
+  // narrower result set never leaves the view stuck on a now-empty page.
+  // Adjusted directly during render (React's documented pattern for
+  // deriving state from a changed input) rather than in an effect.
+  const resetKey = `${search}|${roleFilter}`;
+  if (resetKey !== pageResetKey) {
+    setPageResetKey(resetKey);
+    setPage(1);
+  }
+
+  const totalPages = Math.max(1, Math.ceil(filteredEmployees.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pagedEmployees = filteredEmployees.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE
+  );
+
+  const totalCount = employees.length;
+  const activeCount = employees.filter((e) => e.status === "active" && !e.offboardedAt).length;
+  const offboardedCount = employees.filter((e) => e.offboardedAt !== null).length;
 
   const openCreateForm = () => {
     setEditingEmployee(null);
@@ -242,9 +265,30 @@ export default function EmployeesPage() {
     ? getMonthlyAttendanceStats(detailEmployee.id, new Date().toISOString().slice(0, 7))
     : null;
 
+  const bannerStats = [
+    { label: "Total employees", value: String(totalCount) },
+    { label: "Active", value: String(activeCount) },
+    { label: "Offboarded", value: String(offboardedCount) },
+  ];
+
   return (
     <main className="flex flex-1 flex-col gap-6 p-6">
-      <AdminPageHeader title="Employees" subtitle="Manage your team's roster and profiles" />
+      <header className="relative overflow-hidden rounded-b-[20px] bg-brand-600 px-6 py-6 text-white">
+        <div className="absolute top-0 right-0 size-48 -translate-y-1/3 translate-x-1/4 rounded-full bg-white/15" />
+        <div className="relative">
+          <h1 className="text-2xl font-bold">Employees</h1>
+          <p className="mt-1 text-sm text-white/80">Manage your team&apos;s roster and profiles</p>
+
+          <div className="mt-4 flex items-center gap-6">
+            {bannerStats.map((stat) => (
+              <div key={stat.label}>
+                <p className="text-xl font-bold tabular-nums">{stat.value}</p>
+                <p className="text-xs text-white/80">{stat.label}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </header>
 
       <Card className="rounded-2xl">
         <CardHeader>
@@ -292,14 +336,21 @@ export default function EmployeesPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredEmployees.map((employee) => (
+              {pagedEmployees.map((employee) => (
                 <TableRow
                   key={employee.id}
                   className="cursor-pointer"
                   onClick={() => openDetail(employee)}
                 >
                   <TableCell className="font-medium text-foreground">
-                    {employee.firstName} {employee.lastName}
+                    <div className="flex items-center gap-3">
+                      <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-100 text-xs font-semibold text-brand-600">
+                        {initials(employee)}
+                      </div>
+                      <span>
+                        {employee.firstName} {employee.lastName}
+                      </span>
+                    </div>
                   </TableCell>
                   <TableCell className="capitalize">{employee.role}</TableCell>
                   <TableCell>{statusBadge(employee)}</TableCell>
@@ -322,7 +373,7 @@ export default function EmployeesPage() {
                   </TableCell>
                 </TableRow>
               ))}
-              {filteredEmployees.length === 0 && (
+              {pagedEmployees.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center text-muted-foreground">
                     No employees match your search.
@@ -331,6 +382,48 @@ export default function EmployeesPage() {
               )}
             </TableBody>
           </Table>
+
+          {filteredEmployees.length > 0 && (
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-muted-foreground">
+                Showing {(currentPage - 1) * PAGE_SIZE + 1}
+                {"–"}
+                {Math.min(currentPage * PAGE_SIZE, filteredEmployees.length)} of{" "}
+                {filteredEmployees.length}
+              </p>
+              {totalPages > 1 && (
+                <div className="flex items-center gap-1">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={currentPage === 1}
+                    onClick={() => setPage(currentPage - 1)}
+                  >
+                    <ChevronLeft className="size-4" />
+                  </Button>
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNumber) => (
+                    <Button
+                      key={pageNumber}
+                      size="sm"
+                      variant={pageNumber === currentPage ? "default" : "outline"}
+                      className={pageNumber === currentPage ? "bg-accent-600 text-white hover:bg-accent-700" : undefined}
+                      onClick={() => setPage(pageNumber)}
+                    >
+                      {pageNumber}
+                    </Button>
+                  ))}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={currentPage === totalPages}
+                    onClick={() => setPage(currentPage + 1)}
+                  >
+                    <ChevronRight className="size-4" />
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 

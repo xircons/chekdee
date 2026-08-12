@@ -84,7 +84,8 @@ export const mockTeam = { id: "team-1", name: "CAMT Front Desk" };
 
 // [firstName, lastName] pairs appended to the 5 fixture employees below to
 // reach a realistic team size for testing the admin dashboard's roster
-// list. Change the length of this list to grow/shrink the mock team.
+// list and the employees table's pagination. Change the length of this
+// list to grow/shrink the mock team.
 const EXTRA_ROSTER_NAMES: [string, string][] = [
   ["Chatchai", "Boonmee"],
   ["Suda", "Panyawong"],
@@ -100,6 +101,12 @@ const EXTRA_ROSTER_NAMES: [string, string][] = [
   ["Siriporn", "Tangsiri"],
   ["Boonrod", "Yodkhun"],
   ["Kanya", "Intharak"],
+  ["Anucha", "Sombat"],
+  ["Ladda", "Wanchai"],
+  ["Sombat", "Chaisiri"],
+  ["Piyada", "Rungrueang"],
+  ["Thawatchai", "Meesuk"],
+  ["Orawan", "Phetsuwan"],
 ];
 
 export const mockEmployees: MockEmployee[] = [
