@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { QrCode } from "lucide-react";
 
 import { AdminBubbleChart, type BubbleEntry } from "@/components/admin-bubble-chart";
@@ -61,6 +61,7 @@ const RECENT_CHECKIN_LIMIT = 6;
 const ON_TIME_RING_SIZE = 80;
 const ON_TIME_RING_RADIUS = 34;
 const ON_TIME_RING_STROKE = 8;
+const DEMO_LOOP_INTERVAL_MS = 2500;
 
 export default function AdminDashboard() {
   const me = useMe();
@@ -143,6 +144,44 @@ export default function AdminDashboard() {
     [roster, now]
   );
 
+  // There's no live check-in event stream yet (Phase 4 backend), so this
+  // loop stands in for one: it keeps revealing bubbles for people not
+  // already shown so the pop-in animation has something to demo. Once
+  // everyone's shown, it clears and starts over. Replace with real
+  // event-driven updates once attendance is wired up.
+  const bubbleEntriesRef = useRef(bubbleEntries);
+  useEffect(() => {
+    bubbleEntriesRef.current = bubbleEntries;
+  }, [bubbleEntries]);
+
+  const [demoEntries, setDemoEntries] = useState<Map<string, "checked-in" | "late">>(new Map());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setDemoEntries((prev) => {
+        const shownIds = new Set([...bubbleEntriesRef.current.map((e) => e.id), ...prev.keys()]);
+        const candidates = employees.filter((e) => !shownIds.has(e.id));
+        if (candidates.length === 0) return new Map();
+
+        const pick = candidates[Math.floor(Math.random() * candidates.length)];
+        const status: "checked-in" | "late" = Math.random() < 0.7 ? "checked-in" : "late";
+        return new Map(prev).set(pick.id, status);
+      });
+    }, DEMO_LOOP_INTERVAL_MS);
+    return () => clearInterval(timer);
+  }, [employees]);
+
+  const displayEntries: BubbleEntry[] = useMemo(() => {
+    const extra: BubbleEntry[] = [];
+    demoEntries.forEach((status, id) => {
+      if (bubbleEntries.some((e) => e.id === id)) return;
+      const employee = employees.find((e) => e.id === id);
+      if (!employee) return;
+      extra.push({ id, initials: initials(employee), pictureUrl: employee.pictureUrl, status });
+    });
+    return [...bubbleEntries, ...extra];
+  }, [bubbleEntries, demoEntries, employees]);
+
   const quickStats = [
     { label: "เข้างานวันนี้", value: `${checkedInEntries.length}/${employees.length}` },
     { label: "คำขอลารออนุมัติ", value: String(pendingRequests.length) },
@@ -156,7 +195,7 @@ export default function AdminDashboard() {
     <main className="flex h-full min-h-0 flex-1 flex-col gap-5 px-6 pb-6">
       <header className="relative shrink-0 overflow-hidden rounded-b-[20px] bg-brand-600 px-6 py-6 text-white">
         <div className="absolute top-0 right-0 size-48 -translate-y-1/3 translate-x-1/4 rounded-full bg-white/15" />
-        <div className="relative flex items-start justify-between gap-6">
+        <div className="relative flex items-center justify-between gap-6">
           <div>
             <h1 className="text-2xl font-bold">
               ยินดีต้อนรับ, {me.first_name ?? me.display_name}
@@ -173,7 +212,7 @@ export default function AdminDashboard() {
             </div>
           </div>
           <div className="shrink-0 text-right">
-            <p className="text-3xl font-bold tabular-nums">
+            <p className="text-5xl font-bold tabular-nums">
               {now.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
             </p>
             <p className="mt-1 text-sm text-white/80">{formatThaiDateWithDay(now)}</p>
@@ -185,15 +224,17 @@ export default function AdminDashboard() {
         <Card className="flex min-h-0 flex-col rounded-2xl border border-slate-200 lg:col-span-2">
           <CardContent className="flex min-h-0 flex-1 flex-col p-5">
             <p className="text-sm font-semibold text-foreground">แผนผังการแสดงตน</p>
-            <AdminBubbleChart entries={bubbleEntries} />
+            <AdminBubbleChart entries={displayEntries} />
           </CardContent>
         </Card>
 
         <div className="flex min-h-0 flex-col gap-4">
           <Card className="rounded-2xl border border-brand-600/10 bg-brand-100">
             <CardContent className="flex items-center gap-4 p-4">
-              <div className="flex size-16 shrink-0 items-center justify-center rounded-xl border-2 border-dashed border-brand-600/40 bg-white text-brand-600">
-                <QrCode className="size-9" />
+              {/* p-4 is the QR's quiet zone — the white background must stay
+                  clear of the tinted card so scanners can lock onto the code. */}
+              <div className="flex size-32 shrink-0 items-center justify-center rounded-xl bg-white p-4 text-brand-600">
+                <QrCode className="size-full" />
               </div>
               <p className="text-sm font-semibold text-brand-900">สแกนเพื่อบันทึกเวลาเข้างาน</p>
             </CardContent>
