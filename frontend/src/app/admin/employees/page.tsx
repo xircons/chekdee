@@ -154,16 +154,21 @@ function EmployeeFormFields({
       </div>
 
       <div className="flex flex-col gap-1.5">
-        {/* No htmlFor here — SelectTrigger isn't a native input, and a
-            native label->id click gets forwarded to it as a real click,
-            re-toggling the dropdown right as its own outside-click handler
-            tries to close it (clicking the label never actually closes it). */}
+        {/* No htmlFor — SelectTrigger isn't a native input, and a native
+            label->id click gets forwarded to it as a real click. */}
         <Label>ตำแหน่ง</Label>
         <Controller
           name="role"
           control={control}
           render={({ field }) => (
-            <Select value={field.value} onValueChange={field.onChange}>
+            // modal={false}: this Select's own modal layer defaults to on
+            // (Base UI), which fights the parent Dialog's modal/outside-press
+            // handling once nested inside it — any real click near the
+            // trigger (the role label included) was being read as a click
+            // outside the Dialog and closing the whole modal instead of
+            // just the dropdown. Turning off the Select's own modal state
+            // leaves the Dialog as the only outside-press authority.
+            <Select value={field.value} onValueChange={field.onChange} modal={false}>
               <SelectTrigger id="role" className={`w-full ${SELECT_TRIGGER_CLASS}`}>
                 <SelectValue placeholder="เลือกตำแหน่ง">
                   {(value: string | null) => (value ? ROLE_LABEL_TH[value as Role] : "เลือกตำแหน่ง")}
