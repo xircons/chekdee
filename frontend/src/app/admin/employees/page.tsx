@@ -55,16 +55,18 @@ import { useMe } from "@/lib/session";
 
 const directoryRoles: Role[] = ["employee", "supervisor", "admin"];
 const PAGE_SIZE = 20;
-// Matches the employee shell's actual field style — that's `rounded-xl`
-// (this project's 20px token) with a soft muted fill, not `rounded-full`;
-// the employee side barely uses true pill shapes outside of a couple of
-// standalone sheet buttons, so admin forms should read the same way.
+// Matches the employee shell's actual field style — soft muted fill, no
+// stark border. The employee side's own fields use rounded-xl (20px) at
+// h-12; at this row's shorter h-9 the same 20px radius is large enough
+// relative to the box that CSS caps/scales the corners down to a full
+// stadium pill (a real rendering effect, not just a class-name mismatch)
+// — rounded-lg (16px) keeps the same proportion without hitting that cap.
 const FIELD_CLASS =
-  "h-9 rounded-xl border-border bg-muted/40 px-4 text-sm focus-visible:border-brand-600 focus-visible:bg-card focus-visible:ring-brand-600/20";
+  "h-9 rounded-lg border-border bg-muted/40 px-4 text-sm focus-visible:border-brand-600 focus-visible:bg-card focus-visible:ring-brand-600/20";
 // Shared with the icon-prefixed inputs (ชื่อ, นามสกุล, Directory search) so
 // their focus state reads as one design pass instead of the default gray ring.
 const ICON_INPUT_CLASS = `${FIELD_CLASS} pl-9`;
-const ACTION_BUTTON_CLASS = "h-9 rounded-xl px-5 text-sm";
+const ACTION_BUTTON_CLASS = "h-9 rounded-lg px-5 text-sm";
 
 const employeeSchema = z.object({
   firstName: z.string().trim().min(1, "กรุณากรอกชื่อ"),
