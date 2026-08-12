@@ -70,12 +70,12 @@ type EmployeeForm = z.infer<typeof employeeSchema>;
 
 function statusBadge(employee: MockEmployee) {
   if (employee.offboardedAt) {
-    return <Badge variant="danger">Offboarded</Badge>;
+    return <Badge variant="danger">พ้นสภาพแล้ว</Badge>;
   }
   if (employee.status === "active") {
-    return <Badge variant="success">Active</Badge>;
+    return <Badge variant="success">ใช้งานอยู่</Badge>;
   }
-  return <Badge variant="secondary">Inactive</Badge>;
+  return <Badge variant="secondary">ไม่ใช้งาน</Badge>;
 }
 
 function initials(employee: MockEmployee): string {
@@ -295,16 +295,16 @@ export default function EmployeesPage() {
     : null;
 
   const bannerStats = [
-    { label: "Total employees", value: String(totalCount) },
-    { label: "Active", value: String(activeCount) },
-    { label: "Offboarded", value: String(offboardedCount) },
+    { label: "พนักงานทั้งหมด", value: String(totalCount) },
+    { label: "ใช้งานอยู่", value: String(activeCount) },
+    { label: "พ้นสภาพแล้ว", value: String(offboardedCount) },
   ];
 
   return (
     <main className="flex flex-1 flex-col gap-6 p-6">
       <header className="rounded-b-[20px] bg-brand-600 px-6 py-6 text-white">
-        <h1 className="text-2xl font-bold">Employees</h1>
-        <p className="mt-1 text-sm text-white/80">Manage your team&apos;s roster and profiles</p>
+        <h1 className="text-2xl font-bold">พนักงาน</h1>
+        <p className="mt-1 text-sm text-white/80">จัดการรายชื่อและข้อมูลพนักงานของทีมคุณ</p>
 
         <div className="mt-4 flex items-center gap-6">
           {bannerStats.map((stat) => (
@@ -318,10 +318,10 @@ export default function EmployeesPage() {
 
       <Card className="rounded-2xl">
         <CardHeader>
-          <CardTitle>Directory</CardTitle>
+          <CardTitle>ทำเนียบพนักงาน</CardTitle>
           <CardAction>
             <Button size="sm" className="bg-accent-600 text-white hover:bg-accent-700" onClick={openCreateForm}>
-              Add employee
+              เพิ่มพนักงาน
             </Button>
           </CardAction>
         </CardHeader>
@@ -338,13 +338,13 @@ export default function EmployeesPage() {
             </div>
             <Select value={roleFilter} onValueChange={(v) => setRoleFilter(v as Role | "all")}>
               <SelectTrigger className="w-40">
-                <SelectValue placeholder="All roles" />
+                <SelectValue placeholder="ทั้งหมด" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All roles</SelectItem>
+                <SelectItem value="all">ทั้งหมด</SelectItem>
                 {directoryRoles.map((role) => (
-                  <SelectItem key={role} value={role} className="capitalize">
-                    {role}
+                  <SelectItem key={role} value={role}>
+                    {ROLE_LABEL_TH[role]}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -354,11 +354,11 @@ export default function EmployeesPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Role</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Student gen</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead>ชื่อ</TableHead>
+                <TableHead>ตำแหน่ง</TableHead>
+                <TableHead>สถานะ</TableHead>
+                <TableHead>รุ่นนักศึกษา</TableHead>
+                <TableHead className="text-right">จัดการ</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -378,21 +378,29 @@ export default function EmployeesPage() {
                       </span>
                     </div>
                   </TableCell>
-                  <TableCell className="capitalize">{employee.role}</TableCell>
+                  <TableCell>{ROLE_LABEL_TH[employee.role]}</TableCell>
                   <TableCell>{statusBadge(employee)}</TableCell>
                   <TableCell>{employee.studentGen ? `(${employee.studentGen})` : "—"}</TableCell>
                   <TableCell className="text-right">
-                    {!employee.offboardedAt && (
+                    {employee.offboardedAt ? (
+                      <span className="text-muted-foreground">—</span>
+                    ) : (
                       <div className="flex justify-end gap-2" onClick={(e) => e.stopPropagation()}>
-                        <Button size="sm" variant="outline" onClick={() => openEditForm(employee)}>
-                          Edit
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="border-slate-200 text-muted-foreground"
+                          onClick={() => openEditForm(employee)}
+                        >
+                          แก้ไข
                         </Button>
                         <Button
                           size="sm"
-                          variant="destructive"
+                          variant="outline"
+                          className="border-danger-foreground/30 text-danger-foreground hover:bg-danger hover:text-danger-foreground"
                           onClick={() => setOffboardTarget(employee)}
                         >
-                          Offboard
+                          พ้นสภาพ
                         </Button>
                       </div>
                     )}
@@ -402,7 +410,7 @@ export default function EmployeesPage() {
               {pagedEmployees.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center text-muted-foreground">
-                    No employees match your search.
+                    ไม่พบพนักงานที่ตรงกับการค้นหา
                   </TableCell>
                 </TableRow>
               )}
@@ -412,9 +420,9 @@ export default function EmployeesPage() {
           {filteredEmployees.length > 0 && (
             <div className="flex items-center justify-between">
               <p className="text-xs text-muted-foreground">
-                Showing {(currentPage - 1) * PAGE_SIZE + 1}
+                แสดง {(currentPage - 1) * PAGE_SIZE + 1}
                 {"–"}
-                {Math.min(currentPage * PAGE_SIZE, filteredEmployees.length)} of{" "}
+                {Math.min(currentPage * PAGE_SIZE, filteredEmployees.length)} จาก{" "}
                 {filteredEmployees.length}
               </p>
               {totalPages > 1 && (
@@ -476,16 +484,16 @@ export default function EmployeesPage() {
       <AlertDialog open={!!offboardTarget} onOpenChange={(open) => !open && setOffboardTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Offboard {offboardTarget?.firstName}?</AlertDialogTitle>
+            <AlertDialogTitle>ให้ {offboardTarget?.firstName} พ้นสภาพ?</AlertDialogTitle>
             <AlertDialogDescription>
-              This soft-deletes the employee — their record and attendance history stay
-              intact, they&apos;re just marked offboarded and can no longer check in.
+              การดำเนินการนี้เป็นการลบแบบไม่ถาวร — ข้อมูลและประวัติการเข้างานของพนักงานจะยังคงอยู่
+              เพียงแค่ถูกทำเครื่องหมายว่าพ้นสภาพและไม่สามารถเช็คอินได้อีก
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>ยกเลิก</AlertDialogCancel>
             <AlertDialogAction variant="destructive" onClick={confirmOffboard}>
-              Offboard
+              พ้นสภาพ
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -496,11 +504,11 @@ export default function EmployeesPage() {
         onOpenChange={setDetailOpen}
         icon={Users}
         title={detailEmployee ? `${detailEmployee.firstName} ${detailEmployee.lastName}` : ""}
-        badgeText={detailEmployee?.role ?? ""}
+        badgeText={detailEmployee ? ROLE_LABEL_TH[detailEmployee.role] : ""}
         badgeVariant="default"
         footer={
           <Button variant="outline" className="w-full" onClick={() => setDetailOpen(false)}>
-            Close
+            ปิด
           </Button>
         }
       >
@@ -513,20 +521,20 @@ export default function EmployeesPage() {
               <div className="flex flex-col gap-0.5 text-sm">
                 <div className="flex items-center gap-1.5 text-foreground">
                   <IdCard className="size-3.5 text-muted-foreground" />
-                  {detailEmployee.studentId ?? "No student ID on file"}
+                  {detailEmployee.studentId ?? "ไม่มีข้อมูลรหัสนักศึกษา"}
                 </div>
                 <div className="flex items-center gap-1.5 text-foreground">
                   <Phone className="size-3.5 text-muted-foreground" />
-                  {detailEmployee.phoneNumber ?? "No phone on file"}
+                  {detailEmployee.phoneNumber ?? "ไม่มีข้อมูลเบอร์โทรศัพท์"}
                 </div>
               </div>
             </div>
 
             {monthStats && (
               <div className="grid grid-cols-3 gap-2">
-                <AdminDetailInfoBlock label="Hours (mo.)" value={String(monthStats.hours)} valueSize="sm" />
-                <AdminDetailInfoBlock label="Late" value={String(monthStats.lateCount)} valueSize="sm" />
-                <AdminDetailInfoBlock label="Absent" value={String(monthStats.absentCount)} valueSize="sm" />
+                <AdminDetailInfoBlock label="ชั่วโมง (เดือนนี้)" value={String(monthStats.hours)} valueSize="sm" />
+                <AdminDetailInfoBlock label="สาย" value={String(monthStats.lateCount)} valueSize="sm" />
+                <AdminDetailInfoBlock label="ขาด" value={String(monthStats.absentCount)} valueSize="sm" />
               </div>
             )}
           </div>
