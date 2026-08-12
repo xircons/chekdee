@@ -55,9 +55,15 @@ import { useMe } from "@/lib/session";
 
 const directoryRoles: Role[] = ["employee", "supervisor", "admin"];
 const PAGE_SIZE = 20;
+// Matches the employee shell's pill-shaped, softly-filled field style
+// (rounded-full, muted fill, no stark border) so admin forms read as the
+// same design system instead of the plain shadcn defaults.
+const PILL_FIELD_CLASS =
+  "h-9 rounded-full border-border bg-muted/40 px-4 text-sm focus-visible:border-brand-600 focus-visible:bg-card focus-visible:ring-brand-600/20";
 // Shared with the icon-prefixed inputs (ชื่อ, นามสกุล, Directory search) so
 // their focus state reads as one design pass instead of the default gray ring.
-const ICON_INPUT_CLASS = "pl-8 focus-visible:border-brand-600 focus-visible:ring-brand-600/30";
+const ICON_INPUT_CLASS = `${PILL_FIELD_CLASS} pl-9`;
+const PILL_BUTTON_CLASS = "h-9 rounded-full px-5 text-sm";
 
 const employeeSchema = z.object({
   firstName: z.string().trim().min(1, "กรุณากรอกชื่อ"),
@@ -147,7 +153,7 @@ function EmployeeFormFields({
           control={control}
           render={({ field }) => (
             <Select value={field.value} onValueChange={field.onChange}>
-              <SelectTrigger id="role" className="w-full">
+              <SelectTrigger id="role" className={`w-full ${PILL_FIELD_CLASS}`}>
                 <SelectValue placeholder="เลือกตำแหน่ง" />
               </SelectTrigger>
               {/* alignItemWithTrigger off: the default centers the selected
@@ -168,17 +174,17 @@ function EmployeeFormFields({
 
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="studentGen">รุ่นนักศึกษา (ถ้ามี)</Label>
-        <Input id="studentGen" placeholder="เช่น 7" {...register("studentGen")} />
+        <Input id="studentGen" placeholder="เช่น 7" className={PILL_FIELD_CLASS} {...register("studentGen")} />
       </div>
 
       <DialogFooter>
-        <Button type="button" variant="outline" className="h-11 px-6 text-base" onClick={onCancel}>
+        <Button type="button" variant="outline" className={PILL_BUTTON_CLASS} onClick={onCancel}>
           ยกเลิก
         </Button>
         <Button
           type="submit"
           disabled={isSubmitting}
-          className="h-11 bg-accent-600 px-6 text-base text-white hover:bg-accent-700"
+          className={`${PILL_BUTTON_CLASS} bg-accent-600 text-white hover:bg-accent-700`}
         >
           {isSubmitting ? "กำลังบันทึก..." : "บันทึก"}
         </Button>
@@ -324,7 +330,7 @@ export default function EmployeesPage() {
         <CardHeader>
           <CardTitle>รายชื่อพนักงาน</CardTitle>
           <CardAction>
-            <Button className="h-11 bg-accent-600 px-6 text-base text-white hover:bg-accent-700" onClick={openCreateForm}>
+            <Button className={`${PILL_BUTTON_CLASS} bg-accent-600 text-white hover:bg-accent-700`} onClick={openCreateForm}>
               เพิ่มพนักงาน
             </Button>
           </CardAction>
@@ -341,7 +347,7 @@ export default function EmployeesPage() {
               />
             </div>
             <Select value={roleFilter} onValueChange={(v) => setRoleFilter(v as Role | "all")}>
-              <SelectTrigger className="w-40">
+              <SelectTrigger className={`w-40 ${PILL_FIELD_CLASS}`}>
                 <SelectValue placeholder="ทั้งหมด" />
               </SelectTrigger>
               <SelectContent>
@@ -392,14 +398,14 @@ export default function EmployeesPage() {
                       <div className="flex justify-end gap-2" onClick={(e) => e.stopPropagation()}>
                         <Button
                           variant="outline"
-                          className="h-11 border-slate-200 px-6 text-base text-muted-foreground"
+                          className={`${PILL_BUTTON_CLASS} border-slate-200 text-muted-foreground`}
                           onClick={() => openEditForm(employee)}
                         >
                           แก้ไข
                         </Button>
                         <Button
                           variant="outline"
-                          className="h-11 border-danger-foreground/30 px-6 text-base text-danger-foreground hover:bg-danger hover:text-danger-foreground"
+                          className={`${PILL_BUTTON_CLASS} border-danger-foreground/30 text-danger-foreground hover:bg-danger hover:text-danger-foreground`}
                           onClick={() => setOffboardTarget(employee)}
                         >
                           พ้นสภาพ
@@ -432,6 +438,7 @@ export default function EmployeesPage() {
                   <Button
                     size="sm"
                     variant="outline"
+                    className="rounded-full"
                     disabled={currentPage === 1}
                     onClick={() => setPage(currentPage - 1)}
                   >
@@ -442,7 +449,11 @@ export default function EmployeesPage() {
                       key={pageNumber}
                       size="sm"
                       variant={pageNumber === currentPage ? "default" : "outline"}
-                      className={pageNumber === currentPage ? "bg-accent-600 text-white hover:bg-accent-700" : undefined}
+                      className={
+                        pageNumber === currentPage
+                          ? "rounded-full bg-accent-600 text-white hover:bg-accent-700"
+                          : "rounded-full"
+                      }
                       onClick={() => setPage(pageNumber)}
                     >
                       {pageNumber}
@@ -451,6 +462,7 @@ export default function EmployeesPage() {
                   <Button
                     size="sm"
                     variant="outline"
+                    className="rounded-full"
                     disabled={currentPage === totalPages}
                     onClick={() => setPage(currentPage + 1)}
                   >
@@ -493,8 +505,12 @@ export default function EmployeesPage() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>ยกเลิก</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={confirmOffboard}>
+            <AlertDialogCancel className={PILL_BUTTON_CLASS}>ยกเลิก</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              className={PILL_BUTTON_CLASS}
+              onClick={confirmOffboard}
+            >
               พ้นสภาพ
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -509,7 +525,7 @@ export default function EmployeesPage() {
         badgeText={detailEmployee ? ROLE_LABEL_TH[detailEmployee.role] : ""}
         badgeVariant="default"
         footer={
-          <Button variant="outline" className="h-11 w-full text-base" onClick={() => setDetailOpen(false)}>
+          <Button variant="outline" className={`${PILL_BUTTON_CLASS} w-full`} onClick={() => setDetailOpen(false)}>
             ปิด
           </Button>
         }
