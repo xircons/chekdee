@@ -305,7 +305,7 @@ export default function EmployeesPage() {
   ];
 
   return (
-    <main className="flex flex-1 flex-col gap-6 p-6">
+    <main className="flex flex-1 flex-col gap-6 px-6 pb-6">
       <header className="rounded-b-[20px] bg-brand-600 px-6 py-6 text-white">
         <h1 className="text-2xl font-bold">พนักงาน</h1>
         <p className="mt-1 text-sm text-white/80">จัดการรายชื่อและข้อมูลพนักงานของทีมคุณ</p>
