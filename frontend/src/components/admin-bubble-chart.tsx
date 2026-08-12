@@ -12,9 +12,9 @@ export type BubbleEntry = {
   status: "checked-in" | "late";
 };
 
-const CONTAINER_DIAMETER = 320;
+const CONTAINER_DIAMETER = 420;
 const CONTAINER_RADIUS = CONTAINER_DIAMETER / 2;
-const INNER_PADDING = 16;
+const INNER_PADDING = 20;
 // Shrinks the packed radius slightly so adjacent bubbles keep a visible gap
 // instead of touching edge-to-edge.
 const BUBBLE_GAP_SCALE = 0.86;
