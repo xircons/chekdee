@@ -194,7 +194,6 @@ export default function AdminDashboard() {
   return (
     <main className="flex h-full min-h-0 flex-1 flex-col gap-5 px-6 pb-6">
       <header className="relative shrink-0 overflow-hidden rounded-b-[20px] bg-brand-600 px-6 py-6 text-white">
-        <div className="absolute top-0 right-0 size-48 -translate-y-1/3 translate-x-1/4 rounded-full bg-white/15" />
         <div className="relative flex items-center justify-between gap-6">
           <div>
             <h1 className="text-2xl font-bold">
