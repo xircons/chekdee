@@ -57,8 +57,6 @@
 
   /* pure scale grow, no skew/stretch — QR check-in success dot */
   --animate-dot-grow: dot-grow 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-  /* same overshoot curve — admin dashboard bubble-pack entrance */
-  --animate-bubble-pop: bubble-pop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 
 @keyframes dot-grow {
@@ -73,15 +71,50 @@
   }
 }
 
+/*
+ * Admin dashboard bubble-pack animations. These use the standalone `scale`
+ * and `translate` CSS properties (not the `transform` shorthand) so a
+ * bubble can run its one-shot pop-in, its continuous idle bob, and (for
+ * whichever bubble is newest) a highlight pulse all at once via a single
+ * combined `animation` value, without the animations fighting over the
+ * same property — see admin-bubble-chart.tsx for how they're composed.
+ */
 @keyframes bubble-pop {
   0% {
-    transform: scale(0);
+    scale: 0;
   }
   70% {
-    transform: scale(1.12);
+    scale: 1.12;
   }
   100% {
-    transform: scale(1);
+    scale: 1;
+  }
+}
+
+@keyframes bubble-bob {
+  0%,
+  100% {
+    translate: 0 0;
+  }
+  33% {
+    translate: 1.5px -2.5px;
+  }
+  66% {
+    translate: -1.5px -1px;
+  }
+}
+
+/* Flat highlight for the most-recently-added bubble — a plain outline
+   pulse, no blur/shadow. */
+@keyframes bubble-highlight {
+  0%,
+  100% {
+    outline-width: 2px;
+    outline-color: rgb(255 255 255 / 0.85);
+  }
+  50% {
+    outline-width: 4px;
+    outline-color: rgb(255 255 255 / 0.35);
   }
 }
 

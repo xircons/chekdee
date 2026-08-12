@@ -74,6 +74,11 @@ export function packCirclesInCircle(count: number, containerRadius: number): Cir
 // nothing works — that means the existing (fixed) circles are arranged in
 // a way that can't fit one more without moving any of them, which callers
 // should handle by repacking everyone.
+// Half-width of the radial band `findBubblePosition` searches first, as a
+// fraction of usableRadius — tight enough to read as a clear center-to-edge
+// growth order, wide enough that same-era bubbles don't land on a rigid ring.
+const BAND_HALF_WIDTH = 0.13;
+
 export function findBubblePosition(
   existing: PackedCircle[],
   bubbleRadius: number,
@@ -99,7 +104,7 @@ export function findBubblePosition(
     return null;
   };
 
-  const banded = sampleAnnulus(targetFraction - 0.3, targetFraction + 0.3, 250);
+  const banded = sampleAnnulus(targetFraction - BAND_HALF_WIDTH, targetFraction + BAND_HALF_WIDTH, 250);
   if (banded) return banded;
 
   const anywhere = sampleAnnulus(0, 1, 250);
