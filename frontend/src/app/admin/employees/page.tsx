@@ -67,6 +67,10 @@ const FIELD_CLASS =
 // their focus state reads as one design pass instead of the default gray ring.
 const ICON_INPUT_CLASS = `${FIELD_CLASS} pl-9`;
 const ACTION_BUTTON_CLASS = "h-9 rounded-lg px-5 text-sm";
+// SelectTrigger's own base classes set height via `data-[size=default]:h-8`,
+// a variant-guarded utility whose specificity beats a plain `h-9` override —
+// same variant prefix needed here to actually win and match the inputs.
+const SELECT_TRIGGER_CLASS = `${FIELD_CLASS} data-[size=default]:h-9`;
 
 const employeeSchema = z.object({
   firstName: z.string().trim().min(1, "กรุณากรอกชื่อ"),
@@ -150,13 +154,17 @@ function EmployeeFormFields({
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <Label htmlFor="role">ตำแหน่ง</Label>
+        {/* No htmlFor here — SelectTrigger isn't a native input, and a
+            native label->id click gets forwarded to it as a real click,
+            re-toggling the dropdown right as its own outside-click handler
+            tries to close it (clicking the label never actually closes it). */}
+        <Label>ตำแหน่ง</Label>
         <Controller
           name="role"
           control={control}
           render={({ field }) => (
             <Select value={field.value} onValueChange={field.onChange}>
-              <SelectTrigger id="role" className={`w-full ${FIELD_CLASS}`}>
+              <SelectTrigger id="role" className={`w-full ${SELECT_TRIGGER_CLASS}`}>
                 <SelectValue placeholder="เลือกตำแหน่ง">
                   {(value: string | null) => (value ? ROLE_LABEL_TH[value as Role] : "เลือกตำแหน่ง")}
                 </SelectValue>
@@ -352,14 +360,19 @@ export default function EmployeesPage() {
               />
             </div>
             <Select value={roleFilter} onValueChange={(v) => setRoleFilter(v as Role | "all")}>
-              <SelectTrigger className={`w-48 ${FIELD_CLASS}`}>
+              <SelectTrigger className={`w-48 ${SELECT_TRIGGER_CLASS}`}>
                 <SelectValue placeholder="ทั้งหมด">
                   {(value: string | null) =>
                     !value || value === "all" ? "ทั้งหมด" : ROLE_LABEL_TH[value as Role]
                   }
                 </SelectValue>
               </SelectTrigger>
-              <SelectContent>
+              {/* Same fix as the form's role select below: alignItemWithTrigger
+                  off keeps this anchored under the trigger instead of
+                  centering on whichever item is selected and drifting away
+                  from it (up toward the card header when a later item is
+                  selected). */}
+              <SelectContent alignItemWithTrigger={false} sideOffset={4}>
                 <SelectItem value="all">ทั้งหมด</SelectItem>
                 {directoryRoles.map((role) => (
                   <SelectItem key={role} value={role}>
@@ -507,7 +520,7 @@ export default function EmployeesPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>ให้ {offboardTarget?.firstName} พ้นสภาพ?</AlertDialogTitle>
             <AlertDialogDescription>
-              การดำเนินการนี้เป็นการลบแบบไม่ถาวร — ข้อมูลและประวัติการเข้างานของพนักงานจะยังคงอยู่
+              การดำเนินการนี้เป็นการลบแบบไม่ถาวร ข้อมูลและประวัติการเข้างานของพนักงานจะยังคงอยู่
               เพียงแค่ถูกทำเครื่องหมายว่าพ้นสภาพและไม่สามารถเช็คอินได้อีก
             </AlertDialogDescription>
           </AlertDialogHeader>
