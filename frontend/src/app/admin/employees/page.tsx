@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ChevronLeft, ChevronRight, IdCard, Phone, Search, Users } from "lucide-react";
+import { ChevronLeft, ChevronRight, IdCard, Phone, Search, User, Users } from "lucide-react";
 import { z } from "zod";
 
 import { AdminDetailDialog, AdminDetailInfoBlock } from "@/components/admin-detail-dialog";
@@ -55,6 +55,9 @@ import { useMe } from "@/lib/session";
 
 const directoryRoles: Role[] = ["employee", "supervisor", "admin"];
 const PAGE_SIZE = 20;
+// Shared with the icon-prefixed inputs (ชื่อ, นามสกุล, Directory search) so
+// their focus state reads as one design pass instead of the default gray ring.
+const ICON_INPUT_CLASS = "pl-8 focus-visible:border-brand-600 focus-visible:ring-brand-600/30";
 
 const employeeSchema = z.object({
   firstName: z.string().trim().min(1, "กรุณากรอกชื่อ"),
@@ -102,15 +105,35 @@ function EmployeeFormFields({
     <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
       <div className="grid grid-cols-2 gap-3">
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="firstName">ชื่อ</Label>
-          <Input id="firstName" placeholder="กรอกชื่อ" {...register("firstName")} />
+          <Label htmlFor="firstName" className="font-semibold">
+            ชื่อ
+          </Label>
+          <div className="relative">
+            <User className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              id="firstName"
+              placeholder="กรอกชื่อ"
+              className={ICON_INPUT_CLASS}
+              {...register("firstName")}
+            />
+          </div>
           {errors.firstName && (
             <p className="text-xs text-danger-foreground">{errors.firstName.message}</p>
           )}
         </div>
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="lastName">นามสกุล</Label>
-          <Input id="lastName" placeholder="กรอกนามสกุล" {...register("lastName")} />
+          <Label htmlFor="lastName" className="font-semibold">
+            นามสกุล
+          </Label>
+          <div className="relative">
+            <User className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              id="lastName"
+              placeholder="กรอกนามสกุล"
+              className={ICON_INPUT_CLASS}
+              {...register("lastName")}
+            />
+          </div>
           {errors.lastName && (
             <p className="text-xs text-danger-foreground">{errors.lastName.message}</p>
           )}
@@ -309,8 +332,8 @@ export default function EmployeesPage() {
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search by name"
-                className="pl-8"
+                placeholder="ค้นหาจากชื่อ"
+                className={ICON_INPUT_CLASS}
               />
             </div>
             <Select value={roleFilter} onValueChange={(v) => setRoleFilter(v as Role | "all")}>
