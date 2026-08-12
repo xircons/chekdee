@@ -11,10 +11,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { mockEmployees, ROLE_LABEL_TH } from "@/lib/mock-data";
 import { useMe, logout } from "@/lib/session";
 
-// studentGen stores the admission year (e.g. "2026") to match the admin
-// employee form; the profile view shows it as a generation ordinal instead.
-function studentGenLabel(admissionYear: string): string {
-  return `Gen (${Number(admissionYear) - 2019})`;
+function studentGenLabel(gen: string): string {
+  return `Gen (${gen})`;
 }
 
 function initials(first: string | null, last: string | null, fallback: string | null): string {

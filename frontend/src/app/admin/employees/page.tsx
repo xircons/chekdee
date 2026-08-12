@@ -44,15 +44,21 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { getMonthlyAttendanceStats, mockEmployees, type MockEmployee, type Role } from "@/lib/mock-data";
+import {
+  getMonthlyAttendanceStats,
+  mockEmployees,
+  ROLE_LABEL_TH,
+  type MockEmployee,
+  type Role,
+} from "@/lib/mock-data";
 import { useMe } from "@/lib/session";
 
 const directoryRoles: Role[] = ["employee", "supervisor", "admin"];
 const PAGE_SIZE = 20;
 
 const employeeSchema = z.object({
-  firstName: z.string().trim().min(1, "First name is required"),
-  lastName: z.string().trim().min(1, "Last name is required"),
+  firstName: z.string().trim().min(1, "กรุณากรอกชื่อ"),
+  lastName: z.string().trim().min(1, "กรุณากรอกนามสกุล"),
   role: z.enum(["employee", "supervisor", "admin"] as const),
   studentGen: z.string().trim().optional(),
 });
@@ -96,15 +102,15 @@ function EmployeeFormFields({
     <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
       <div className="grid grid-cols-2 gap-3">
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="firstName">First name</Label>
-          <Input id="firstName" {...register("firstName")} />
+          <Label htmlFor="firstName">ชื่อ</Label>
+          <Input id="firstName" placeholder="กรอกชื่อ" {...register("firstName")} />
           {errors.firstName && (
             <p className="text-xs text-danger-foreground">{errors.firstName.message}</p>
           )}
         </div>
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="lastName">Last name</Label>
-          <Input id="lastName" {...register("lastName")} />
+          <Label htmlFor="lastName">นามสกุล</Label>
+          <Input id="lastName" placeholder="กรอกนามสกุล" {...register("lastName")} />
           {errors.lastName && (
             <p className="text-xs text-danger-foreground">{errors.lastName.message}</p>
           )}
@@ -112,19 +118,19 @@ function EmployeeFormFields({
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <Label htmlFor="role">Role</Label>
+        <Label htmlFor="role">ตำแหน่ง</Label>
         <Controller
           name="role"
           control={control}
           render={({ field }) => (
             <Select value={field.value} onValueChange={field.onChange}>
               <SelectTrigger id="role" className="w-full">
-                <SelectValue placeholder="Select a role" />
+                <SelectValue placeholder="เลือกตำแหน่ง" />
               </SelectTrigger>
               <SelectContent>
                 {directoryRoles.map((role) => (
-                  <SelectItem key={role} value={role} className="capitalize">
-                    {role}
+                  <SelectItem key={role} value={role}>
+                    {ROLE_LABEL_TH[role]}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -134,20 +140,20 @@ function EmployeeFormFields({
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <Label htmlFor="studentGen">Student gen (optional)</Label>
-        <Input id="studentGen" placeholder="e.g. 2026" {...register("studentGen")} />
+        <Label htmlFor="studentGen">รุ่นนักศึกษา (ถ้ามี)</Label>
+        <Input id="studentGen" placeholder="เช่น 7" {...register("studentGen")} />
       </div>
 
       <DialogFooter>
         <Button type="button" variant="outline" onClick={onCancel}>
-          Cancel
+          ยกเลิก
         </Button>
         <Button
           type="submit"
           disabled={isSubmitting}
           className="bg-accent-600 text-white hover:bg-accent-700"
         >
-          {isSubmitting ? "Saving…" : "Save"}
+          {isSubmitting ? "กำลังบันทึก..." : "บันทึก"}
         </Button>
       </DialogFooter>
     </form>
@@ -351,7 +357,7 @@ export default function EmployeesPage() {
                   </TableCell>
                   <TableCell className="capitalize">{employee.role}</TableCell>
                   <TableCell>{statusBadge(employee)}</TableCell>
-                  <TableCell>{employee.studentGen ?? "—"}</TableCell>
+                  <TableCell>{employee.studentGen ? `(${employee.studentGen})` : "—"}</TableCell>
                   <TableCell className="text-right">
                     {!employee.offboardedAt && (
                       <div className="flex justify-end gap-2" onClick={(e) => e.stopPropagation()}>
@@ -427,7 +433,7 @@ export default function EmployeesPage() {
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{editingEmployee ? "Edit employee" : "Add employee"}</DialogTitle>
+            <DialogTitle>{editingEmployee ? "แก้ไขข้อมูลพนักงาน" : "เพิ่มพนักงาน"}</DialogTitle>
           </DialogHeader>
           {formOpen && (
             <EmployeeFormFields

@@ -22,6 +22,8 @@ export type MockEmployee = {
   teamId: string;
   firstName: string;
   lastName: string;
+  // The student generation ordinal (e.g. "7"), not an admission year — see
+  // getYearOfStudy below for the year-of-study figure derived from it.
   studentGen: string | null;
   displayName: string;
   pictureUrl: string | null;
@@ -117,7 +119,7 @@ export const mockEmployees: MockEmployee[] = [
     teamId: mockTeam.id,
     firstName: "Nira",
     lastName: "Suwan",
-    studentGen: "2026",
+    studentGen: "7",
     displayName: "Nira S.",
     pictureUrl: null,
     offboardedAt: null,
@@ -134,7 +136,7 @@ export const mockEmployees: MockEmployee[] = [
     teamId: mockTeam.id,
     firstName: "Ploy",
     lastName: "Charoen",
-    studentGen: "2025",
+    studentGen: "6",
     displayName: "Ploy C.",
     pictureUrl: null,
     offboardedAt: null,
@@ -151,7 +153,7 @@ export const mockEmployees: MockEmployee[] = [
     teamId: mockTeam.id,
     firstName: "Kritsada",
     lastName: "Boon",
-    studentGen: "2026",
+    studentGen: "7",
     displayName: "Kritsada B.",
     pictureUrl: null,
     offboardedAt: null,
@@ -185,7 +187,7 @@ export const mockEmployees: MockEmployee[] = [
     teamId: mockTeam.id,
     firstName: "Somsak",
     lastName: "Intra",
-    studentGen: "2024",
+    studentGen: "5",
     displayName: "Somsak I.",
     pictureUrl: null,
     offboardedAt: "2026-06-30T00:00:00Z",
@@ -206,7 +208,7 @@ export const mockEmployees: MockEmployee[] = [
       teamId: mockTeam.id,
       firstName,
       lastName,
-      studentGen: String(2023 + (i % 4)),
+      studentGen: String(4 + (i % 4)),
       displayName: `${firstName} ${lastName[0]}.`,
       pictureUrl: null,
       offboardedAt: null,
@@ -266,11 +268,13 @@ export const mockLeaveRequests: MockLeaveRequest[] = [
   { id: "leave-4", employeeId: "user-3", leaveType: "ป่วย", startDate: "2026-06-02", endDate: "2026-06-03", reason: "Sick", status: "rejected", submittedAt: "2026-05-30T06:00:00Z", decidedBy: "user-4", decidedAt: "2026-06-01T03:00:00Z" },
 ];
 
-// "ชั้นปี" isn't stored directly — derive it from studentGen (the admission
-// year already used to compute the profile page's Gen ordinal).
+// "ชั้นปี" isn't stored directly — derive it from studentGen (the
+// generation ordinal, e.g. "7"), converting back to an admission year
+// first (gen 1 started 2020, matching the profile page's Gen ordinal).
 export function getYearOfStudy(studentGen: string | null): string {
-  const admissionYear = Number(studentGen);
-  if (!studentGen || Number.isNaN(admissionYear)) return "-";
+  const gen = Number(studentGen);
+  if (!studentGen || Number.isNaN(gen)) return "-";
+  const admissionYear = gen + 2019;
   return String(Math.max(1, new Date().getFullYear() - admissionYear + 1));
 }
 
