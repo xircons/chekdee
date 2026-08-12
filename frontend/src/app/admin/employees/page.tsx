@@ -55,15 +55,16 @@ import { useMe } from "@/lib/session";
 
 const directoryRoles: Role[] = ["employee", "supervisor", "admin"];
 const PAGE_SIZE = 20;
-// Matches the employee shell's pill-shaped, softly-filled field style
-// (rounded-full, muted fill, no stark border) so admin forms read as the
-// same design system instead of the plain shadcn defaults.
-const PILL_FIELD_CLASS =
-  "h-9 rounded-full border-border bg-muted/40 px-4 text-sm focus-visible:border-brand-600 focus-visible:bg-card focus-visible:ring-brand-600/20";
+// Matches the employee shell's actual field style — that's `rounded-xl`
+// (this project's 20px token) with a soft muted fill, not `rounded-full`;
+// the employee side barely uses true pill shapes outside of a couple of
+// standalone sheet buttons, so admin forms should read the same way.
+const FIELD_CLASS =
+  "h-9 rounded-xl border-border bg-muted/40 px-4 text-sm focus-visible:border-brand-600 focus-visible:bg-card focus-visible:ring-brand-600/20";
 // Shared with the icon-prefixed inputs (ชื่อ, นามสกุล, Directory search) so
 // their focus state reads as one design pass instead of the default gray ring.
-const ICON_INPUT_CLASS = `${PILL_FIELD_CLASS} pl-9`;
-const PILL_BUTTON_CLASS = "h-9 rounded-full px-5 text-sm";
+const ICON_INPUT_CLASS = `${FIELD_CLASS} pl-9`;
+const ACTION_BUTTON_CLASS = "h-9 rounded-xl px-5 text-sm";
 
 const employeeSchema = z.object({
   firstName: z.string().trim().min(1, "กรุณากรอกชื่อ"),
@@ -153,8 +154,10 @@ function EmployeeFormFields({
           control={control}
           render={({ field }) => (
             <Select value={field.value} onValueChange={field.onChange}>
-              <SelectTrigger id="role" className={`w-full ${PILL_FIELD_CLASS}`}>
-                <SelectValue placeholder="เลือกตำแหน่ง" />
+              <SelectTrigger id="role" className={`w-full ${FIELD_CLASS}`}>
+                <SelectValue placeholder="เลือกตำแหน่ง">
+                  {(value: string | null) => (value ? ROLE_LABEL_TH[value as Role] : "เลือกตำแหน่ง")}
+                </SelectValue>
               </SelectTrigger>
               {/* alignItemWithTrigger off: the default centers the selected
                   item over the trigger, which can push the list down far
@@ -174,17 +177,17 @@ function EmployeeFormFields({
 
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="studentGen">รุ่นนักศึกษา (ถ้ามี)</Label>
-        <Input id="studentGen" placeholder="เช่น 7" className={PILL_FIELD_CLASS} {...register("studentGen")} />
+        <Input id="studentGen" placeholder="เช่น 7" className={FIELD_CLASS} {...register("studentGen")} />
       </div>
 
       <DialogFooter>
-        <Button type="button" variant="outline" className={PILL_BUTTON_CLASS} onClick={onCancel}>
+        <Button type="button" variant="outline" className={ACTION_BUTTON_CLASS} onClick={onCancel}>
           ยกเลิก
         </Button>
         <Button
           type="submit"
           disabled={isSubmitting}
-          className={`${PILL_BUTTON_CLASS} bg-accent-600 text-white hover:bg-accent-700`}
+          className={`${ACTION_BUTTON_CLASS} bg-accent-600 text-white hover:bg-accent-700`}
         >
           {isSubmitting ? "กำลังบันทึก..." : "บันทึก"}
         </Button>
@@ -330,25 +333,29 @@ export default function EmployeesPage() {
         <CardHeader>
           <CardTitle>รายชื่อพนักงาน</CardTitle>
           <CardAction>
-            <Button className={`${PILL_BUTTON_CLASS} bg-accent-600 text-white hover:bg-accent-700`} onClick={openCreateForm}>
+            <Button className={`${ACTION_BUTTON_CLASS} bg-accent-600 text-white hover:bg-accent-700`} onClick={openCreateForm}>
               เพิ่มพนักงาน
             </Button>
           </CardAction>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <div className="flex flex-wrap items-center gap-2">
-            <div className="relative w-64">
+            <div className="relative min-w-48 flex-1">
               <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="ค้นหาจากชื่อ"
-                className={ICON_INPUT_CLASS}
+                className={`w-full ${ICON_INPUT_CLASS}`}
               />
             </div>
             <Select value={roleFilter} onValueChange={(v) => setRoleFilter(v as Role | "all")}>
-              <SelectTrigger className={`w-40 ${PILL_FIELD_CLASS}`}>
-                <SelectValue placeholder="ทั้งหมด" />
+              <SelectTrigger className={`w-48 ${FIELD_CLASS}`}>
+                <SelectValue placeholder="ทั้งหมด">
+                  {(value: string | null) =>
+                    !value || value === "all" ? "ทั้งหมด" : ROLE_LABEL_TH[value as Role]
+                  }
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">ทั้งหมด</SelectItem>
@@ -398,14 +405,14 @@ export default function EmployeesPage() {
                       <div className="flex justify-end gap-2" onClick={(e) => e.stopPropagation()}>
                         <Button
                           variant="outline"
-                          className={`${PILL_BUTTON_CLASS} border-slate-200 text-muted-foreground`}
+                          className={`${ACTION_BUTTON_CLASS} border-slate-200 text-muted-foreground`}
                           onClick={() => openEditForm(employee)}
                         >
                           แก้ไข
                         </Button>
                         <Button
                           variant="outline"
-                          className={`${PILL_BUTTON_CLASS} border-danger-foreground/30 text-danger-foreground hover:bg-danger hover:text-danger-foreground`}
+                          className={`${ACTION_BUTTON_CLASS} border-danger-foreground/30 text-danger-foreground hover:bg-danger hover:text-danger-foreground`}
                           onClick={() => setOffboardTarget(employee)}
                         >
                           พ้นสภาพ
@@ -438,7 +445,6 @@ export default function EmployeesPage() {
                   <Button
                     size="sm"
                     variant="outline"
-                    className="rounded-full"
                     disabled={currentPage === 1}
                     onClick={() => setPage(currentPage - 1)}
                   >
@@ -451,8 +457,8 @@ export default function EmployeesPage() {
                       variant={pageNumber === currentPage ? "default" : "outline"}
                       className={
                         pageNumber === currentPage
-                          ? "rounded-full bg-accent-600 text-white hover:bg-accent-700"
-                          : "rounded-full"
+                          ? "bg-accent-600 text-white hover:bg-accent-700"
+                          : undefined
                       }
                       onClick={() => setPage(pageNumber)}
                     >
@@ -462,7 +468,6 @@ export default function EmployeesPage() {
                   <Button
                     size="sm"
                     variant="outline"
-                    className="rounded-full"
                     disabled={currentPage === totalPages}
                     onClick={() => setPage(currentPage + 1)}
                   >
@@ -505,10 +510,10 @@ export default function EmployeesPage() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className={PILL_BUTTON_CLASS}>ยกเลิก</AlertDialogCancel>
+            <AlertDialogCancel className={ACTION_BUTTON_CLASS}>ยกเลิก</AlertDialogCancel>
             <AlertDialogAction
               variant="destructive"
-              className={PILL_BUTTON_CLASS}
+              className={ACTION_BUTTON_CLASS}
               onClick={confirmOffboard}
             >
               พ้นสภาพ
@@ -525,7 +530,7 @@ export default function EmployeesPage() {
         badgeText={detailEmployee ? ROLE_LABEL_TH[detailEmployee.role] : ""}
         badgeVariant="default"
         footer={
-          <Button variant="outline" className={`${PILL_BUTTON_CLASS} w-full`} onClick={() => setDetailOpen(false)}>
+          <Button variant="outline" className={`${ACTION_BUTTON_CLASS} w-full`} onClick={() => setDetailOpen(false)}>
             ปิด
           </Button>
         }
