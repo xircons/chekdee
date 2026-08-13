@@ -330,7 +330,7 @@ export default function SchedulesPage() {
 
       {tab === "individual" ? (
         <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-3">
-          <Card className="flex min-h-0 flex-col rounded-2xl border border-slate-200 py-0">
+          <Card className="flex min-h-0 flex-col rounded-2xl border border-slate-200 py-0 ring-0">
             <CardContent className="flex min-h-0 flex-1 flex-col gap-3 p-4">
               <div className="relative shrink-0">
                 <Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -395,7 +395,7 @@ export default function SchedulesPage() {
             </CardContent>
           </Card>
 
-          <Card className="flex min-h-0 flex-col rounded-2xl border border-slate-200 py-0 lg:col-span-2">
+          <Card className="flex min-h-0 flex-col rounded-2xl border border-slate-200 py-0 ring-0 lg:col-span-2">
             <CardContent className="flex min-h-0 flex-1 flex-col p-5">
               {selectedEmployee ? (
                 <ScheduleEditor
