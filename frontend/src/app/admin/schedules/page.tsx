@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { CheckCircle2, Circle, Copy, Search, Upload } from "lucide-react";
+import { CheckCircle2, Circle, Clock, Copy, Search, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -131,19 +131,25 @@ function ScheduleEditor({
             <p className="w-20 text-sm font-medium text-foreground">{label}</p>
             {days[i].working ? (
               <div className="flex items-center gap-2">
-                <Input
-                  value={days[i].startTime}
-                  onChange={(e) => updateDay(i, { startTime: e.target.value })}
-                  placeholder="09:00"
-                  className={cn(FIELD_CLASS, "w-24 text-center")}
-                />
+                <div className="relative w-32">
+                  <Input
+                    value={days[i].startTime}
+                    onChange={(e) => updateDay(i, { startTime: e.target.value })}
+                    placeholder="09:00"
+                    className={cn(FIELD_CLASS, "w-full pr-9 text-center")}
+                  />
+                  <Clock className="pointer-events-none absolute top-1/2 right-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                </div>
                 <span className="text-sm text-muted-foreground">ถึง</span>
-                <Input
-                  value={days[i].endTime}
-                  onChange={(e) => updateDay(i, { endTime: e.target.value })}
-                  placeholder="17:00"
-                  className={cn(FIELD_CLASS, "w-24 text-center")}
-                />
+                <div className="relative w-32">
+                  <Input
+                    value={days[i].endTime}
+                    onChange={(e) => updateDay(i, { endTime: e.target.value })}
+                    placeholder="17:00"
+                    className={cn(FIELD_CLASS, "w-full pr-9 text-center")}
+                  />
+                  <Clock className="pointer-events-none absolute top-1/2 right-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                </div>
               </div>
             ) : (
               <p className="text-sm text-muted-foreground">วันหยุด</p>
