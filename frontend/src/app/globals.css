@@ -71,6 +71,53 @@
   }
 }
 
+/*
+ * Admin dashboard bubble-pack animations. These use the standalone `scale`
+ * and `translate` CSS properties (not the `transform` shorthand) so a
+ * bubble can run its one-shot pop-in, its continuous idle bob, and (for
+ * whichever bubble is newest) a highlight pulse all at once via a single
+ * combined `animation` value, without the animations fighting over the
+ * same property — see admin-bubble-chart.tsx for how they're composed.
+ */
+@keyframes bubble-pop {
+  0% {
+    scale: 0;
+  }
+  70% {
+    scale: 1.12;
+  }
+  100% {
+    scale: 1;
+  }
+}
+
+@keyframes bubble-bob {
+  0%,
+  100% {
+    translate: 0 0;
+  }
+  33% {
+    translate: 1.5px -2.5px;
+  }
+  66% {
+    translate: -1.5px -1px;
+  }
+}
+
+/* Flat highlight for the most-recently-added bubble — a plain outline
+   pulse, no blur/shadow. */
+@keyframes bubble-highlight {
+  0%,
+  100% {
+    outline-width: 2px;
+    outline-color: rgb(255 255 255 / 0.85);
+  }
+  50% {
+    outline-width: 4px;
+    outline-color: rgb(255 255 255 / 0.35);
+  }
+}
+
 /* Light mode only — see design.md. No .dark theme is defined. */
 :root {
   --background: #f8fafc;

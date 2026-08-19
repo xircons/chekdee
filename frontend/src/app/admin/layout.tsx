@@ -26,9 +26,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   return (
     <MeContext.Provider value={me}>
-      <div className="flex min-h-full flex-1">
+      {/* Pinned to exactly one viewport tall so the page itself never scrolls
+          — `flex-none` matters here, same flexbox quirk as the employee shell:
+          `flex-1`'s `flex-basis:0%` would otherwise pre-empt `h-screen`. Only
+          the content column scrolls internally, with its scrollbar hidden. */}
+      <div className="flex h-screen flex-none overflow-hidden">
         <AdminSidebar />
-        <div className="flex-1 overflow-x-auto">{children}</div>
+        <div className="min-h-0 flex-1 overflow-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {children}
+        </div>
       </div>
     </MeContext.Provider>
   );

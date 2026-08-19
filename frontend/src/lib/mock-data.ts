@@ -22,6 +22,8 @@ export type MockEmployee = {
   teamId: string;
   firstName: string;
   lastName: string;
+  // The student generation ordinal (e.g. "7"), not an admission year — see
+  // getYearOfStudy below for the year-of-study figure derived from it.
   studentGen: string | null;
   displayName: string;
   pictureUrl: string | null;
@@ -75,11 +77,39 @@ export type MockLeaveRequest = {
   endDate: string;
   reason: string | null;
   status: LeaveStatus;
+  submittedAt: string;
   decidedBy: string | null;
   decidedAt: string | null;
 };
 
 export const mockTeam = { id: "team-1", name: "CAMT Front Desk" };
+
+// [firstName, lastName] pairs appended to the 5 fixture employees below to
+// reach a realistic team size for testing the admin dashboard's roster
+// list and the employees table's pagination. Change the length of this
+// list to grow/shrink the mock team.
+const EXTRA_ROSTER_NAMES: [string, string][] = [
+  ["Chatchai", "Boonmee"],
+  ["Suda", "Panyawong"],
+  ["Anan", "Ratanakul"],
+  ["Wipada", "Srisawat"],
+  ["Somchai", "Thongdee"],
+  ["Napaporn", "Chaiyasit"],
+  ["Kittipong", "Uraiwan"],
+  ["Ratree", "Phromma"],
+  ["Decha", "Wongsa"],
+  ["Malee", "Sukjai"],
+  ["Prasert", "Kamnoon"],
+  ["Siriporn", "Tangsiri"],
+  ["Boonrod", "Yodkhun"],
+  ["Kanya", "Intharak"],
+  ["Anucha", "Sombat"],
+  ["Ladda", "Wanchai"],
+  ["Sombat", "Chaisiri"],
+  ["Piyada", "Rungrueang"],
+  ["Thawatchai", "Meesuk"],
+  ["Orawan", "Phetsuwan"],
+];
 
 export const mockEmployees: MockEmployee[] = [
   {
@@ -89,7 +119,7 @@ export const mockEmployees: MockEmployee[] = [
     teamId: mockTeam.id,
     firstName: "Nira",
     lastName: "Suwan",
-    studentGen: "2026",
+    studentGen: "7",
     displayName: "Nira S.",
     pictureUrl: null,
     offboardedAt: null,
@@ -106,7 +136,7 @@ export const mockEmployees: MockEmployee[] = [
     teamId: mockTeam.id,
     firstName: "Ploy",
     lastName: "Charoen",
-    studentGen: "2025",
+    studentGen: "6",
     displayName: "Ploy C.",
     pictureUrl: null,
     offboardedAt: null,
@@ -123,7 +153,7 @@ export const mockEmployees: MockEmployee[] = [
     teamId: mockTeam.id,
     firstName: "Kritsada",
     lastName: "Boon",
-    studentGen: "2026",
+    studentGen: "7",
     displayName: "Kritsada B.",
     pictureUrl: null,
     offboardedAt: null,
@@ -157,7 +187,7 @@ export const mockEmployees: MockEmployee[] = [
     teamId: mockTeam.id,
     firstName: "Somsak",
     lastName: "Intra",
-    studentGen: "2024",
+    studentGen: "5",
     displayName: "Somsak I.",
     pictureUrl: null,
     offboardedAt: "2026-06-30T00:00:00Z",
@@ -167,17 +197,52 @@ export const mockEmployees: MockEmployee[] = [
     studentId: "642110198",
     phoneNumber: "085-678-9012",
   },
+  // Extra roster for testing the admin dashboard's "today's roster" list at
+  // a realistic team size — adjust EXTRA_ROSTER_NAMES.length to grow/shrink
+  // the mock team without touching anything else.
+  ...EXTRA_ROSTER_NAMES.map(
+    ([firstName, lastName], i): MockEmployee => ({
+      id: `user-${6 + i}`,
+      role: "employee",
+      status: "active",
+      teamId: mockTeam.id,
+      firstName,
+      lastName,
+      studentGen: String(4 + (i % 4)),
+      displayName: `${firstName} ${lastName[0]}.`,
+      pictureUrl: null,
+      offboardedAt: null,
+      offboardedBy: null,
+      offboardedReason: null,
+      nickname: firstName,
+      studentId: String(660000000 + i * 137),
+      phoneNumber: null,
+    })
+  ),
 ];
 
-export const mockWorkSchedules: MockWorkSchedule[] = [1, 2, 3, 4, 5].map((day) => ({
-  id: `sched-${day}`,
-  employeeId: "user-1",
-  dayOfWeek: day,
-  startTime: "09:00",
-  endTime: "17:00",
-  effectiveFrom: "2026-06-01",
-  effectiveTo: null,
-}));
+// Rough shift-start spread so a Monday-Friday roster sorts into a
+// realistic staggered list rather than everyone at the same time.
+const SHIFT_START_TIMES = ["08:00", "08:30", "09:00", "09:30", "10:00"];
+
+export const mockWorkSchedules: MockWorkSchedule[] = mockEmployees
+  .filter((e) => e.status === "active" && e.offboardedAt === null)
+  .flatMap((employee, employeeIndex) =>
+    [1, 2, 3, 4, 5].map((day) => {
+      const startTime = SHIFT_START_TIMES[employeeIndex % SHIFT_START_TIMES.length];
+      const [h, m] = startTime.split(":").map(Number);
+      const endTime = `${String((h + 8) % 24).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+      return {
+        id: `sched-${employee.id}-${day}`,
+        employeeId: employee.id,
+        dayOfWeek: day,
+        startTime,
+        endTime,
+        effectiveFrom: "2026-06-01",
+        effectiveTo: null,
+      };
+    })
+  );
 
 export const mockHolidays: MockHoliday[] = [
   { id: "hol-1", date: "2026-08-12", name: "Mother's Day", localName: "วันแม่แห่งชาติ", source: "nager_date" },
@@ -197,23 +262,31 @@ export const mockAttendanceRecords: MockAttendanceRecord[] = [
 ];
 
 export const mockLeaveRequests: MockLeaveRequest[] = [
-  { id: "leave-1", employeeId: "user-1", leaveType: "กิจส่วนตัว", startDate: "2026-08-20", endDate: "2026-08-21", reason: "Family event", status: "pending", decidedBy: null, decidedAt: null },
-  { id: "leave-2", employeeId: "user-1", leaveType: "ป่วย", startDate: "2026-07-14", endDate: "2026-07-14", reason: "Doctor's appointment", status: "approved", decidedBy: "user-4", decidedAt: "2026-07-10T03:00:00Z" },
-  { id: "leave-3", employeeId: "user-2", leaveType: "กิจส่วนตัว", startDate: "2026-08-15", endDate: "2026-08-16", reason: "Personal", status: "pending", decidedBy: null, decidedAt: null },
-  { id: "leave-4", employeeId: "user-3", leaveType: "ป่วย", startDate: "2026-06-02", endDate: "2026-06-03", reason: "Sick", status: "rejected", decidedBy: "user-4", decidedAt: "2026-06-01T03:00:00Z" },
+  { id: "leave-1", employeeId: "user-1", leaveType: "กิจส่วนตัว", startDate: "2026-08-20", endDate: "2026-08-21", reason: "Family event", status: "pending", submittedAt: "2026-08-10T02:30:00Z", decidedBy: null, decidedAt: null },
+  { id: "leave-2", employeeId: "user-1", leaveType: "ป่วย", startDate: "2026-07-14", endDate: "2026-07-14", reason: "Doctor's appointment", status: "approved", submittedAt: "2026-07-09T04:00:00Z", decidedBy: "user-4", decidedAt: "2026-07-10T03:00:00Z" },
+  { id: "leave-3", employeeId: "user-2", leaveType: "กิจส่วนตัว", startDate: "2026-08-15", endDate: "2026-08-16", reason: "Personal", status: "pending", submittedAt: "2026-08-09T07:15:00Z", decidedBy: null, decidedAt: null },
+  { id: "leave-4", employeeId: "user-3", leaveType: "ป่วย", startDate: "2026-06-02", endDate: "2026-06-03", reason: "Sick", status: "rejected", submittedAt: "2026-05-30T06:00:00Z", decidedBy: "user-4", decidedAt: "2026-06-01T03:00:00Z" },
 ];
 
-// "ชั้นปี" isn't stored directly — derive it from studentGen (the admission
-// year already used to compute the profile page's Gen ordinal).
+// "ชั้นปี" isn't stored directly — derive it from studentGen (the
+// generation ordinal, e.g. "7"), converting back to an admission year
+// first (gen 1 started 2020, matching the profile page's Gen ordinal).
 export function getYearOfStudy(studentGen: string | null): string {
-  const admissionYear = Number(studentGen);
-  if (!studentGen || Number.isNaN(admissionYear)) return "-";
+  const gen = Number(studentGen);
+  if (!studentGen || Number.isNaN(gen)) return "-";
+  const admissionYear = gen + 2019;
   return String(Math.max(1, new Date().getFullYear() - admissionYear + 1));
 }
 
 // Placeholder policy — the real annual entitlement lives in the backend
 // once leave accrual is implemented (Phase 4).
 export const ANNUAL_LEAVE_DAYS = 10;
+
+// Placeholder org-wide metric for the admin dashboard's on-time ring stat.
+// The fixture attendance records above are too sparse to aggregate a
+// believable month-to-date figure from — this will come from a real
+// summary endpoint once attendance_records has full-month data (Phase 4).
+export const MOCK_MONTHLY_ON_TIME = { percent: 94, totalCheckIns: 120 };
 
 export function getWorkScheduleForEmployee(employeeId: string): MockWorkSchedule[] {
   return mockWorkSchedules

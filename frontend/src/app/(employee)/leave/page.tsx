@@ -183,6 +183,7 @@ export default function LeavePage() {
       endDate: values.end_date,
       reason: values.reason,
       status: "pending",
+      submittedAt: new Date().toISOString(),
       decidedBy: null,
       decidedAt: null,
     };
