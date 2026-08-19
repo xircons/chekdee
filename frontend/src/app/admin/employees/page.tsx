@@ -7,6 +7,7 @@ import { ChevronLeft, ChevronRight, IdCard, Phone, Search, User, Users } from "l
 import { z } from "zod";
 
 import { AdminDetailDialog, AdminDetailInfoBlock } from "@/components/admin-detail-dialog";
+import { EmployeeAttendanceHeatmap } from "@/components/employee-attendance-heatmap";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -580,6 +581,13 @@ export default function EmployeesPage() {
                 <AdminDetailInfoBlock label="ขาด" value={String(monthStats.absentCount)} valueSize="sm" />
               </div>
             )}
+
+            <div className="flex flex-col gap-2 rounded-xl border border-border p-3">
+              <p className="text-xs font-semibold text-muted-foreground">
+                ปฏิทินการเข้างาน (เดือนนี้)
+              </p>
+              <EmployeeAttendanceHeatmap employeeId={detailEmployee.id} />
+            </div>
           </div>
         )}
       </AdminDetailDialog>

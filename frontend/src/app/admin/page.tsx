@@ -426,13 +426,10 @@ export default function AdminDashboard() {
         </CardContent>
       </Card>
 
-      {/* Disabled until /admin/reports exists (separate branch) — re-enable
-          with a small follow-up commit once that branch merges rather than
-          shipping a link to a page that 404s. */}
-      <Card className="rounded-2xl border border-slate-200 ring-0 opacity-60">
+      <Card className="rounded-2xl border border-slate-200 ring-0">
         <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
           <div className="flex items-center gap-3">
-            <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+            <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-brand-100 text-brand-600">
               <FileBarChart2 className="size-5" />
             </div>
             <div>
@@ -440,15 +437,9 @@ export default function AdminDashboard() {
               <p className="text-xs text-muted-foreground">สรุปและส่งออกข้อมูลการเข้างานรายเดือน</p>
             </div>
           </div>
-          <span
-            className={cn(
-              buttonVariants({ variant: "outline" }),
-              ACTION_BUTTON_CLASS,
-              "cursor-not-allowed border-slate-200 text-muted-foreground"
-            )}
-          >
-            เร็ว ๆ นี้
-          </span>
+          <Link href="/admin/reports" className={cn(buttonVariants({ variant: "outline" }), ACTION_BUTTON_CLASS)}>
+            ดูรายงาน
+          </Link>
         </CardContent>
       </Card>
 
