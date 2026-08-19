@@ -29,7 +29,10 @@ type CalendarDay = {
   hours: { start: string; end: string } | null;
 };
 
-function toIsoDate(date: Date): string {
+// Exported for the employee attendance heatmap (admin-detail-dialog), which
+// reuses this same Sunday-first month-grid layout instead of building its
+// own.
+export function toIsoDate(date: Date): string {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");
@@ -38,7 +41,7 @@ function toIsoDate(date: Date): string {
 
 // Sunday-first month grid, padded with the leading/trailing days needed to
 // fill whole weeks (so the grid is always a clean 7-column table).
-function buildMonthGrid(year: number, monthIndex0: number): Date[][] {
+export function buildMonthGrid(year: number, monthIndex0: number): Date[][] {
   const firstOfMonth = new Date(year, monthIndex0, 1);
   const leadingDays = firstOfMonth.getDay(); // Sun=0 ... Sat=6
   const daysInMonth = new Date(year, monthIndex0 + 1, 0).getDate();
