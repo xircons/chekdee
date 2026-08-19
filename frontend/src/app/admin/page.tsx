@@ -7,6 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { FileBarChart2 } from "lucide-react";
 import { z } from "zod";
 
+import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -45,6 +46,7 @@ const ACTION_BUTTON_CLASS = "h-9 rounded-lg px-5 text-sm focus-visible:ring-bran
 const FIELD_CLASS =
   "h-9 rounded-lg border-border bg-muted/40 px-4 text-sm focus-visible:border-brand-600 focus-visible:bg-card focus-visible:ring-brand-600/20";
 const PREVIEW_LIMIT = 4;
+const RECENT_CHECKIN_LIMIT = 6;
 
 const STATUS_LABEL_TH: Record<AttendanceStatus, string> = {
   present: "มาปกติ",
@@ -65,6 +67,14 @@ function employeeName(employee: MockEmployee): string {
 
 function initials(employee: MockEmployee): string {
   return `${employee.firstName[0] ?? ""}${employee.lastName[0] ?? ""}`.toUpperCase();
+}
+
+function relativeTimeTh(from: Date, now: Date): string {
+  const minutes = Math.max(0, Math.round((now.getTime() - from.getTime()) / 60_000));
+  if (minutes < 1) return "เมื่อสักครู่";
+  if (minutes < 60) return `${minutes} นาทีที่แล้ว`;
+  const hours = Math.round(minutes / 60);
+  return `${hours} ชั่วโมงที่แล้ว`;
 }
 
 const correctionSchema = z.object({
@@ -144,6 +154,82 @@ function CorrectionFormFields({
   );
 }
 
+type AttendanceIssue = {
+  entry: SimulatedRosterEntry;
+  status: "ขาด" | "สาย";
+};
+
+const ISSUE_AVATAR_CLASS: Record<AttendanceIssue["status"], string> = {
+  ขาด: "bg-danger text-danger-foreground",
+  สาย: "bg-warning text-warning-foreground",
+};
+
+const ISSUE_BADGE_VARIANT: Record<AttendanceIssue["status"], "danger" | "warning"> = {
+  ขาด: "danger",
+  สาย: "warning",
+};
+
+// One priority-ordered list (ขาด first, then สาย — same-day attendance
+// problems, ranked by urgency) instead of two separate cards, so scanning
+// top to bottom already reflects what needs attention first.
+function AttendanceIssuesCard({
+  issues,
+  onCorrect,
+}: {
+  issues: AttendanceIssue[];
+  onCorrect: (entry: SimulatedRosterEntry) => void;
+}) {
+  return (
+    <Card className="rounded-2xl border border-slate-200 ring-0">
+      <CardHeader>
+        <CardTitle>ปัญหาการเข้างานวันนี้</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        {issues.length === 0 ? (
+          <p className="text-sm text-muted-foreground">วันนี้ยังไม่มีปัญหาการเข้างาน</p>
+        ) : (
+          issues.slice(0, PREVIEW_LIMIT).map(({ entry, status }) => (
+            <div
+              key={entry.employee.id}
+              className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border p-3"
+            >
+              <div className="flex min-w-0 items-center gap-3">
+                <div
+                  className={cn(
+                    "flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
+                    ISSUE_AVATAR_CLASS[status]
+                  )}
+                >
+                  {initials(entry.employee)}
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="truncate text-sm font-medium text-foreground">
+                      {employeeName(entry.employee)}
+                    </p>
+                    <Badge variant={ISSUE_BADGE_VARIANT[status]}>{STATUS_LABEL_TH[status]}</Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    นัดเข้างาน{" "}
+                    {entry.scheduledStart.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })}
+                  </p>
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                className={`${ACTION_BUTTON_CLASS} shrink-0 border-slate-200 text-muted-foreground`}
+                onClick={() => onCorrect(entry)}
+              >
+                แก้ไขสถานะ
+              </Button>
+            </div>
+          ))
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function AdminDashboard() {
   const me = useMe();
   const now = useMemo(() => new Date(), []);
@@ -168,6 +254,18 @@ export default function AdminDashboard() {
   const absentToday = roster.filter(
     (r) => !onLeaveIds.has(r.employee.id) && effectiveStatus(r.employee.id, r.status) === "ขาด"
   );
+  const lateToday = roster.filter(
+    (r) => !onLeaveIds.has(r.employee.id) && effectiveStatus(r.employee.id, r.status) === "สาย"
+  );
+  const attendanceIssues: AttendanceIssue[] = [
+    ...absentToday.map((entry) => ({ entry, status: "ขาด" as const })),
+    ...lateToday.map((entry) => ({ entry, status: "สาย" as const })),
+  ];
+
+  const recentCheckins = roster
+    .filter((r): r is SimulatedRosterEntry & { checkInAt: Date } => r.checkInAt !== null)
+    .sort((a, b) => b.checkInAt.getTime() - a.checkInAt.getTime())
+    .slice(0, RECENT_CHECKIN_LIMIT);
 
   const pendingRequests = getPendingLeaveRequests().filter((r) =>
     requests.some((live) => live.id === r.id && live.status === "pending")
@@ -225,6 +323,8 @@ export default function AdminDashboard() {
       </header>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <AttendanceIssuesCard issues={attendanceIssues} onCorrect={setCorrectionTarget} />
+
         <Card className="rounded-2xl border border-slate-200 ring-0">
           <CardHeader>
             <CardTitle>คำขอลารออนุมัติ</CardTitle>
@@ -280,47 +380,37 @@ export default function AdminDashboard() {
             )}
           </CardContent>
         </Card>
+      </div>
 
-        <Card className="rounded-2xl border border-slate-200 ring-0">
-          <CardHeader>
-            <CardTitle>ขาดวันนี้</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-3">
-            {absentToday.length === 0 ? (
-              <p className="text-sm text-muted-foreground">วันนี้ยังไม่มีพนักงานขาดงาน</p>
-            ) : (
-              absentToday.slice(0, PREVIEW_LIMIT).map((entry) => (
+      <Card className="rounded-2xl border border-slate-200 ring-0">
+        <CardHeader>
+          <CardTitle>เช็คอินล่าสุด</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-1.5">
+          {recentCheckins.length > 0 ? (
+            <div className="flex max-h-72 flex-col gap-1.5 overflow-y-auto">
+              {recentCheckins.map((entry, index) => (
                 <div
                   key={entry.employee.id}
-                  className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border p-3"
+                  className={cn("flex items-center gap-3 rounded-xl px-3 py-2", index === 0 && "bg-brand-100")}
                 >
-                  <div className="flex min-w-0 items-center gap-3">
-                    <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-danger text-xs font-semibold text-danger-foreground">
-                      {initials(entry.employee)}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-foreground">
-                        {employeeName(entry.employee)}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        นัดเข้างาน{" "}
-                        {entry.scheduledStart.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })}
-                      </p>
-                    </div>
+                  <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-success text-xs font-semibold text-success-foreground">
+                    {initials(entry.employee)}
                   </div>
-                  <Button
-                    variant="outline"
-                    className={`${ACTION_BUTTON_CLASS} shrink-0 border-slate-200 text-muted-foreground`}
-                    onClick={() => setCorrectionTarget(entry)}
-                  >
-                    แก้ไขสถานะ
-                  </Button>
+                  <p className="flex-1 truncate text-sm font-medium text-foreground">
+                    {employeeName(entry.employee)}
+                  </p>
+                  <p className="shrink-0 text-xs text-muted-foreground">
+                    {relativeTimeTh(entry.checkInAt, now)}
+                  </p>
                 </div>
-              ))
-            )}
-          </CardContent>
-        </Card>
-      </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">ยังไม่มีการเช็คอินวันนี้</p>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Disabled until /admin/reports exists (separate branch) — re-enable
           with a small follow-up commit once that branch merges rather than
