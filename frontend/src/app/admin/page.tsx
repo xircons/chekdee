@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -230,14 +230,28 @@ function AttendanceIssuesCard({
   );
 }
 
+// This is an admin working page, not an unattended display (contrast the
+// kiosk view's 1s tick) — sub-minute freshness isn't needed, so 60s keeps
+// the roster reasonably current without re-rendering the page constantly.
+const CLOCK_TICK_MS = 60_000;
+
 export default function AdminDashboard() {
   const me = useMe();
-  const now = useMemo(() => new Date(), []);
+  const [now, setNow] = useState<Date>(() => new Date());
   const todayIso = toIsoDateLocal(now);
 
   const [requests, setRequests] = useState<MockLeaveRequest[]>(mockLeaveRequests);
   const [corrections, setCorrections] = useState<MockAttendanceCorrection[]>([]);
   const [correctionTarget, setCorrectionTarget] = useState<SimulatedRosterEntry | null>(null);
+
+  // Paused while the correction dialog is open, so a row's status/scheduled
+  // time can't shift (or the entry vanish out of the list entirely) out
+  // from under the admin mid-correction. Resumes once it closes.
+  useEffect(() => {
+    if (correctionTarget) return;
+    const timer = setInterval(() => setNow(new Date()), CLOCK_TICK_MS);
+    return () => clearInterval(timer);
+  }, [correctionTarget]);
 
   const employees = useMemo(() => getActiveEmployees(), []);
   const roster = useMemo(() => getSimulatedRoster(employees, mockWorkSchedules, now), [employees, now]);
