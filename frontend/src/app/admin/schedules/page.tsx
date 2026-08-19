@@ -417,7 +417,7 @@ export default function SchedulesPage() {
           </Card>
         </div>
       ) : (
-        <Card className="shrink-0 rounded-2xl border border-slate-200">
+        <Card className="shrink-0 rounded-2xl border border-slate-200 ring-0">
           <CardContent className="flex flex-col gap-4 p-5">
             <div className="flex flex-col gap-1.5 text-sm text-muted-foreground">
               <p>
