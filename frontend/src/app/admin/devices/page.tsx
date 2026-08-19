@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Check, Copy, Trash2 } from "lucide-react";
+import { Check, Copy, RefreshCw, Trash2 } from "lucide-react";
 import { z } from "zod";
 
 import {
@@ -114,8 +114,9 @@ function DeviceFormFields({
 export default function DevicesPage() {
   const [devices, setDevices] = useState<MockKioskDevice[]>(mockKioskDevices);
   const [formOpen, setFormOpen] = useState(false);
-  const [createdDevice, setCreatedDevice] = useState<MockKioskDevice | null>(null);
+  const [revealDevice, setRevealDevice] = useState<MockKioskDevice | null>(null);
   const [revokeTarget, setRevokeTarget] = useState<MockKioskDevice | null>(null);
+  const [rotateTarget, setRotateTarget] = useState<MockKioskDevice | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const copyLink = (device: MockKioskDevice) => {
@@ -135,7 +136,7 @@ export default function DevicesPage() {
     };
     setDevices((prev) => [newDevice, ...prev]);
     setFormOpen(false);
-    setCreatedDevice(newDevice);
+    setRevealDevice(newDevice);
   };
 
   const confirmRevoke = () => {
@@ -144,6 +145,17 @@ export default function DevicesPage() {
       prev.map((d) => (d.id === revokeTarget.id ? { ...d, revokedAt: new Date().toISOString() } : d))
     );
     setRevokeTarget(null);
+  };
+
+  // Invalidates the current token and issues a new one — name/location/
+  // createdAt are untouched, only tokenHash changes. Cheaper than
+  // revoke-and-recreate for a leaked-token scenario.
+  const confirmRotate = () => {
+    if (!rotateTarget) return;
+    const rotated: MockKioskDevice = { ...rotateTarget, tokenHash: crypto.randomUUID().replace(/-/g, "") };
+    setDevices((prev) => prev.map((d) => (d.id === rotateTarget.id ? rotated : d)));
+    setRotateTarget(null);
+    setRevealDevice(rotated);
   };
 
   return (
@@ -169,12 +181,12 @@ export default function DevicesPage() {
           <Table className="table-fixed">
             <TableHeader>
               <TableRow>
-                <TableHead className="w-[20%]">ชื่ออุปกรณ์</TableHead>
-                <TableHead className="w-[20%]">สถานที่</TableHead>
-                <TableHead className="w-[20%]">ลิงก์อุปกรณ์</TableHead>
-                <TableHead className="w-[15%]">สร้างเมื่อ</TableHead>
+                <TableHead className="w-[19%]">ชื่ออุปกรณ์</TableHead>
+                <TableHead className="w-[18%]">สถานที่</TableHead>
+                <TableHead className="w-[19%]">ลิงก์อุปกรณ์</TableHead>
+                <TableHead className="w-[14%]">สร้างเมื่อ</TableHead>
                 <TableHead className="w-[12%]">สถานะ</TableHead>
-                <TableHead className="w-[13%] text-center">จัดการ</TableHead>
+                <TableHead className="w-[18%] text-center">จัดการ</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -217,15 +229,26 @@ export default function DevicesPage() {
                     {device.revokedAt ? (
                       <span className="text-muted-foreground">—</span>
                     ) : (
-                      <Button
-                        size="icon-sm"
-                        variant="ghost"
-                        aria-label="เพิกถอน"
-                        className="text-muted-foreground hover:bg-danger hover:text-danger-foreground"
-                        onClick={() => setRevokeTarget(device)}
-                      >
-                        <Trash2 />
-                      </Button>
+                      <div className="flex justify-center gap-1">
+                        <Button
+                          size="icon-sm"
+                          variant="ghost"
+                          aria-label="หมุนคีย์"
+                          className="text-muted-foreground hover:bg-warning hover:text-warning-foreground"
+                          onClick={() => setRotateTarget(device)}
+                        >
+                          <RefreshCw />
+                        </Button>
+                        <Button
+                          size="icon-sm"
+                          variant="ghost"
+                          aria-label="เพิกถอน"
+                          className="text-muted-foreground hover:bg-danger hover:text-danger-foreground"
+                          onClick={() => setRevokeTarget(device)}
+                        >
+                          <Trash2 />
+                        </Button>
+                      </div>
                     )}
                   </TableCell>
                 </TableRow>
@@ -244,37 +267,45 @@ export default function DevicesPage() {
         </DialogContent>
       </Dialog>
 
-      {/* One-time reveal — the token is never rendered in full again after
-          this closes, matching how API keys are typically shown once. */}
-      <Dialog open={!!createdDevice} onOpenChange={(open) => !open && setCreatedDevice(null)}>
+      {/* One-time reveal — used for both a fresh device and a rotated key.
+          The token is never rendered in full again after this closes,
+          matching how API keys are typically shown once. Full URL wraps
+          across lines instead of truncating — it has to stay fully
+          visible, not just copyable blind. */}
+      <Dialog open={!!revealDevice} onOpenChange={(open) => !open && setRevealDevice(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>สร้างอุปกรณ์ &quot;{createdDevice?.name}&quot; แล้ว</DialogTitle>
+            <DialogTitle>ลิงก์อุปกรณ์ &quot;{revealDevice?.name}&quot;</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
             คัดลอกลิงก์นี้ไปเปิดที่จอทีวี — ระบบจะไม่แสดงลิงก์แบบเต็มอีกหลังจากปิดหน้าต่างนี้
           </p>
-          <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2">
-            <code className="flex-1 truncate text-xs text-foreground">
-              {createdDevice ? buildKioskUrl(createdDevice.tokenHash) : ""}
+          <div className="flex flex-col gap-2 rounded-lg border border-border bg-muted/40 p-3">
+            <code className="font-mono text-xs break-all text-foreground">
+              {revealDevice ? buildKioskUrl(revealDevice.tokenHash) : ""}
             </code>
             <Button
-              size="icon-sm"
-              variant="ghost"
-              aria-label="คัดลอกลิงก์"
-              onClick={() => createdDevice && copyLink(createdDevice)}
+              variant="outline"
+              className={cn(ACTION_BUTTON_CLASS, "w-fit border-slate-200")}
+              onClick={() => revealDevice && copyLink(revealDevice)}
             >
-              {createdDevice && copiedId === createdDevice.id ? (
-                <Check className="text-success-foreground" />
+              {revealDevice && copiedId === revealDevice.id ? (
+                <>
+                  <Check className="text-success-foreground" />
+                  คัดลอกแล้ว
+                </>
               ) : (
-                <Copy />
+                <>
+                  <Copy />
+                  คัดลอกลิงก์
+                </>
               )}
             </Button>
           </div>
           <DialogFooter>
             <Button
               className={cn(ACTION_BUTTON_CLASS, "bg-accent-600 text-white hover:bg-accent-700")}
-              onClick={() => setCreatedDevice(null)}
+              onClick={() => setRevealDevice(null)}
             >
               เสร็จสิ้น
             </Button>
@@ -294,6 +325,24 @@ export default function DevicesPage() {
             <AlertDialogCancel>ยกเลิก</AlertDialogCancel>
             <AlertDialogAction variant="destructive" onClick={confirmRevoke}>
               เพิกถอน
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!rotateTarget} onOpenChange={(open) => !open && setRotateTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>หมุนคีย์อุปกรณ์ {rotateTarget?.name}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              ลิงก์เดิมจะใช้งานไม่ได้ทันทีและไม่สามารถย้อนกลับได้ — จอทีวีที่เปิดลิงก์เดิมค้างอยู่จะหลุดจากระบบ
+              ต้องเปิดลิงก์ใหม่แทน ชื่อและสถานที่ของอุปกรณ์จะไม่เปลี่ยนแปลง
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>ยกเลิก</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={confirmRotate}>
+              หมุนคีย์
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
