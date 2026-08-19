@@ -8,6 +8,7 @@ import {
   FileBarChart2,
   LayoutDashboard,
   LogOut,
+  MonitorSmartphone,
   PartyPopper,
   Users,
 } from "lucide-react";
@@ -24,6 +25,7 @@ const links = [
   { href: "/admin/schedules", label: "ตารางงาน", icon: CalendarClock },
   { href: "/admin/holidays", label: "วันหยุด", icon: PartyPopper },
   { href: "/admin/leave-requests", label: "คำขอลา", icon: ClipboardList },
+  { href: "/admin/devices", label: "อุปกรณ์", icon: MonitorSmartphone },
   { href: "/admin/reports", label: "รายงาน", icon: FileBarChart2 },
 ];
 
