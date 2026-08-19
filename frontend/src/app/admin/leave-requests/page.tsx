@@ -4,7 +4,6 @@ import { useState } from "react";
 import { CalendarRange, Check, X } from "lucide-react";
 
 import { AdminDetailDialog, AdminDetailInfoBlock } from "@/components/admin-detail-dialog";
-import { AdminPageHeader } from "@/components/admin-page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,11 +18,18 @@ import {
 import { buildLeaveRequestEmail } from "@/lib/leave-email";
 import { mockEmployees, mockLeaveRequests, type LeaveStatus, type MockLeaveRequest } from "@/lib/mock-data";
 import { useMe } from "@/lib/session";
+import { cn, formatThaiDate, formatThaiDateRange } from "@/lib/utils";
 
 const statusBadgeVariant: Record<LeaveStatus, "warning" | "success" | "danger"> = {
   pending: "warning",
   approved: "success",
   rejected: "danger",
+};
+
+const statusLabelTh: Record<LeaveStatus, string> = {
+  pending: "รอดำเนินการ",
+  approved: "อนุมัติแล้ว",
+  rejected: "ปฏิเสธแล้ว",
 };
 
 function findEmployee(employeeId: string) {
@@ -35,14 +41,81 @@ function employeeName(employeeId: string): string {
   return employee ? `${employee.firstName} ${employee.lastName}` : employeeId;
 }
 
-function formatDateRange(startDate: string, endDate: string): string {
-  const format = (d: string) =>
-    new Date(`${d}T00:00:00Z`).toLocaleDateString([], { month: "short", day: "numeric" });
-  return startDate === endDate ? format(startDate) : `${format(startDate)} - ${format(endDate)}`;
-}
-
-function formatSubmitted(iso: string): string {
-  return new Date(iso).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
+function LeaveRequestTable({
+  requests,
+  showActions,
+  onRowClick,
+  onDecide,
+}: {
+  requests: MockLeaveRequest[];
+  showActions: boolean;
+  onRowClick: (request: MockLeaveRequest) => void;
+  onDecide: (id: string, status: "approved" | "rejected") => void;
+}) {
+  // table-fixed + matching widths on every column, so the รอดำเนินการ and
+  // ดำเนินการแล้ว tables (two separate <table> elements) line up column-for-
+  // column instead of each auto-sizing to its own content — same fix as
+  // admin/holidays/page.tsx.
+  return (
+    <Table className="table-fixed">
+      <TableHeader>
+        <TableRow>
+          <TableHead className="w-[22%]">พนักงาน</TableHead>
+          <TableHead className="w-[15%]">ประเภทการลา</TableHead>
+          <TableHead className="w-[20%]">วันที่ลา</TableHead>
+          <TableHead className="w-[15%]">วันที่ส่งคำขอ</TableHead>
+          <TableHead className="w-[13%]">สถานะ</TableHead>
+          <TableHead className="w-[15%] text-center">จัดการ</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {requests.map((request) => (
+          <TableRow
+            key={request.id}
+            className="cursor-pointer"
+            onClick={() => onRowClick(request)}
+          >
+            <TableCell className="truncate font-medium text-foreground">
+              {employeeName(request.employeeId)}
+            </TableCell>
+            <TableCell className="text-muted-foreground">
+              {request.leaveType ?? "-"}
+            </TableCell>
+            <TableCell>{formatThaiDateRange(request.startDate, request.endDate)}</TableCell>
+            <TableCell className="text-muted-foreground">
+              {formatThaiDate(new Date(request.submittedAt))}
+            </TableCell>
+            <TableCell>
+              <Badge variant={statusBadgeVariant[request.status]}>
+                {statusLabelTh[request.status]}
+              </Badge>
+            </TableCell>
+            <TableCell className="text-center">
+              {showActions && (
+                <div className="flex justify-center gap-2" onClick={(e) => e.stopPropagation()}>
+                  <Button
+                    size="sm"
+                    className="cursor-pointer bg-success-foreground text-white hover:bg-success-foreground/90"
+                    onClick={() => onDecide(request.id, "approved")}
+                  >
+                    อนุมัติ
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="cursor-pointer"
+                    onClick={() => onDecide(request.id, "rejected")}
+                  >
+                    ปฏิเสธ
+                  </Button>
+                </div>
+              )}
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
 }
 
 export default function LeaveRequestsPage() {
@@ -62,11 +135,14 @@ export default function LeaveRequestsPage() {
     setDetailOpen(false);
   };
 
-  const sortedRequests = [...requests].sort((a, b) => {
-    if (a.status === "pending" && b.status !== "pending") return -1;
-    if (a.status !== "pending" && b.status === "pending") return 1;
-    return b.submittedAt.localeCompare(a.submittedAt);
-  });
+  const openDetail = (request: MockLeaveRequest) => {
+    setSelectedRequest(request);
+    setDetailOpen(true);
+  };
+
+  const sortedRequests = [...requests].sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
+  const pendingRequests = sortedRequests.filter((r) => r.status === "pending");
+  const handledRequests = sortedRequests.filter((r) => r.status !== "pending");
 
   const selectedEmployee = selectedRequest ? findEmployee(selectedRequest.employeeId) : undefined;
   // The formal-letter body is a fixed template the employee fills in
@@ -88,79 +164,57 @@ export default function LeaveRequestsPage() {
     : "";
 
   return (
-    <main className="flex flex-1 flex-col gap-6 p-6">
-      <AdminPageHeader title="Leave requests" subtitle="Review and approve pending requests" />
+    <main className="flex flex-1 flex-col gap-6 px-6 pb-6">
+      <header className="relative shrink-0 overflow-hidden rounded-b-[20px] bg-brand-600 px-6 py-6 text-white">
+        <div className="absolute top-0 right-0 size-40 -translate-y-1/3 translate-x-1/4 rounded-full bg-white/10" />
+        <div className="relative">
+          <h1 className="text-2xl font-bold">คำขอลา</h1>
+          <p className="mt-1 text-sm text-white/80">ตรวจสอบและอนุมัติคำขอที่รอดำเนินการ</p>
+        </div>
+      </header>
 
-      <Card className="rounded-2xl">
+      <Card className="rounded-2xl border border-slate-200 ring-0">
         <CardHeader>
-          <CardTitle>Approval queue</CardTitle>
+          <CardTitle>รายการคำขอลา</CardTitle>
           <p className="text-sm text-muted-foreground">
-            In-app fallback — approvals also come in through the email-approval link
-            sent with each request.
+            ระบบสำรองในแอป — สามารถอนุมัติผ่านลิงก์ในอีเมลที่ส่งไปพร้อมคำขอแต่ละรายการได้เช่นกัน
           </p>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Employee</TableHead>
-                <TableHead>Leave type</TableHead>
-                <TableHead>Dates</TableHead>
-                <TableHead>Submitted</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {sortedRequests.map((request) => (
-                <TableRow
-                  key={request.id}
-                  className="cursor-pointer"
-                  onClick={() => {
-                    setSelectedRequest(request);
-                    setDetailOpen(true);
-                  }}
-                >
-                  <TableCell className="font-medium text-foreground">
-                    {employeeName(request.employeeId)}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {request.leaveType ?? "-"}
-                  </TableCell>
-                  <TableCell>{formatDateRange(request.startDate, request.endDate)}</TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {formatSubmitted(request.submittedAt)}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={statusBadgeVariant[request.status]} className="capitalize">
-                      {request.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {request.status === "pending" && (
-                      <div className="flex justify-end gap-2" onClick={(e) => e.stopPropagation()}>
-                        <Button
-                          size="sm"
-                          className="cursor-pointer bg-success-foreground text-white hover:bg-success-foreground/90"
-                          onClick={() => decide(request.id, "approved")}
-                        >
-                          Approve
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="cursor-pointer"
-                          onClick={() => decide(request.id, "rejected")}
-                        >
-                          Decline
-                        </Button>
-                      </div>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          {pendingRequests.length > 0 && (
+            <>
+              <p className="text-xs font-semibold text-muted-foreground">รอดำเนินการ</p>
+              <div className="mt-2">
+                <LeaveRequestTable
+                  requests={pendingRequests}
+                  showActions
+                  onRowClick={openDetail}
+                  onDecide={decide}
+                />
+              </div>
+            </>
+          )}
+
+          {handledRequests.length > 0 && (
+            <>
+              <p
+                className={cn(
+                  "text-xs font-semibold text-muted-foreground",
+                  pendingRequests.length > 0 && "mt-6"
+                )}
+              >
+                ดำเนินการแล้ว
+              </p>
+              <div className="mt-2">
+                <LeaveRequestTable
+                  requests={handledRequests}
+                  showActions={false}
+                  onRowClick={openDetail}
+                  onDecide={decide}
+                />
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
 
@@ -169,7 +223,7 @@ export default function LeaveRequestsPage() {
         onOpenChange={setDetailOpen}
         icon={CalendarRange}
         title={selectedSubject}
-        badgeText={selectedRequest ? selectedRequest.status : ""}
+        badgeText={selectedRequest ? statusLabelTh[selectedRequest.status] : ""}
         badgeVariant={selectedRequest ? statusBadgeVariant[selectedRequest.status] : "warning"}
         footer={
           selectedRequest?.status === "pending" ? (
@@ -180,14 +234,14 @@ export default function LeaveRequestsPage() {
                 onClick={() => decide(selectedRequest.id, "rejected")}
               >
                 <X className="size-4" />
-                Decline
+                ปฏิเสธ
               </Button>
               <Button
-                className="cursor-pointer bg-accent-600 text-white hover:bg-accent-700"
+                className="cursor-pointer bg-success-foreground text-white hover:bg-success-foreground/90"
                 onClick={() => decide(selectedRequest.id, "approved")}
               >
                 <Check className="size-4" />
-                Approve
+                อนุมัติ
               </Button>
             </div>
           ) : undefined
@@ -196,13 +250,13 @@ export default function LeaveRequestsPage() {
         {selectedRequest && (
           <div className="flex flex-col gap-3">
             <AdminDetailInfoBlock
-              label="Dates"
-              value={formatDateRange(selectedRequest.startDate, selectedRequest.endDate)}
+              label="วันที่ลา"
+              value={formatThaiDateRange(selectedRequest.startDate, selectedRequest.endDate)}
               valueSize="sm"
             />
-            <AdminDetailInfoBlock label="Reason" value={selectedRequest.reason ?? "-"} valueSize="sm" />
+            <AdminDetailInfoBlock label="เหตุผล" value={selectedRequest.reason ?? "-"} valueSize="sm" />
             <p className="text-xs text-muted-foreground">
-              Submitted {formatSubmitted(selectedRequest.submittedAt)}
+              ส่งคำขอเมื่อ {formatThaiDate(new Date(selectedRequest.submittedAt))}
             </p>
           </div>
         )}
