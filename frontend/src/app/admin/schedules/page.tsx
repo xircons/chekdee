@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { CheckCircle2, Circle, Clock, Copy, Search, Upload } from "lucide-react";
+import { Check, Clock, Copy, Search, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -16,12 +16,13 @@ import {
 import { cn } from "@/lib/utils";
 
 const DAY_LABELS_TH = ["อาทิตย์", "จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์"];
+const DAY_ABBR_TH = ["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"];
 const WEEKDAY_COPY_TARGETS = [2, 3, 4, 5]; // Tuesday–Friday, filled from Monday (index 1)
 const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
 const FIELD_CLASS =
   "h-9 rounded-lg border-border bg-muted/40 px-4 text-sm focus-visible:border-brand-600 focus-visible:bg-card focus-visible:ring-brand-600/20";
-const ACTION_BUTTON_CLASS = "h-9 rounded-lg px-5 text-sm";
+const ACTION_BUTTON_CLASS = "h-9 rounded-lg px-5 text-sm focus-visible:ring-brand-600/20";
 
 type DayEntry = { working: boolean; startTime: string; endTime: string };
 type Tab = "individual" | "import";
@@ -36,6 +37,39 @@ function employeeName(employee: MockEmployee): string {
 
 function initials(employee: MockEmployee): string {
   return `${employee.firstName[0] ?? ""}${employee.lastName[0] ?? ""}`.toUpperCase();
+}
+
+function minutesBetween(start: string, end: string): number {
+  const [sh, sm] = start.split(":").map(Number);
+  const [eh, em] = end.split(":").map(Number);
+  const diff = eh * 60 + em - (sh * 60 + sm);
+  return Number.isFinite(diff) && diff > 0 ? diff : 0;
+}
+
+// Collapse the sorted day list into ranges: consecutive days become
+// "จ–ศ", non-consecutive runs are comma-separated.
+function formatDayGroups(days: number[]): string {
+  const groups: Array<[number, number]> = [];
+  for (const d of days) {
+    const last = groups[groups.length - 1];
+    if (last && d === last[1] + 1) last[1] = d;
+    else groups.push([d, d]);
+  }
+  return groups
+    .map(([a, b]) => (a === b ? DAY_ABBR_TH[a] : `${DAY_ABBR_TH[a]}–${DAY_ABBR_TH[b]}`))
+    .join(", ");
+}
+
+// Short saved-schedule summary for the name list; null when the employee
+// has no schedule yet. Reads from the saved schedules, not the draft, so
+// the list preview reflects what's actually saved.
+function scheduleSummary(employeeId: string, schedules: MockWorkSchedule[]): string | null {
+  const entries = schedules
+    .filter((s) => s.employeeId === employeeId)
+    .sort((a, b) => a.dayOfWeek - b.dayOfWeek);
+  if (entries.length === 0) return null;
+  const days = entries.map((e) => e.dayOfWeek);
+  return `${formatDayGroups(days)} · ${entries[0].startTime}–${entries[0].endTime}`;
 }
 
 function parseCsv(text: string): string[][] {
@@ -78,46 +112,91 @@ function buildDayEntries(employeeId: string, schedules: MockWorkSchedule[]): Day
   });
 }
 
+// Native time input; the clock icon is a button that opens the browser's
+// time picker (falling back to focusing the field where showPicker is
+// unsupported). The native picker indicator is hidden so only our icon shows.
+function TimeField({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="relative w-32">
+      <Input
+        type="time"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={cn(
+          FIELD_CLASS,
+          "w-full pr-9 text-center [&::-webkit-calendar-picker-indicator]:hidden"
+        )}
+      />
+      <button
+        type="button"
+        aria-label="เลือกเวลา"
+        onClick={(e) => {
+          const input = e.currentTarget.parentElement?.querySelector("input");
+          if (input?.showPicker) input.showPicker();
+          else input?.focus();
+        }}
+        className="absolute top-1/2 right-1.5 flex size-6 -translate-y-1/2 cursor-pointer items-center justify-center rounded-sm text-muted-foreground outline-none focus-visible:ring-3 focus-visible:ring-brand-600/20"
+      >
+        <Clock className="size-3.5" />
+      </button>
+    </div>
+  );
+}
+
 function ScheduleEditor({
   employee,
-  schedules,
+  days,
+  dirty,
+  onUpdateDay,
+  onCopyMonday,
   onSave,
+  onCancel,
 }: {
   employee: MockEmployee;
-  schedules: MockWorkSchedule[];
-  onSave: (employeeId: string, days: DayEntry[]) => void;
+  days: DayEntry[];
+  dirty: boolean;
+  onUpdateDay: (index: number, patch: Partial<DayEntry>) => void;
+  onCopyMonday: () => void;
+  onSave: () => void;
+  onCancel: () => void;
 }) {
-  const [days, setDays] = useState<DayEntry[]>(() => buildDayEntries(employee.id, schedules));
-  const [saved, setSaved] = useState(false);
-
-  const updateDay = (index: number, patch: Partial<DayEntry>) => {
-    setDays((prev) => prev.map((d, i) => (i === index ? { ...d, ...patch } : d)));
-    setSaved(false);
-  };
-
-  const copyMondayToWeek = () => {
-    setDays((prev) => {
-      const monday = prev[1];
-      return prev.map((d, i) =>
-        WEEKDAY_COPY_TARGETS.includes(i)
-          ? { working: true, startTime: monday.startTime, endTime: monday.endTime }
-          : d
-      );
-    });
-    setSaved(false);
-  };
+  const totalMinutes = days.reduce(
+    (sum, d) => (d.working ? sum + minutesBetween(d.startTime, d.endTime) : sum),
+    0
+  );
+  const hours = totalMinutes / 60;
+  const hoursLabel = Number.isInteger(hours) ? String(hours) : hours.toFixed(1);
+  const workingDays = days.filter((d) => d.working).length;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm font-semibold text-foreground">ตารางของ {employeeName(employee)}</p>
-        <Button variant="outline" className={ACTION_BUTTON_CLASS} onClick={copyMondayToWeek}>
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex flex-wrap items-center justify-between gap-3 px-5 pt-5 pb-4">
+        <div className="flex flex-col">
+          <p className="text-sm font-semibold text-foreground">ตารางของ {employeeName(employee)}</p>
+          {/* Rendered always but hidden when clean, so the heading block height stays stable. */}
+          <span
+            className={cn(
+              "flex items-center gap-1.5 text-xs text-muted-foreground",
+              !dirty && "invisible"
+            )}
+          >
+            <span className="size-1.5 rounded-full bg-brand-600" />
+            ยังไม่บันทึก
+          </span>
+        </div>
+        <Button variant="outline" className={ACTION_BUTTON_CLASS} onClick={onCopyMonday}>
           <Copy className="size-4" />
           คัดลอกเวลาจันทร์ไปทั้งสัปดาห์
         </Button>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
+      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-5 pb-5">
         {DAY_LABELS_TH.map((label, i) => (
           <div
             key={label}
@@ -125,31 +204,21 @@ function ScheduleEditor({
           >
             <Switch
               checked={days[i].working}
-              onCheckedChange={(checked) => updateDay(i, { working: checked })}
-              className="data-checked:bg-brand-600"
+              onCheckedChange={(checked) => onUpdateDay(i, { working: checked })}
+              className="cursor-pointer data-checked:bg-brand-600"
             />
             <p className="w-20 text-sm font-medium text-foreground">{label}</p>
             {days[i].working ? (
               <div className="flex items-center gap-2">
-                <div className="relative w-32">
-                  <Input
-                    value={days[i].startTime}
-                    onChange={(e) => updateDay(i, { startTime: e.target.value })}
-                    placeholder="09:00"
-                    className={cn(FIELD_CLASS, "w-full pr-9 text-center")}
-                  />
-                  <Clock className="pointer-events-none absolute top-1/2 right-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
-                </div>
+                <TimeField
+                  value={days[i].startTime}
+                  onChange={(value) => onUpdateDay(i, { startTime: value })}
+                />
                 <span className="text-sm text-muted-foreground">ถึง</span>
-                <div className="relative w-32">
-                  <Input
-                    value={days[i].endTime}
-                    onChange={(e) => updateDay(i, { endTime: e.target.value })}
-                    placeholder="17:00"
-                    className={cn(FIELD_CLASS, "w-full pr-9 text-center")}
-                  />
-                  <Clock className="pointer-events-none absolute top-1/2 right-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
-                </div>
+                <TimeField
+                  value={days[i].endTime}
+                  onChange={(value) => onUpdateDay(i, { endTime: value })}
+                />
               </div>
             ) : (
               <p className="text-sm text-muted-foreground">วันหยุด</p>
@@ -158,17 +227,24 @@ function ScheduleEditor({
         ))}
       </div>
 
-      <div className="flex items-center gap-3">
-        <Button
-          onClick={() => {
-            onSave(employee.id, days);
-            setSaved(true);
-          }}
-          className={cn(ACTION_BUTTON_CLASS, "bg-accent-600 text-white hover:bg-accent-700")}
-        >
-          บันทึกตาราง
-        </Button>
-        {saved && <p className="text-xs text-muted-foreground">บันทึกแล้ว</p>}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-5 py-3">
+        <p className="text-xs text-muted-foreground">
+          รวม <span className="font-medium text-foreground tabular-nums">{hoursLabel}</span>{" "}
+          ชม./สัปดาห์ · ทำงาน{" "}
+          <span className="font-medium text-foreground tabular-nums">{workingDays}</span> วัน
+        </p>
+        <div className="flex items-center gap-3">
+          <Button variant="outline" className={ACTION_BUTTON_CLASS} onClick={onCancel}>
+            ยกเลิก
+          </Button>
+          <Button
+            onClick={onSave}
+            disabled={!dirty}
+            className={cn(ACTION_BUTTON_CLASS, dirty && "bg-accent-600 text-white hover:bg-accent-700")}
+          >
+            บันทึกตาราง
+          </Button>
+        </div>
       </div>
     </div>
   );
@@ -179,8 +255,11 @@ export default function SchedulesPage() {
   const [tab, setTab] = useState<Tab>("individual");
   const [selectedId, setSelectedId] = useState<string | null>(employees[0]?.id ?? null);
   const [schedules, setSchedules] = useState<MockWorkSchedule[]>(mockWorkSchedules);
-  const [scheduleVersion, setScheduleVersion] = useState(0);
   const [search, setSearch] = useState("");
+  // Per-employee in-progress edits, lifted here so the name list can flag
+  // which employees have unsaved changes. Cleared for an employee on
+  // save/cancel, so its absence means "clean".
+  const [drafts, setDrafts] = useState<Record<string, DayEntry[]>>({});
   // Session-only "reviewed today" marker, so the admin can track who they've
   // already worked through in the list — not persisted to mock data.
   const [doneIds, setDoneIds] = useState<Set<string>>(new Set());
@@ -207,15 +286,55 @@ export default function SchedulesPage() {
 
   const selectedEmployee = employees.find((e) => e.id === selectedId) ?? null;
 
-  const handleSave = (employeeId: string, days: DayEntry[]) => {
+  const daysFor = (id: string): DayEntry[] => drafts[id] ?? buildDayEntries(id, schedules);
+
+  const isDirty = (id: string): boolean => {
+    const draft = drafts[id];
+    if (!draft) return false;
+    return JSON.stringify(draft) !== JSON.stringify(buildDayEntries(id, schedules));
+  };
+
+  const updateDay = (id: string, index: number, patch: Partial<DayEntry>) => {
+    setDrafts((prev) => {
+      const base = prev[id] ?? buildDayEntries(id, schedules);
+      return { ...prev, [id]: base.map((d, i) => (i === index ? { ...d, ...patch } : d)) };
+    });
+  };
+
+  const copyMonday = (id: string) => {
+    setDrafts((prev) => {
+      const base = prev[id] ?? buildDayEntries(id, schedules);
+      const monday = base[1];
+      return {
+        ...prev,
+        [id]: base.map((d, i) =>
+          WEEKDAY_COPY_TARGETS.includes(i)
+            ? { working: true, startTime: monday.startTime, endTime: monday.endTime }
+            : d
+        ),
+      };
+    });
+  };
+
+  const clearDraft = (id: string) => {
+    setDrafts((prev) => {
+      if (!(id in prev)) return prev;
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+  };
+
+  const handleSave = (id: string) => {
+    const days = daysFor(id);
     setSchedules((prev) => {
-      const withoutEmployee = prev.filter((s) => s.employeeId !== employeeId);
+      const withoutEmployee = prev.filter((s) => s.employeeId !== id);
       const newEntries: MockWorkSchedule[] = days.flatMap((d, dayOfWeek) =>
         d.working
           ? [
             {
-              id: `sched-${employeeId}-${dayOfWeek}`,
-              employeeId,
+              id: `sched-${id}-${dayOfWeek}`,
+              employeeId: id,
               dayOfWeek,
               startTime: d.startTime,
               endTime: d.endTime,
@@ -227,7 +346,7 @@ export default function SchedulesPage() {
       );
       return [...withoutEmployee, ...newEntries];
     });
-    setScheduleVersion((v) => v + 1);
+    clearDraft(id);
   };
 
   const runImport = async (file: File) => {
@@ -267,8 +386,8 @@ export default function SchedulesPage() {
       return [...next, ...newEntries];
     });
 
+    setDrafts({});
     setImportResult({ imported: validRows.length, errors });
-    setScheduleVersion((v) => v + 1);
     setImportFile(null);
   };
 
@@ -351,11 +470,13 @@ export default function SchedulesPage() {
                 {filteredEmployees.map((employee) => {
                   const active = employee.id === selectedId;
                   const done = doneIds.has(employee.id);
+                  const dirty = isDirty(employee.id);
+                  const summary = scheduleSummary(employee.id, schedules);
                   return (
                     <div
                       key={employee.id}
                       className={cn(
-                        "flex items-center gap-1 rounded-xl pr-1 transition-colors",
+                        "group flex items-center gap-1 rounded-xl pr-1 transition-colors",
                         active ? "bg-brand-100" : "hover:bg-muted"
                       )}
                     >
@@ -376,20 +497,41 @@ export default function SchedulesPage() {
                         >
                           {initials(employee)}
                         </div>
-                        <span className="truncate text-sm font-medium">{employeeName(employee)}</span>
+                        <div className="flex min-w-0 flex-1 flex-col">
+                          <span className="truncate text-sm font-medium">{employeeName(employee)}</span>
+                          <span className="truncate text-xs text-muted-foreground">
+                            {summary ?? "ยังไม่กำหนดตาราง"}
+                          </span>
+                        </div>
                       </button>
+                      {dirty && (
+                        <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-brand-600" />
+                      )}
                       <button
                         type="button"
-                        onClick={() => toggleDone(employee.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleDone(employee.id);
+                        }}
                         aria-label={done ? "ยกเลิกการทำเครื่องหมายว่าเสร็จ" : "ทำเครื่องหมายว่าเสร็จ"}
                         aria-pressed={done}
-                        className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full"
+                        className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-sm outline-none focus-visible:ring-3 focus-visible:ring-brand-600/20"
                       >
-                        {done ? (
-                          <CheckCircle2 className="size-5 text-success-foreground" />
-                        ) : (
-                          <Circle className="size-5 text-muted-foreground/50" />
-                        )}
+                        <span
+                          className={cn(
+                            "flex size-5 items-center justify-center rounded-sm border transition-colors",
+                            done ? "border-brand-600 bg-brand-600" : "border-border bg-transparent"
+                          )}
+                        >
+                          <Check
+                            className={cn(
+                              "size-3.5 transition-opacity",
+                              done
+                                ? "text-white opacity-100"
+                                : "text-muted-foreground opacity-0 group-hover:opacity-40"
+                            )}
+                          />
+                        </span>
                       </button>
                     </div>
                   );
@@ -402,18 +544,21 @@ export default function SchedulesPage() {
           </Card>
 
           <Card className="flex min-h-0 flex-col rounded-2xl border border-slate-200 py-0 ring-0 lg:col-span-2">
-            <CardContent className="flex min-h-0 flex-1 flex-col p-5">
-              {selectedEmployee ? (
-                <ScheduleEditor
-                  key={`${selectedEmployee.id}-${scheduleVersion}`}
-                  employee={selectedEmployee}
-                  schedules={schedules}
-                  onSave={handleSave}
-                />
-              ) : (
+            {selectedEmployee ? (
+              <ScheduleEditor
+                employee={selectedEmployee}
+                days={daysFor(selectedEmployee.id)}
+                dirty={isDirty(selectedEmployee.id)}
+                onUpdateDay={(index, patch) => updateDay(selectedEmployee.id, index, patch)}
+                onCopyMonday={() => copyMonday(selectedEmployee.id)}
+                onSave={() => handleSave(selectedEmployee.id)}
+                onCancel={() => clearDraft(selectedEmployee.id)}
+              />
+            ) : (
+              <div className="flex min-h-0 flex-1 items-center justify-center p-5">
                 <p className="text-sm text-muted-foreground">เลือกพนักงานจากรายการเพื่อแก้ไขตาราง</p>
-              )}
-            </CardContent>
+              </div>
+            )}
           </Card>
         </div>
       ) : (
