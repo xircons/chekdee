@@ -269,36 +269,33 @@ export default function DevicesPage() {
 
       {/* One-time reveal — used for both a fresh device and a rotated key.
           The token is never rendered in full again after this closes,
-          matching how API keys are typically shown once. Full URL wraps
-          across lines instead of truncating — it has to stay fully
-          visible, not just copyable blind. */}
+          matching how API keys are typically shown once. Dialog is widened
+          well past the default sm max-width so the URL fits on one line in
+          the common case; break-all (not truncate) stays as a fallback so
+          an unusually long origin still wraps instead of ever clipping. */}
       <Dialog open={!!revealDevice} onOpenChange={(open) => !open && setRevealDevice(null)}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>ลิงก์อุปกรณ์ &quot;{revealDevice?.name}&quot;</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
             คัดลอกลิงก์นี้ไปเปิดที่จอทีวี — ระบบจะไม่แสดงลิงก์แบบเต็มอีกหลังจากปิดหน้าต่างนี้
           </p>
-          <div className="flex flex-col gap-2 rounded-lg border border-border bg-muted/40 p-3">
-            <code className="font-mono text-xs break-all text-foreground">
+          <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2">
+            <code className="flex-1 break-all font-mono text-xs text-foreground">
               {revealDevice ? buildKioskUrl(revealDevice.tokenHash) : ""}
             </code>
             <Button
-              variant="outline"
-              className={cn(ACTION_BUTTON_CLASS, "w-fit border-slate-200")}
+              size="icon-sm"
+              variant="ghost"
+              aria-label="คัดลอกลิงก์"
+              className="shrink-0"
               onClick={() => revealDevice && copyLink(revealDevice)}
             >
               {revealDevice && copiedId === revealDevice.id ? (
-                <>
-                  <Check className="text-success-foreground" />
-                  คัดลอกแล้ว
-                </>
+                <Check className="text-success-foreground" />
               ) : (
-                <>
-                  <Copy />
-                  คัดลอกลิงก์
-                </>
+                <Copy />
               )}
             </Button>
           </div>
