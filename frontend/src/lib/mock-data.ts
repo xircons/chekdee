@@ -81,6 +81,24 @@ export type MockAttendanceCorrection = {
   correctedAt: string;
 };
 
+// Seed fixture, not session state — the admin dashboard's own correction
+// flow keeps its corrections in local component state (lost on navigation,
+// same as every other mutable list there) rather than writing back here.
+// This one fixture row exists so the reports daily log below has a
+// realistic correction reason to surface in its notes column.
+export const mockAttendanceCorrections: MockAttendanceCorrection[] = [
+  {
+    id: "corr-1",
+    employeeId: "user-1",
+    date: "2026-08-08",
+    previousStatus: null,
+    newStatus: "present",
+    reason: "พนักงานลืมเช็คเอาท์ ยืนยันกับหัวหน้างานแล้วว่ามาทำงานตามปกติ",
+    correctedBy: "user-4",
+    correctedAt: "2026-08-09T02:00:00Z",
+  },
+];
+
 export type LeaveStatus = "pending" | "approved" | "rejected";
 
 export type MockLeaveRequest = {
@@ -442,6 +460,19 @@ function inclusiveDayCount(startDate: string, endDate: string): number {
   return Math.round(ms / 86_400_000) + 1;
 }
 
+// Same inclusive count, but clipped to a "YYYY-MM" month so a leave request
+// spanning a month boundary only contributes the days that actually fall
+// inside the month being reported on.
+function overlappingDaysInMonth(startDate: string, endDate: string, yearMonth: string): number {
+  const [year, month] = yearMonth.split("-").map(Number);
+  const monthStart = `${yearMonth}-01`;
+  const monthEnd = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
+  const clippedStart = startDate > monthStart ? startDate : monthStart;
+  const clippedEnd = endDate < monthEnd ? endDate : monthEnd;
+  if (clippedStart > clippedEnd) return 0;
+  return inclusiveDayCount(clippedStart, clippedEnd);
+}
+
 export function getLeaveBalance(employeeId: string, year: number): number {
   const usedDays = mockLeaveRequests
     .filter(
@@ -454,9 +485,32 @@ export function getLeaveBalance(employeeId: string, year: number): number {
   return ANNUAL_LEAVE_DAYS - usedDays;
 }
 
+// The work schedule covering a given calendar date for an employee, if any
+// — used to find the scheduled start time (for lateness) and shift length
+// (for the no-overtime hours cap) below.
+function getScheduledShift(employeeId: string, workDate: string): MockWorkSchedule | null {
+  const dayOfWeek = new Date(`${workDate}T00:00:00Z`).getUTCDay();
+  return (
+    mockWorkSchedules.find(
+      (s) =>
+        s.employeeId === employeeId &&
+        s.dayOfWeek === dayOfWeek &&
+        s.effectiveFrom <= workDate &&
+        (s.effectiveTo === null || workDate <= s.effectiveTo)
+    ) ?? null
+  );
+}
+
+function shiftHours(schedule: MockWorkSchedule): number {
+  const [startH, startM] = schedule.startTime.split(":").map(Number);
+  const [endH, endM] = schedule.endTime.split(":").map(Number);
+  return (endH * 60 + endM - (startH * 60 + startM)) / 60;
+}
+
 export type MonthlyAttendanceStats = {
   hours: number;
   lateCount: number;
+  lateMinutes: number;
   absentCount: number;
 };
 
@@ -469,9 +523,107 @@ export function getMonthlyAttendanceStats(employeeId: string, yearMonth: string)
     return sum + (new Date(r.checkOutAt).getTime() - new Date(r.checkInAt).getTime()) / 3_600_000;
   }, 0);
 
+  const lateMinutes = records.reduce((sum, r) => {
+    if (r.status !== "สาย" || !r.checkInAt) return sum;
+    const schedule = getScheduledShift(r.employeeId, r.workDate);
+    if (!schedule) return sum;
+    const scheduledStart = new Date(`${r.workDate}T${schedule.startTime}:00Z`);
+    return sum + Math.max(0, (new Date(r.checkInAt).getTime() - scheduledStart.getTime()) / 60_000);
+  }, 0);
+
   return {
     hours: Math.round(hours * 10) / 10,
     lateCount: records.filter((r) => r.status === "สาย").length,
+    lateMinutes: Math.round(lateMinutes),
     absentCount: records.filter((r) => r.status === "ขาด").length,
   };
+}
+
+// Everything the monthly Excel export's "สรุป" sheet needs for one
+// employee row. Reuses getMonthlyAttendanceStats for late/absence figures
+// so both this and the employee detail dialog agree on those counts; hours
+// here differ from that stat (which is raw actual-hours) because this one
+// applies the same min(actual, scheduled) no-overtime cap the rest of the
+// codebase assumes for worked-hours figures.
+export type MonthlyReportRow = {
+  employee: MockEmployee;
+  workDays: number;
+  lateCount: number;
+  lateMinutes: number;
+  absentCount: number;
+  leaveDays: number;
+  workedHours: number;
+};
+
+export function getMonthlyReportRow(employeeId: string, yearMonth: string): MonthlyReportRow {
+  const employee = mockEmployees.find((e) => e.id === employeeId);
+  if (!employee) throw new Error(`Unknown employeeId: ${employeeId}`);
+
+  const records = getAttendanceForEmployee(employeeId).filter((r) => r.workDate.startsWith(yearMonth));
+  const stats = getMonthlyAttendanceStats(employeeId, yearMonth);
+
+  const workedHours = records.reduce((sum, r) => {
+    if (!r.checkInAt || !r.checkOutAt) return sum;
+    const actualHours = (new Date(r.checkOutAt).getTime() - new Date(r.checkInAt).getTime()) / 3_600_000;
+    const schedule = getScheduledShift(r.employeeId, r.workDate);
+    return sum + (schedule ? Math.min(actualHours, shiftHours(schedule)) : actualHours);
+  }, 0);
+
+  const leaveDays = mockLeaveRequests
+    .filter((r) => r.employeeId === employeeId && r.status === "approved")
+    .reduce((sum, r) => sum + overlappingDaysInMonth(r.startDate, r.endDate, yearMonth), 0);
+
+  return {
+    employee,
+    workDays: records.filter((r) => r.status === "present" || r.status === "สาย").length,
+    lateCount: stats.lateCount,
+    lateMinutes: stats.lateMinutes,
+    absentCount: stats.absentCount,
+    leaveDays,
+    workedHours: Math.round(workedHours * 10) / 10,
+  };
+}
+
+export function getMonthlyReportRows(yearMonth: string): MonthlyReportRow[] {
+  return getActiveEmployees().map((employee) => getMonthlyReportRow(employee.id, yearMonth));
+}
+
+// One row per attendance record in the month, long-format — the export's
+// "รายละเอียดรายวัน" sheet, kept for audit/dispute reference. notes combines
+// the auto-close flag and any matching correction reason so both surface in
+// the same cell instead of needing two columns for what's really one story.
+export type DailyLogRow = {
+  date: string;
+  employeeName: string;
+  status: AttendanceStatus | null;
+  checkInAt: string | null;
+  checkOutAt: string | null;
+  notes: string;
+};
+
+export function getDailyLogForMonth(yearMonth: string): DailyLogRow[] {
+  return mockAttendanceRecords
+    .filter((r) => r.workDate.startsWith(yearMonth))
+    .map((r): DailyLogRow => {
+      const employee = mockEmployees.find((e) => e.id === r.employeeId);
+      const correction = mockAttendanceCorrections.find(
+        (c) => c.employeeId === r.employeeId && c.date === r.workDate
+      );
+      const notes = [
+        r.autoClosed ? "ปิดงานอัตโนมัติ (ไม่ได้เช็คเอาท์)" : null,
+        correction?.reason ?? null,
+      ]
+        .filter((n): n is string => n !== null)
+        .join(" / ");
+
+      return {
+        date: r.workDate,
+        employeeName: employee ? `${employee.firstName} ${employee.lastName}` : r.employeeId,
+        status: r.status,
+        checkInAt: r.checkInAt,
+        checkOutAt: r.checkOutAt,
+        notes,
+      };
+    })
+    .sort((a, b) => a.date.localeCompare(b.date) || a.employeeName.localeCompare(b.employeeName));
 }
