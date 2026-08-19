@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   CalendarClock,
   ClipboardList,
+  FileBarChart2,
   LayoutDashboard,
   LogOut,
   MonitorSmartphone,
@@ -25,6 +26,7 @@ const links = [
   { href: "/admin/holidays", label: "วันหยุด", icon: PartyPopper },
   { href: "/admin/leave-requests", label: "คำขอลา", icon: ClipboardList },
   { href: "/admin/devices", label: "อุปกรณ์", icon: MonitorSmartphone },
+  { href: "/admin/reports", label: "รายงาน", icon: FileBarChart2 },
 ];
 
 export function AdminSidebar() {
