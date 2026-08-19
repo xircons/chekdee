@@ -67,6 +67,20 @@ export type MockAttendanceRecord = {
   autoClosed: boolean;
 };
 
+// Audit trail for admin corrections to a computed status (or an auto-closed
+// checkout) — who changed it, when, and the old/new value. Session-only for
+// now, like every other mutable list here; a real audit_log table is Phase 4.
+export type MockAttendanceCorrection = {
+  id: string;
+  employeeId: string;
+  date: string; // ISO date
+  previousStatus: AttendanceStatus | null;
+  newStatus: AttendanceStatus;
+  reason: string | null;
+  correctedBy: string;
+  correctedAt: string;
+};
+
 export type LeaveStatus = "pending" | "approved" | "rejected";
 
 export type MockLeaveRequest = {
@@ -80,6 +94,18 @@ export type MockLeaveRequest = {
   submittedAt: string;
   decidedBy: string | null;
   decidedAt: string | null;
+};
+
+// The TV kiosk display is a device, not a user account — it authenticates
+// via this token, not a login session. tokenHash stands in for a real
+// hashed token (Phase 4); the mock kiosk route just string-compares it.
+export type MockKioskDevice = {
+  id: string;
+  name: string;
+  location: string;
+  tokenHash: string;
+  createdAt: string;
+  revokedAt: string | null;
 };
 
 export const mockTeam = { id: "team-1", name: "CAMT Front Desk" };
@@ -268,6 +294,17 @@ export const mockLeaveRequests: MockLeaveRequest[] = [
   { id: "leave-4", employeeId: "user-3", leaveType: "ป่วย", startDate: "2026-06-02", endDate: "2026-06-03", reason: "Sick", status: "rejected", submittedAt: "2026-05-30T06:00:00Z", decidedBy: "user-4", decidedAt: "2026-06-01T03:00:00Z" },
 ];
 
+export const mockKioskDevices: MockKioskDevice[] = [
+  {
+    id: "kiosk-1",
+    name: "จอ Lobby ชั้น 1",
+    location: "อาคาร CAMT ชั้น 1",
+    tokenHash: "demo-token-lobby-1",
+    createdAt: "2026-08-01T00:00:00Z",
+    revokedAt: null,
+  },
+];
+
 // "ชั้นปี" isn't stored directly — derive it from studentGen (the
 // generation ordinal, e.g. "7"), converting back to an admission year
 // first (gen 1 started 2020, matching the profile page's Gen ordinal).
@@ -311,6 +348,77 @@ export function getActiveEmployees(): MockEmployee[] {
 
 export function getAttendanceForDate(date: string): MockAttendanceRecord[] {
   return mockAttendanceRecords.filter((r) => r.workDate === date);
+}
+
+// สาย/ขาด rule: any lateness at all is สาย (no grace period), more than 60
+// minutes late is ขาด — whether that's how late an actual check-in was, or
+// how long it's been with no check-in yet at all. The second case matters
+// for a live dashboard: it needs to flag a no-show as it's happening, not
+// only once the day is over, so "still hasn't checked in and it's been over
+// an hour" reads as ขาด already (subject to admin correction), while
+// "hasn't checked in yet but we're still inside the hour" reads as
+// unresolved (null) rather than guessing early.
+export function computeAttendanceStatus(
+  checkInAt: Date | null,
+  scheduledStart: Date,
+  now: Date
+): AttendanceStatus | null {
+  if (checkInAt) {
+    const lateMinutes = (checkInAt.getTime() - scheduledStart.getTime()) / 60_000;
+    if (lateMinutes <= 0) return "present";
+    return lateMinutes <= 60 ? "สาย" : "ขาด";
+  }
+  if (now < scheduledStart) return null;
+  const overdueMinutes = (now.getTime() - scheduledStart.getTime()) / 60_000;
+  return overdueMinutes > 60 ? "ขาด" : null;
+}
+
+// Deterministic hash so the same employee gets the same simulated check-in
+// behavior all day (stable across re-renders/ticks) but a different mix on
+// different days — there's no real "who's checked in right now" data source
+// yet (Phase 4), so this stands in for one. Shared by the admin dashboard
+// and the kiosk TV view so both read the same simulated "today" instead of
+// each rolling their own.
+function hashSeed(seed: string): number {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+
+export type SimulatedRosterEntry = {
+  employee: MockEmployee;
+  scheduledStart: Date;
+  checkInAt: Date | null;
+  status: AttendanceStatus | null;
+};
+
+export function getSimulatedRoster(
+  employees: MockEmployee[],
+  schedules: MockWorkSchedule[],
+  now: Date
+): SimulatedRosterEntry[] {
+  const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  const todayDow = now.getDay();
+
+  return employees.flatMap((employee) => {
+    const schedule = schedules.find((s) => s.employeeId === employee.id && s.dayOfWeek === todayDow);
+    if (!schedule) return [];
+
+    const [h, m] = schedule.startTime.split(":").map(Number);
+    const scheduledStart = new Date(now);
+    scheduledStart.setHours(h, m, 0, 0);
+
+    // ~65% simulated attendance; offset spans -20 to +69 minutes so the
+    // demo naturally produces a mix of present/สาย/ขาด instead of everyone
+    // landing in the same bucket.
+    const roll = hashSeed(employee.id + todayIso) % 100;
+    const offsetMinutes = (hashSeed(employee.id + todayIso + "offset") % 90) - 20;
+    const simulatedCheckInAt = new Date(scheduledStart.getTime() + offsetMinutes * 60_000);
+    const checkedIn = roll < 65 && simulatedCheckInAt <= now;
+    const checkInAt = checkedIn ? simulatedCheckInAt : null;
+
+    return [{ employee, scheduledStart, checkInAt, status: computeAttendanceStatus(checkInAt, scheduledStart, now) }];
+  });
 }
 
 export function getPendingLeaveRequests(): MockLeaveRequest[] {
