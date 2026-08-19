@@ -273,7 +273,7 @@ export default function DevicesPage() {
           across lines instead of truncating — it has to stay fully
           visible, not just copyable blind. */}
       <Dialog open={!!revealDevice} onOpenChange={(open) => !open && setRevealDevice(null)}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>ลิงก์อุปกรณ์ &quot;{revealDevice?.name}&quot;</DialogTitle>
           </DialogHeader>
