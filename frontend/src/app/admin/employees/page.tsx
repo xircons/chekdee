@@ -344,7 +344,7 @@ export default function EmployeesPage() {
         </div>
       </header>
 
-      <Card className="rounded-2xl">
+      <Card className="rounded-2xl border border-slate-200 ring-0">
         <CardHeader>
           <CardTitle>รายชื่อพนักงาน</CardTitle>
           <CardAction>
