@@ -1,0 +1,12 @@
+# oapi-codegen configuration. Scaffolded for the endpoints added from Phase 4
+# onward. Only models + the embedded spec are generated for now: the existing
+# hand-written auth handlers are deliberately NOT retrofitted onto a generated
+# server interface. New feature PRs turn on `strict-server`/`echo-server`
+# generation for their own route groups.
+package: api
+output: internal/api/types.gen.go
+generate:
+  models: true
+  embedded-spec: true
+output-options:
+  skip-prune: true

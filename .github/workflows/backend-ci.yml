@@ -1,0 +1,66 @@
+name: backend-ci
+
+on:
+  push:
+    branches: [dev, main]
+    paths:
+      - "backend/**"
+      - "openapi/**"
+      - "Makefile"
+      - ".github/workflows/backend-ci.yml"
+  pull_request:
+    paths:
+      - "backend/**"
+      - "openapi/**"
+      - "Makefile"
+      - ".github/workflows/backend-ci.yml"
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: checkdee
+          POSTGRES_PASSWORD: checkdee
+          POSTGRES_DB: checkdee
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U checkdee"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      # GitHub Actions already exports CI=true; repository tests turn a missing
+      # DATABASE_URL into a hard failure here rather than a silent skip.
+      DATABASE_URL: postgres://checkdee:checkdee@localhost:5432/checkdee?sslmode=disable
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - name: Install golang-migrate
+        run: go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+
+      - name: Apply migrations
+        run: migrate -path backend/db/migrations -database "$DATABASE_URL" up
+
+      - name: Build
+        working-directory: backend
+        run: go build ./...
+
+      - name: Vet
+        working-directory: backend
+        run: go vet ./...
+
+      - name: Test
+        working-directory: backend
+        run: go test ./...

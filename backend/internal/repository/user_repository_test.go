@@ -2,7 +2,6 @@ package repository_test
 
 import (
 	"context"
-	"os"
 	"testing"
 	"time"
 
@@ -15,12 +14,9 @@ import (
 
 // Requires a real Postgres reachable via DATABASE_URL with migrations
 // applied (`docker compose up -d postgres && make migrate-up`). Skipped
-// otherwise — this isn't wired to testcontainers-go yet, see design.md.
+// locally when DATABASE_URL is unset; a hard failure in CI (see requireDB).
 func TestUserRepository_CreateFetchRegister(t *testing.T) {
-	databaseURL := os.Getenv("DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("DATABASE_URL not set; skipping integration test")
-	}
+	databaseURL := requireDB(t)
 
 	pool, err := pgxpool.New(context.Background(), databaseURL)
 	require.NoError(t, err)
@@ -63,10 +59,7 @@ func TestUserRepository_CreateFetchRegister(t *testing.T) {
 }
 
 func TestUserRepository_GetByLineUserID_NotFound(t *testing.T) {
-	databaseURL := os.Getenv("DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("DATABASE_URL not set; skipping integration test")
-	}
+	databaseURL := requireDB(t)
 
 	pool, err := pgxpool.New(context.Background(), databaseURL)
 	require.NoError(t, err)

@@ -2,7 +2,6 @@ package repository_test
 
 import (
 	"context"
-	"os"
 	"testing"
 	"time"
 
@@ -14,10 +13,7 @@ import (
 )
 
 func TestRefreshTokenRepository_CreateGetRevoke(t *testing.T) {
-	databaseURL := os.Getenv("DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("DATABASE_URL not set; skipping integration test")
-	}
+	databaseURL := requireDB(t)
 
 	pool, err := pgxpool.New(context.Background(), databaseURL)
 	require.NoError(t, err)
