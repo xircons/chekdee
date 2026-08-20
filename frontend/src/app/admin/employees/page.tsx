@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ChevronLeft, ChevronRight, Search, User, Users } from "lucide-react";
+import { ChevronLeft, ChevronRight, IdCard, Phone, Search, User, Users } from "lucide-react";
 import { z } from "zod";
 
 import { AdminDetailDialog, AdminDetailInfoBlock } from "@/components/admin-detail-dialog";
@@ -74,6 +74,9 @@ const employeeSchema = z.object({
   firstName: z.string().trim().min(1, "กรุณากรอกชื่อ"),
   lastName: z.string().trim().min(1, "กรุณากรอกนามสกุล"),
   role: z.enum(["employee", "supervisor", "admin"] as const),
+  // Optional, matching the backend keeping them optional.
+  studentId: z.string().trim().optional(),
+  phoneNumber: z.string().trim().optional(),
 });
 
 type EmployeeForm = z.infer<typeof employeeSchema>;
@@ -201,6 +204,37 @@ function EmployeeFormFields({
         />
       </div>
 
+      <div className="grid grid-cols-2 gap-3">
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="studentId" className="font-semibold">
+            รหัสนักศึกษา
+          </Label>
+          <div className="relative">
+            <IdCard className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              id="studentId"
+              placeholder="กรอกรหัสนักศึกษา"
+              className={ICON_INPUT_CLASS}
+              {...register("studentId")}
+            />
+          </div>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="phoneNumber" className="font-semibold">
+            เบอร์โทร
+          </Label>
+          <div className="relative">
+            <Phone className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              id="phoneNumber"
+              placeholder="กรอกเบอร์โทร"
+              className={ICON_INPUT_CLASS}
+              {...register("phoneNumber")}
+            />
+          </div>
+        </div>
+      </div>
+
       <DialogFooter>
         <Button type="button" variant="outline" className={ACTION_BUTTON_CLASS} onClick={onCancel}>
           ยกเลิก
@@ -305,6 +339,8 @@ export default function EmployeesPage() {
         firstName: values.firstName,
         lastName: values.lastName,
         teamId: editingEmployee.teamId,
+        studentId: values.studentId || null,
+        phoneNumber: values.phoneNumber || null,
       });
       setEmployees((prev) => prev.map((e) => (e.id === profileUpdated.id ? profileUpdated : e)));
 
@@ -553,6 +589,8 @@ export default function EmployeesPage() {
                 firstName: editingEmployee.firstName ?? "",
                 lastName: editingEmployee.lastName ?? "",
                 role: editingEmployee.role === "system_owner" ? "employee" : editingEmployee.role,
+                studentId: editingEmployee.studentId ?? "",
+                phoneNumber: editingEmployee.phoneNumber ?? "",
               }}
               onSubmit={handleSubmit}
               onCancel={() => setFormOpen(false)}
@@ -626,6 +664,14 @@ export default function EmployeesPage() {
                     ? "ลงทะเบียนเสร็จสิ้นแล้ว"
                     : "ยังไม่ได้ลงทะเบียน"}
                 </span>
+                <div className="mt-1 flex items-center gap-1.5 text-foreground">
+                  <IdCard className="size-3.5 text-muted-foreground" />
+                  {detailEmployee.studentId ?? "ไม่มีข้อมูลรหัสนักศึกษา"}
+                </div>
+                <div className="flex items-center gap-1.5 text-foreground">
+                  <Phone className="size-3.5 text-muted-foreground" />
+                  {detailEmployee.phoneNumber ?? "ไม่มีข้อมูลเบอร์โทรศัพท์"}
+                </div>
               </div>
             </div>
 
