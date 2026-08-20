@@ -516,6 +516,136 @@ paths:
         "409":
           description: Not checked in today, or already checked out today
 
+  /reports/monthly:
+    get:
+      operationId: getMonthlyReport
+      summary: Org-wide monthly attendance summary — one row per active employee
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Month"
+      responses:
+        "200":
+          description: Monthly report rows
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MonthlyReportRow"
+        "400":
+          description: Missing or invalid month
+        "401":
+          description: Missing or invalid access token
+        "403":
+          description: Caller is not admin/supervisor/system_owner
+
+  /reports/daily-log:
+    get:
+      operationId: getDailyLog
+      summary: >
+        Daily attendance log for a month, org-wide or scoped to one employee
+        via employee_id — backs the calendar-heatmap / daily detail view.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Month"
+        - name: employee_id
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Daily log rows
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DailyLogRow"
+        "400":
+          description: Missing or invalid month
+        "401":
+          description: Missing or invalid access token
+        "403":
+          description: Caller is not admin/supervisor/system_owner
+
+  /reports/export:
+    post:
+      operationId: requestReportExport
+      summary: >
+        Enqueue an async Excel export for a month — processing then
+        download-link state, no export history (v1).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RequestExportRequest"
+      responses:
+        "202":
+          description: Export enqueued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportExport"
+        "400":
+          description: Missing month
+        "401":
+          description: Missing or invalid access token
+        "403":
+          description: Caller is not admin/supervisor/system_owner
+
+  /reports/export/{id}:
+    get:
+      operationId: getReportExport
+      summary: Poll export status
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ExportId"
+      responses:
+        "200":
+          description: Current export status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportExport"
+        "401":
+          description: Missing or invalid access token
+        "403":
+          description: Caller is not admin/supervisor/system_owner
+        "404":
+          description: Export not found
+
+  /reports/export/{id}/download:
+    get:
+      operationId: downloadReportExport
+      summary: Download the finished .xlsx file
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ExportId"
+      responses:
+        "200":
+          description: The .xlsx file
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+        "401":
+          description: Missing or invalid access token
+        "403":
+          description: Caller is not admin/supervisor/system_owner
+        "404":
+          description: Export not found
+        "409":
+          description: Export is not ready yet
+
 components:
   parameters:
     EmployeeId:
@@ -532,6 +662,20 @@ components:
         type: string
     DeviceId:
       name: deviceId
+      in: path
+      required: true
+      schema:
+        type: string
+    Month:
+      name: month
+      in: query
+      required: true
+      schema:
+        type: string
+        pattern: "^\\d{4}-\\d{2}$"
+        example: "2026-03"
+    ExportId:
+      name: id
       in: path
       required: true
       schema:
@@ -805,6 +949,84 @@ components:
           enum: [pending, present, late, absent]
         auto_closed:
           type: boolean
+
+    MonthlyReportRow:
+      type: object
+      required: [employee_id, work_days, late_count, late_minutes, absent_count, leave_days, worked_hours]
+      properties:
+        employee_id:
+          type: string
+        first_name:
+          type: string
+          nullable: true
+        last_name:
+          type: string
+          nullable: true
+        work_days:
+          type: integer
+        late_count:
+          type: integer
+        late_minutes:
+          type: integer
+        absent_count:
+          type: integer
+        leave_days:
+          type: integer
+        worked_hours:
+          type: number
+          description: >
+            Capped to each day's scheduled shift length — never counts time
+            outside the scheduled window, even with a real late checkout.
+
+    DailyLogRow:
+      type: object
+      required: [date, employee_id, status, auto_closed]
+      properties:
+        date:
+          type: string
+          format: date
+        employee_id:
+          type: string
+        first_name:
+          type: string
+          nullable: true
+        last_name:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [pending, present, late, absent]
+        check_in_at:
+          type: string
+          nullable: true
+        check_out_at:
+          type: string
+          nullable: true
+        auto_closed:
+          type: boolean
+
+    RequestExportRequest:
+      type: object
+      required: [month]
+      properties:
+        month:
+          type: string
+          pattern: "^\\d{4}-\\d{2}$"
+
+    ReportExport:
+      type: object
+      required: [id, month, status]
+      properties:
+        id:
+          type: string
+        month:
+          type: string
+        status:
+          type: string
+          enum: [processing, ready, failed]
+        error:
+          type: string
+          nullable: true
 
   securitySchemes:
     bearerAuth:

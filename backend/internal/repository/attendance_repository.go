@@ -231,3 +231,29 @@ func (r *AttendanceRepository) AutoCloseOpenRecords(ctx context.Context, cutoff 
 	}
 	return int(tag.RowsAffected()), nil
 }
+
+// ListForMonth returns every attendance record (all employees) with
+// work_date in [from, to) — the report queries' data source.
+func (r *AttendanceRepository) ListForMonth(ctx context.Context, from, to time.Time) ([]*domain.AttendanceRecord, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT `+attendanceColumns+`
+		FROM attendance_records
+		WHERE work_date >= $1 AND work_date < $2
+		ORDER BY work_date, employee_id`,
+		from, to,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []*domain.AttendanceRecord
+	for rows.Next() {
+		a, err := scanAttendance(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}

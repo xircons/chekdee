@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"checkdee-backend/internal/domain"
@@ -119,11 +120,7 @@ func (a *AttendanceUsecase) computeStatus(ctx context.Context, employeeID string
 		if s.EffectiveTo != nil && workDate.After(*s.EffectiveTo) {
 			continue
 		}
-		scheduledStart := time.Date(
-			workDate.Year(), workDate.Month(), workDate.Day(),
-			s.StartTime.Hour(), s.StartTime.Minute(), s.StartTime.Second(), 0,
-			checkInAt.Location(),
-		)
+		scheduledStart := scheduledTimeOn(workDate, s.StartTime)
 		return ComputeCheckInStatus(scheduledStart, checkInAt), nil
 	}
 
@@ -146,11 +143,37 @@ func ComputeCheckInStatus(scheduledStart, checkInAt time.Time) domain.Attendance
 	}
 }
 
-func bangkokWorkDate(t time.Time) time.Time {
+// bangkokLocation is loaded once per process — every wall-clock computation
+// in this package (work_date, and work_schedules.start_time/end_time, which
+// are Bangkok local times with no timezone of their own) must anchor to this
+// explicit zone, never to a caller's ambient time.Time.Location(). That
+// ambient-location mistake was an actual bug here: scheduledStart used to be
+// built from checkInAt.Location() — checkInAt is time.Now(), whose Location
+// is the server process's local zone. On a dev machine already set to
+// Asia/Bangkok this silently worked; on a UTC-configured production
+// container (the normal case) it would have shifted every scheduled-start
+// comparison by the server's UTC offset, corrupting the late/absent
+// classification. Caught while adding the same construction in Reports.
+var bangkokLocation = sync.OnceValue(func() *time.Location {
 	loc, err := time.LoadLocation("Asia/Bangkok")
 	if err != nil {
-		loc = time.FixedZone("Asia/Bangkok", 7*60*60)
+		return time.FixedZone("Asia/Bangkok", 7*60*60)
 	}
-	local := t.In(loc)
+	return loc
+})
+
+func bangkokWorkDate(t time.Time) time.Time {
+	local := t.In(bangkokLocation())
 	return time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, time.UTC)
+}
+
+// scheduledTimeOn combines a work_date and a work_schedules start_time/
+// end_time (both naive values with no real timezone attached by pgx) into
+// the actual Bangkok-local instant they represent.
+func scheduledTimeOn(date, timeOfDay time.Time) time.Time {
+	return time.Date(
+		date.Year(), date.Month(), date.Day(),
+		timeOfDay.Hour(), timeOfDay.Minute(), timeOfDay.Second(), 0,
+		bangkokLocation(),
+	)
 }

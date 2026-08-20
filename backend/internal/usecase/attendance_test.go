@@ -35,6 +35,9 @@ func (f *fakeAttendanceRepo) CheckOut(context.Context, string, time.Time, time.T
 func (f *fakeAttendanceRepo) AutoCloseOpenRecords(context.Context, time.Time) (int, error) {
 	return 0, nil
 }
+func (f *fakeAttendanceRepo) ListForMonth(context.Context, time.Time, time.Time) ([]*domain.AttendanceRecord, error) {
+	return nil, nil
+}
 
 type fakeScheduleRepo struct {
 	schedules []*domain.WorkSchedule
@@ -167,17 +170,25 @@ func TestAttendanceUsecase_CheckIn_LateStatusFromSchedule(t *testing.T) {
 	attendance := &fakeAttendanceRepo{}
 	devices := &fakeKioskDeviceRepo{activeDeviceIDs: map[string]bool{"device-1": true}}
 
-	now := time.Now()
-	dayOfWeek := int16(now.Weekday())
+	// Anchored to Bangkok wall-clock explicitly, not the test host's local
+	// zone: the usecase now interprets a schedule's start_time as Bangkok
+	// time regardless of ambient location (see bangkokLocation's doc comment
+	// in attendance.go for the bug this fixes), so the test must compute its
+	// expected "2 hours ago" the same way or it'll be right only by
+	// coincidence on a host whose local zone happens to be Bangkok.
+	bangkok, err := time.LoadLocation("Asia/Bangkok")
+	require.NoError(t, err)
+	nowBangkok := time.Now().In(bangkok)
+	dayOfWeek := int16(nowBangkok.Weekday())
 	// Scheduled to start 2 hours before "now" so this check-in lands well
 	// past the 60-minute absent threshold.
-	scheduledStart := now.Add(-2 * time.Hour)
+	scheduledStart := nowBangkok.Add(-2 * time.Hour)
 	schedules := &fakeScheduleRepo{schedules: []*domain.WorkSchedule{
 		{
 			DayOfWeek:     dayOfWeek,
-			StartTime:     time.Date(0, 1, 1, scheduledStart.Hour(), scheduledStart.Minute(), 0, 0, time.Local),
-			EndTime:       time.Date(0, 1, 1, 23, 0, 0, 0, time.Local),
-			EffectiveFrom: now.Add(-30 * 24 * time.Hour),
+			StartTime:     time.Date(0, 1, 1, scheduledStart.Hour(), scheduledStart.Minute(), 0, 0, time.UTC),
+			EndTime:       time.Date(0, 1, 1, 23, 0, 0, 0, time.UTC),
+			EffectiveFrom: nowBangkok.Add(-30 * 24 * time.Hour),
 		},
 	}}
 	uc, signer := newAttendanceUsecase(t, attendance, schedules, devices, &fakeQRNonceRepo{})

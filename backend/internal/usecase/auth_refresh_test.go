@@ -76,6 +76,9 @@ func (f *fakeUserRepo) CompleteRegistration(context.Context, string, string, str
 func (f *fakeUserRepo) CreateSystemOwner(context.Context, string, string) (*domain.User, error) {
 	return nil, nil
 }
+func (f *fakeUserRepo) ListActiveEmployees(context.Context) ([]*domain.User, error) {
+	return nil, nil
+}
 
 // fakeLineClient is unused by Refresh but required by the constructor.
 type fakeLineClient struct{}

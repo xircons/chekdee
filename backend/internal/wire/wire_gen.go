@@ -9,6 +9,7 @@ package wire
 import (
 	"checkdee-backend/internal/config"
 	"checkdee-backend/internal/db"
+	"checkdee-backend/internal/domain"
 	"checkdee-backend/internal/handler"
 	"checkdee-backend/internal/jobs"
 	"checkdee-backend/internal/lineclient"
@@ -17,6 +18,7 @@ import (
 	"checkdee-backend/internal/repository"
 	"checkdee-backend/internal/server"
 	"checkdee-backend/internal/usecase"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/riverqueue/river"
 	"log/slog"
@@ -54,16 +56,23 @@ func InitializeServer(logger *slog.Logger) (*server.Server, error) {
 	attendanceUsecase := usecase.NewAttendanceUsecase(attendanceRepository, workScheduleRepository, kioskDeviceRepository, qrNonceRepository, signer)
 	kioskHandler := handler.NewKioskHandler(kioskDeviceUsecase, attendanceUsecase)
 	attendanceHandler := handler.NewAttendanceHandler(attendanceUsecase)
+	reportRepository := repository.NewReportRepository(pool)
+	reportUsecase := usecase.NewReportUsecase(userRepository, attendanceRepository, workScheduleRepository, reportRepository)
+	reportExportRepository := repository.NewReportExportRepository(pool)
 	nagerclientClient := provideNagerClient()
 	holidaySyncWorker := jobs.NewHolidaySyncWorker(nagerclientClient, holidayRepository)
 	attendanceAutoCloseWorker := jobs.NewAttendanceAutoCloseWorker(attendanceRepository)
-	workers := provideRiverWorkers(holidaySyncWorker, attendanceAutoCloseWorker)
+	reportExportWorker := provideReportExportWorker(reportExportRepository, reportUsecase)
+	workers := provideRiverWorkers(holidaySyncWorker, attendanceAutoCloseWorker, reportExportWorker)
 	v := providePeriodicJobs()
 	riverClient, err := jobs.NewClient(pool, workers, v)
 	if err != nil {
 		return nil, err
 	}
-	serverServer := server.New(configConfig, logger, authHandler, scheduleHandler, holidayHandler, kioskHandler, attendanceHandler, jwtIssuer, kioskDeviceUsecase, riverClient)
+	reportExportRiverClient := provideReportExportRiverClient(riverClient)
+	reportExportUsecase := usecase.NewReportExportUsecase(reportExportRepository, reportExportRiverClient)
+	reportHandler := handler.NewReportHandler(reportUsecase, reportExportUsecase)
+	serverServer := server.New(configConfig, logger, authHandler, scheduleHandler, holidayHandler, kioskHandler, attendanceHandler, reportHandler, jwtIssuer, kioskDeviceUsecase, riverClient)
 	return serverServer, nil
 }
 
@@ -92,11 +101,31 @@ func provideQRSigner(cfg *config.Config) *qrsign.Signer {
 	return qrsign.NewSigner(cfg.QRSigningSecret)
 }
 
+// provideReportExportRiverClient adapts the concrete river client to the
+// small interface usecase.ReportExportUsecase depends on, so that package
+// doesn't need to know about river's generic Client[TTx] type.
+func provideReportExportRiverClient(riverClient *river.Client[pgx.Tx]) usecase.ReportExportRiverClient {
+	return riverClient
+}
+
+// provideReportExportWorker wraps the report usecase's query methods as
+// closures rather than the worker depending on *usecase.ReportUsecase
+// directly — see ReportExportWorker's doc comment for why (avoids an
+// import cycle between usecase and jobs).
+func provideReportExportWorker(exports domain.ReportExportRepository, reports *usecase.ReportUsecase) *jobs.ReportExportWorker {
+	return jobs.NewReportExportWorker(exports, reports.MonthlyReport, reports.DailyLog)
+}
+
 // provideRiverWorkers registers every worker this process runs.
-func provideRiverWorkers(holidaySyncWorker *jobs.HolidaySyncWorker, attendanceAutoCloseWorker *jobs.AttendanceAutoCloseWorker) *river.Workers {
+func provideRiverWorkers(
+	holidaySyncWorker *jobs.HolidaySyncWorker,
+	attendanceAutoCloseWorker *jobs.AttendanceAutoCloseWorker,
+	reportExportWorker *jobs.ReportExportWorker,
+) *river.Workers {
 	workers := jobs.Workers()
 	river.AddWorker(workers, holidaySyncWorker)
 	river.AddWorker(workers, attendanceAutoCloseWorker)
+	river.AddWorker(workers, reportExportWorker)
 	return workers
 }
 
@@ -104,7 +133,9 @@ func provideRiverWorkers(holidaySyncWorker *jobs.HolidaySyncWorker, attendanceAu
 // UpsertSynced's "manual edits win" guard makes re-runs safe, RunOnStart so
 // a fresh deploy doesn't wait a day) and attendance auto-close (hourly —
 // cheap no-op once a day's stragglers are closed, since the underlying
-// UPDATE only ever touches rows still missing a checkout).
+// UPDATE only ever touches rows still missing a checkout). Report export has
+// no periodic schedule — it's only ever triggered on demand via
+// ReportExportUsecase.RequestExport.
 func providePeriodicJobs() []*river.PeriodicJob {
 	return []*river.PeriodicJob{river.NewPeriodicJob(river.PeriodicInterval(24*time.Hour), func() (river.JobArgs, *river.InsertOpts) {
 		return jobs.HolidaySyncArgs{Year: time.Now().Year()}, nil
