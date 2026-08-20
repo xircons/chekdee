@@ -21,8 +21,11 @@ import (
 	"checkdee-backend/internal/usecase"
 )
 
+// provideDB connects the server's own pool through the least-privilege
+// checkdee_app role, not the owner/superuser DatabaseURL — see AppDatabaseURL
+// on config.Config.
 func provideDB(cfg *config.Config) (*pgxpool.Pool, error) {
-	return db.Connect(cfg.DatabaseURL)
+	return db.Connect(cfg.AppDatabaseURL)
 }
 
 func provideLineClient(cfg *config.Config) *lineclient.Client {

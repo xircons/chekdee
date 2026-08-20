@@ -23,7 +23,9 @@ func InitializeServer(logger *slog.Logger) (*server.Server, error) {
 		return nil, err
 	}
 
-	pool, err := db.Connect(cfg.DatabaseURL)
+	// checkdee_app (least-privilege role, see AppDatabaseURL doc comment),
+	// not the owner/superuser DatabaseURL used by migrations/seedowner/tests.
+	pool, err := db.Connect(cfg.AppDatabaseURL)
 	if err != nil {
 		return nil, err
 	}

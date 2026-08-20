@@ -38,6 +38,10 @@ jobs:
       # GitHub Actions already exports CI=true; repository tests turn a missing
       # DATABASE_URL into a hard failure here rather than a silent skip.
       DATABASE_URL: postgres://checkdee:checkdee@localhost:5432/checkdee?sslmode=disable
+      # checkdee_app is created by migration 000005; tests connect as it
+      # directly to prove the INSERT-only restriction on admin_audit_logs
+      # actually holds, not just that the grants were issued.
+      APP_DATABASE_URL: postgres://checkdee_app:checkdee-app-dev-only-change-me@localhost:5432/checkdee?sslmode=disable
 
     steps:
       - uses: actions/checkout@v4

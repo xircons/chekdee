@@ -16,7 +16,13 @@ type Config struct {
 	Port        string
 	Env         string
 	DatabaseURL string
-	JWTSecret   string
+	// AppDatabaseURL is the connection the running server uses for its own
+	// pool. It is a distinct, least-privilege role (checkdee_app, created in
+	// migration 000005) from DatabaseURL, which stays the owner/superuser
+	// connection used by golang-migrate, seedowner, and integration tests —
+	// none of those should run as the restricted app role.
+	AppDatabaseURL string
+	JWTSecret      string
 
 	LineChannelID     string
 	LineChannelSecret string
@@ -31,6 +37,7 @@ func Load() (*Config, error) {
 		Port:              getEnv("PORT", "8080"),
 		Env:               getEnv("APP_ENV", "development"),
 		DatabaseURL:       os.Getenv("DATABASE_URL"),
+		AppDatabaseURL:    os.Getenv("APP_DATABASE_URL"),
 		JWTSecret:         os.Getenv("JWT_SECRET"),
 		LineChannelID:     os.Getenv("LINE_CHANNEL_ID"),
 		LineChannelSecret: os.Getenv("LINE_CHANNEL_SECRET"),
@@ -39,6 +46,7 @@ func Load() (*Config, error) {
 
 	required := map[string]string{
 		"DATABASE_URL":        cfg.DatabaseURL,
+		"APP_DATABASE_URL":    cfg.AppDatabaseURL,
 		"JWT_SECRET":          cfg.JWTSecret,
 		"LINE_CHANNEL_ID":     cfg.LineChannelID,
 		"LINE_CHANNEL_SECRET": cfg.LineChannelSecret,

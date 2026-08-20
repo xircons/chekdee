@@ -22,6 +22,7 @@ services:
       PORT: 8080
       APP_ENV: development
       DATABASE_URL: postgres://checkdee:checkdee@postgres:5432/checkdee?sslmode=disable
+      APP_DATABASE_URL: postgres://checkdee_app:checkdee-app-dev-only-change-me@postgres:5432/checkdee?sslmode=disable
       JWT_SECRET: dev-only-secret-change-me-min-32-bytes-long
     ports:
       - "8080:8080"
