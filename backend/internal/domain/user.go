@@ -31,6 +31,12 @@ var (
 	// the employee-directory API.
 	ErrCannotModifySystemOwnerRole = errors.New("cannot change role to or from system_owner")
 	ErrCannotOffboardSystemOwner   = errors.New("cannot offboard system_owner")
+	// ErrInsufficientRole guards rank: an actor can only change another
+	// user's role, or offboard them, if the actor strictly outranks both
+	// the target's current role and (for a role change) the requested new
+	// role. Also covers the self-action case (an actor never outranks
+	// themselves) — see EmployeeUsecase.UpdateRole/Offboard.
+	ErrInsufficientRole = errors.New("insufficient role to perform this action")
 )
 
 type User struct {

@@ -45,10 +45,10 @@ func (f *fakeUserRepoForReport) List(context.Context, domain.EmployeeListFilter)
 func (f *fakeUserRepoForReport) Update(context.Context, string, *string, *string, *string) (*domain.User, error) {
 	return nil, nil
 }
-func (f *fakeUserRepoForReport) UpdateRole(context.Context, string, domain.Role) (*domain.User, error) {
+func (f *fakeUserRepoForReport) UpdateRole(context.Context, string, domain.Role, *domain.AdminAuditLog) (*domain.User, error) {
 	return nil, nil
 }
-func (f *fakeUserRepoForReport) Offboard(context.Context, string, string, *string) (*domain.User, error) {
+func (f *fakeUserRepoForReport) Offboard(context.Context, string, *string, *domain.AdminAuditLog) (*domain.User, error) {
 	return nil, nil
 }
 

@@ -3,6 +3,7 @@ package handler
 import (
 	"errors"
 	"net/http"
+	"regexp"
 	"strconv"
 	"time"
 
@@ -11,6 +12,11 @@ import (
 	"checkdee-backend/internal/domain"
 	"checkdee-backend/internal/usecase"
 )
+
+// uuidPattern validates team_id query params before they reach SQL — a
+// malformed value bound against team_id::uuid would otherwise surface as
+// an unpredictable driver error instead of a clean 400.
+var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
 type EmployeeHandler struct {
 	employees *usecase.EmployeeUsecase
@@ -95,9 +101,19 @@ func queryInt(c echo.Context, name string) int {
 
 // List is the employee directory. Mounted behind RequireRole.
 func (h *EmployeeHandler) List(c echo.Context) error {
+	teamID := queryStringPtr(c, "team_id")
+	if teamID != nil && !uuidPattern.MatchString(*teamID) {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid team_id")
+	}
+
+	status := queryStringPtr(c, "status")
+	if status != nil && *status != "active" && *status != "offboarded" {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid status, expected active or offboarded")
+	}
+
 	filter := domain.EmployeeListFilter{
-		TeamID:         queryStringPtr(c, "team_id"),
-		OffboardStatus: queryStringPtr(c, "status"),
+		TeamID:         teamID,
+		OffboardStatus: status,
 		Search:         c.QueryParam("search"),
 		Limit:          queryInt(c, "limit"),
 		Offset:         queryInt(c, "offset"),
@@ -156,6 +172,18 @@ type updateEmployeeRoleRequest struct {
 	Role string `json:"role"`
 }
 
+// isKnownRole accepts every domain.Role value, including system_owner —
+// an unknown string (typo, empty, garbage) is a 400 here; a syntactically
+// valid but disallowed value like "system_owner" is left to flow through
+// to the usecase, which already returns a more specific 403 for it.
+func isKnownRole(role string) bool {
+	switch domain.Role(role) {
+	case domain.RoleEmployee, domain.RoleSupervisor, domain.RoleAdmin, domain.RoleSystemOwner:
+		return true
+	}
+	return false
+}
+
 // UpdateRole changes a user's role — a distinct, more sensitive action from
 // Update, with its own audit-log entry. Mounted behind RequireRole.
 func (h *EmployeeHandler) UpdateRole(c echo.Context) error {
@@ -166,11 +194,16 @@ func (h *EmployeeHandler) UpdateRole(c echo.Context) error {
 	if req.Role == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "role is required")
 	}
+	if !isKnownRole(req.Role) {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid role")
+	}
 
 	updated, err := h.employees.UpdateRole(c.Request().Context(), userIDFromContext(c), c.Param("id"), domain.Role(req.Role))
 	switch {
 	case errors.Is(err, domain.ErrCannotModifySystemOwnerRole):
 		return echo.NewHTTPError(http.StatusForbidden, "cannot change role to or from system_owner")
+	case errors.Is(err, domain.ErrInsufficientRole):
+		return echo.NewHTTPError(http.StatusForbidden, "insufficient role to make this change")
 	case errors.Is(err, domain.ErrUserNotFound):
 		return echo.NewHTTPError(http.StatusNotFound, "employee not found")
 	case err != nil:
@@ -199,6 +232,8 @@ func (h *EmployeeHandler) Offboard(c echo.Context) error {
 	switch {
 	case errors.Is(err, domain.ErrCannotOffboardSystemOwner):
 		return echo.NewHTTPError(http.StatusForbidden, "cannot offboard system_owner")
+	case errors.Is(err, domain.ErrInsufficientRole):
+		return echo.NewHTTPError(http.StatusForbidden, "insufficient role to offboard this employee")
 	case errors.Is(err, domain.ErrUserNotFound):
 		return echo.NewHTTPError(http.StatusNotFound, "employee not found")
 	case errors.Is(err, domain.ErrUserAlreadyOffboarded):

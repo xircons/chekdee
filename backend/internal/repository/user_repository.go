@@ -223,13 +223,11 @@ func (r *UserRepository) Update(ctx context.Context, id string, firstName, lastN
 	return u, err
 }
 
-func (r *UserRepository) UpdateRole(ctx context.Context, id string, role domain.Role) (*domain.User, error) {
-	row := r.pool.QueryRow(ctx, `
-		UPDATE users SET role = $2, updated_at = now()
-		WHERE id = $1
-		RETURNING `+userColumns,
-		id, string(role),
-	)
+// getByIDTx is GetByID run inside an already-open transaction, so the
+// disambiguating re-check in UpdateRole/Offboard below sees a consistent
+// view with the UPDATE that just ran in the same tx.
+func getByIDTx(ctx context.Context, tx pgx.Tx, id string) (*domain.User, error) {
+	row := tx.QueryRow(ctx, `SELECT `+userColumns+` FROM users WHERE id = $1`, id)
 	u, err := scanUser(row)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, domain.ErrUserNotFound
@@ -237,24 +235,92 @@ func (r *UserRepository) UpdateRole(ctx context.Context, id string, role domain.
 	return u, err
 }
 
-// Offboard soft-deletes a user — rejects (via ErrUserAlreadyOffboarded) a
-// user who is already offboarded, distinguished from not-found the same
-// way LeaveRequestRepository.Decide distinguishes "not pending anymore"
-// from "doesn't exist".
-func (r *UserRepository) Offboard(ctx context.Context, id, offboardedBy string, reason *string) (*domain.User, error) {
-	row := r.pool.QueryRow(ctx, `
-		UPDATE users
-		SET offboarded_at = now(), offboarded_by = $2, offboarded_reason = $3, updated_at = now()
-		WHERE id = $1 AND offboarded_at IS NULL
+// UpdateRole and the audit log entry commit together or not at all — see
+// the interface doc comment. WHERE role <> 'system_owner' is a DB-level
+// backstop against a race between the usecase's own system_owner check and
+// this write; 0 rows matched is disambiguated below into not-found vs.
+// still-system_owner (there is no third possibility for UpdateRole, unlike
+// Offboard's extra "already offboarded" case).
+func (r *UserRepository) UpdateRole(ctx context.Context, id string, role domain.Role, auditEntry *domain.AdminAuditLog) (*domain.User, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	row := tx.QueryRow(ctx, `
+		UPDATE users SET role = $2, updated_at = now()
+		WHERE id = $1 AND role <> 'system_owner'
 		RETURNING `+userColumns,
-		id, offboardedBy, reason,
+		id, string(role),
 	)
 	u, err := scanUser(row)
 	if errors.Is(err, pgx.ErrNoRows) {
-		if _, getErr := r.GetByID(ctx, id); errors.Is(getErr, domain.ErrUserNotFound) {
-			return nil, domain.ErrUserNotFound
+		existing, getErr := getByIDTx(ctx, tx, id)
+		if getErr != nil {
+			return nil, getErr
 		}
-		return nil, domain.ErrUserAlreadyOffboarded
+		if existing.Role == domain.RoleSystemOwner {
+			return nil, domain.ErrCannotModifySystemOwnerRole
+		}
+		return nil, domain.ErrUserNotFound
 	}
-	return u, err
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err := insertAuditLog(ctx, tx, auditEntry); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return u, nil
+}
+
+// Offboard soft-deletes a user and writes the audit log entry in the same
+// transaction. WHERE role <> 'system_owner' is the same DB-level backstop
+// UpdateRole has; 0 rows matched is disambiguated below into not-found,
+// still-system_owner, or already-offboarded — the same three-way split
+// LeaveRequestRepository.Decide does for "not pending anymore" vs.
+// "doesn't exist".
+func (r *UserRepository) Offboard(ctx context.Context, id string, reason *string, auditEntry *domain.AdminAuditLog) (*domain.User, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	row := tx.QueryRow(ctx, `
+		UPDATE users
+		SET offboarded_at = now(), offboarded_by = $2, offboarded_reason = $3, updated_at = now()
+		WHERE id = $1 AND offboarded_at IS NULL AND role <> 'system_owner'
+		RETURNING `+userColumns,
+		id, auditEntry.ActorID, reason,
+	)
+	u, err := scanUser(row)
+	if errors.Is(err, pgx.ErrNoRows) {
+		existing, getErr := getByIDTx(ctx, tx, id)
+		if getErr != nil {
+			return nil, getErr
+		}
+		if existing.Role == domain.RoleSystemOwner {
+			return nil, domain.ErrCannotOffboardSystemOwner
+		}
+		if existing.OffboardedAt != nil {
+			return nil, domain.ErrUserAlreadyOffboarded
+		}
+		return nil, domain.ErrUserNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err := insertAuditLog(ctx, tx, auditEntry); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return u, nil
 }

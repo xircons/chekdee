@@ -120,8 +120,17 @@ func TestUserRepository_List_FiltersAndPaginates(t *testing.T) {
 
 	// status: default (no filter) sees both; offboarding bob must remove him
 	// from the "active" filter and surface him under "offboarded".
-	_, err = repo.Offboard(ctx, bob.ID, alice.ID, nil)
+	targetType := "user"
+	_, err = repo.Offboard(ctx, bob.ID, nil, &domain.AdminAuditLog{
+		ActorID: alice.ID, Action: "employee.offboard", TargetType: &targetType, TargetID: &bob.ID,
+	})
 	require.NoError(t, err)
+	// admin_audit_logs.actor_id FK-references users(id) RESTRICT — must be
+	// gone before the users cleanup above runs. t.Cleanup is LIFO, so
+	// registering this after guarantees it runs first.
+	t.Cleanup(func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM admin_audit_logs WHERE actor_id = $1", alice.ID)
+	})
 
 	activeStatus := "active"
 	_, total, err = repo.List(ctx, domain.EmployeeListFilter{Search: marker, OffboardStatus: &activeStatus, Limit: 50})
@@ -206,9 +215,88 @@ func TestUserRepository_UpdateRole(t *testing.T) {
 		_, _ = pool.Exec(ctx, "DELETE FROM users WHERE id = $1", created.ID)
 	})
 
-	updated, err := repo.UpdateRole(ctx, created.ID, domain.RoleSupervisor)
+	targetType := "user"
+	updated, err := repo.UpdateRole(ctx, created.ID, domain.RoleSupervisor, &domain.AdminAuditLog{
+		ActorID: created.ID, Action: "employee.update_role", TargetType: &targetType, TargetID: &created.ID,
+	})
 	require.NoError(t, err)
 	require.Equal(t, domain.RoleSupervisor, updated.Role)
+	t.Cleanup(func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM admin_audit_logs WHERE actor_id = $1", created.ID)
+	})
+
+	// The mutation and its audit entry must commit in the same transaction.
+	var auditAction string
+	require.NoError(t, pool.QueryRow(ctx,
+		"SELECT action FROM admin_audit_logs WHERE target_id = $1", created.ID,
+	).Scan(&auditAction))
+	require.Equal(t, "employee.update_role", auditAction)
+}
+
+// TestUserRepository_UpdateRole_RejectsSystemOwnerTarget exercises the
+// WHERE role <> 'system_owner' backstop directly at the repository level
+// (bypassing EmployeeUsecase's own system_owner check entirely), and
+// confirms it's disambiguated from not-found rather than surfacing as a
+// generic "0 rows" error.
+func TestUserRepository_UpdateRole_RejectsSystemOwnerTarget(t *testing.T) {
+	databaseURL := requireDB(t)
+
+	pool, err := pgxpool.New(context.Background(), databaseURL)
+	require.NoError(t, err)
+	t.Cleanup(pool.Close)
+
+	repo := repository.NewUserRepository(pool)
+	ctx := context.Background()
+
+	username := "test-owner-role-" + time.Now().Format("20060102150405.000000000")
+	owner, err := repo.CreateSystemOwner(ctx, username, "irrelevant-hash")
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM users WHERE id = $1", owner.ID)
+	})
+
+	targetType := "user"
+	_, err = repo.UpdateRole(ctx, owner.ID, domain.RoleAdmin, &domain.AdminAuditLog{
+		ActorID: owner.ID, Action: "employee.update_role", TargetType: &targetType, TargetID: &owner.ID,
+	})
+	require.ErrorIs(t, err, domain.ErrCannotModifySystemOwnerRole)
+
+	// No audit row should exist — the backstop must reject before the
+	// transaction ever reaches the audit insert.
+	var count int
+	require.NoError(t, pool.QueryRow(ctx, "SELECT count(*) FROM admin_audit_logs WHERE target_id = $1", owner.ID).Scan(&count))
+	require.Equal(t, 0, count)
+}
+
+// TestUserRepository_Offboard_RejectsSystemOwnerTarget is the Offboard
+// analogue of the UpdateRole test above.
+func TestUserRepository_Offboard_RejectsSystemOwnerTarget(t *testing.T) {
+	databaseURL := requireDB(t)
+
+	pool, err := pgxpool.New(context.Background(), databaseURL)
+	require.NoError(t, err)
+	t.Cleanup(pool.Close)
+
+	repo := repository.NewUserRepository(pool)
+	ctx := context.Background()
+
+	username := "test-owner-offboard-" + time.Now().Format("20060102150405.000000000")
+	owner, err := repo.CreateSystemOwner(ctx, username, "irrelevant-hash")
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM users WHERE id = $1", owner.ID)
+	})
+
+	reason := "should not apply"
+	targetType := "user"
+	_, err = repo.Offboard(ctx, owner.ID, &reason, &domain.AdminAuditLog{
+		ActorID: owner.ID, Action: "employee.offboard", TargetType: &targetType, TargetID: &owner.ID, Reason: &reason,
+	})
+	require.ErrorIs(t, err, domain.ErrCannotOffboardSystemOwner)
+
+	var count int
+	require.NoError(t, pool.QueryRow(ctx, "SELECT count(*) FROM admin_audit_logs WHERE target_id = $1", owner.ID).Scan(&count))
+	require.Equal(t, 0, count)
 }
 
 func TestUserRepository_Offboard_RejectsAlreadyOffboarded(t *testing.T) {
@@ -229,13 +317,20 @@ func TestUserRepository_Offboard_RejectsAlreadyOffboarded(t *testing.T) {
 	})
 
 	reason := "resigned"
-	offboarded, err := repo.Offboard(ctx, created.ID, created.ID, &reason)
+	targetType := "user"
+	auditEntry := &domain.AdminAuditLog{
+		ActorID: created.ID, Action: "employee.offboard", TargetType: &targetType, TargetID: &created.ID, Reason: &reason,
+	}
+	offboarded, err := repo.Offboard(ctx, created.ID, &reason, auditEntry)
 	require.NoError(t, err)
 	require.NotNil(t, offboarded.OffboardedAt)
 	require.Equal(t, created.ID, *offboarded.OffboardedBy)
 	require.Equal(t, "resigned", *offboarded.OffboardedReason)
+	t.Cleanup(func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM admin_audit_logs WHERE actor_id = $1", created.ID)
+	})
 
-	_, err = repo.Offboard(ctx, created.ID, created.ID, &reason)
+	_, err = repo.Offboard(ctx, created.ID, &reason, auditEntry)
 	require.ErrorIs(t, err, domain.ErrUserAlreadyOffboarded)
 }
 
@@ -248,6 +343,9 @@ func TestUserRepository_Offboard_NotFound(t *testing.T) {
 
 	repo := repository.NewUserRepository(pool)
 	reason := "n/a"
-	_, err = repo.Offboard(context.Background(), "00000000-0000-0000-0000-000000000000", "00000000-0000-0000-0000-000000000000", &reason)
+	dummyID := "00000000-0000-0000-0000-000000000000"
+	_, err = repo.Offboard(context.Background(), dummyID, &reason, &domain.AdminAuditLog{
+		ActorID: dummyID, Action: "employee.offboard",
+	})
 	require.ErrorIs(t, err, domain.ErrUserNotFound)
 }
