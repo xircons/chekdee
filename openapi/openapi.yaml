@@ -520,6 +520,27 @@ paths:
         "409":
           description: Not checked in today, or already checked out today
 
+  /attendance/me/today:
+    get:
+      operationId: getMyTodayAttendance
+      summary: >
+        The caller's own attendance record for today (Asia/Bangkok), or null
+        if they haven't checked in yet. Backs the employee home page's
+        "already checked in?" status on page load.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Today's attendance record, or null
+          content:
+            application/json:
+              schema:
+                nullable: true
+                allOf:
+                  - $ref: "#/components/schemas/AttendanceRecord"
+        "401":
+          description: Missing or invalid access token
+
   /reports/monthly:
     get:
       operationId: getMonthlyReport

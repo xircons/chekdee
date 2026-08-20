@@ -16,10 +16,11 @@ type fakeAttendanceRepo struct {
 	checkInCalls int
 	lastStatus   domain.AttendanceStatus
 	cachedByKey  map[string]*domain.AttendanceRecord
+	todayRecord  *domain.AttendanceRecord
 }
 
 func (f *fakeAttendanceRepo) GetForEmployeeDate(context.Context, string, time.Time) (*domain.AttendanceRecord, error) {
-	return nil, nil
+	return f.todayRecord, nil
 }
 func (f *fakeAttendanceRepo) GetByIdempotencyKey(_ context.Context, key string) (*domain.AttendanceRecord, error) {
 	return f.cachedByKey[key], nil
@@ -235,4 +236,23 @@ func TestAttendanceUsecase_CheckIn_RetryWithSameKeyNeverTouchesNonce(t *testing.
 	require.Equal(t, cached, rec)
 	require.Zero(t, nonces.consumeCalls, "a cached-key retry must never attempt to consume the nonce")
 	require.Zero(t, attendance.checkInCalls, "a cached-key retry must never re-run the attendance write")
+}
+
+func TestAttendanceUsecase_Today_NoRecord(t *testing.T) {
+	attendance := &fakeAttendanceRepo{}
+	uc, _ := newAttendanceUsecase(t, attendance, &fakeScheduleRepo{}, &fakeKioskDeviceRepo{}, &fakeQRNonceRepo{})
+
+	rec, err := uc.Today(context.Background(), "employee-1")
+	require.NoError(t, err)
+	require.Nil(t, rec)
+}
+
+func TestAttendanceUsecase_Today_ReturnsExistingRecord(t *testing.T) {
+	existing := &domain.AttendanceRecord{ID: "rec-1", EmployeeID: "employee-1", Status: domain.AttendanceStatusLate}
+	attendance := &fakeAttendanceRepo{todayRecord: existing}
+	uc, _ := newAttendanceUsecase(t, attendance, &fakeScheduleRepo{}, &fakeKioskDeviceRepo{}, &fakeQRNonceRepo{})
+
+	rec, err := uc.Today(context.Background(), "employee-1")
+	require.NoError(t, err)
+	require.Equal(t, existing, rec)
 }

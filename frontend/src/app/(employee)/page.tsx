@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   Calendar,
@@ -23,15 +23,15 @@ import { EmployeePageHeader } from "@/components/employee-page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { listMyLeaveRequests } from "@/lib/api-leave";
 import { useTodayAttendance, type TodayAttendance } from "@/lib/attendance-store";
 import { buildLeaveRequestEmail } from "@/lib/leave-email";
 import {
   getAttendanceForEmployee,
-  getLeaveRequestsForEmployee,
   getWorkScheduleForEmployee,
-  mockEmployees,
   ROLE_LABEL_TH,
   type MockAttendanceRecord,
+  type MockLeaveRequest,
 } from "@/lib/mock-data";
 import { useMe } from "@/lib/session";
 import { cn, formatThaiDate, formatThaiDateRange } from "@/lib/utils";
@@ -163,15 +163,28 @@ export default function EmployeeHome() {
   const [selectedDay, setSelectedDay] = useState<WeekDay | null>(null);
   const [dayModalOpen, setDayModalOpen] = useState(false);
   const [requestModalOpen, setRequestModalOpen] = useState(false);
+  const [myLeaveRequests, setMyLeaveRequests] = useState<MockLeaveRequest[]>([]);
+
+  useEffect(() => {
+    listMyLeaveRequests()
+      .then(setMyLeaveRequests)
+      .catch(() => {
+        // Best-effort: the pending-leave-request preview card just doesn't
+        // show anything if this fails, rather than blocking the rest of
+        // the home page on a non-critical background fetch.
+      });
+  }, []);
 
   const now = new Date();
   const todayIso = toIsoDateLocal(now);
 
-  const mockProfile = mockEmployees.find((e) => e.id === me.id);
   const fullName = [me.first_name, me.last_name].filter(Boolean).join(" ") || me.display_name || "—";
 
   const statusLabel = !today.checkInAt ? "ยังไม่เข้างาน" : !today.checkOutAt ? "เข้างานแล้ว" : "ออกงานแล้ว";
 
+  // Weekly summary still reads mock schedule/attendance history -- there's
+  // no self-scoped attendance-history endpoint yet (/reports/monthly and
+  // /reports/daily-log are admin-only); tracked as PLAN.md Group C #9.
   const workingDays = new Set(getWorkScheduleForEmployee(me.id).map((s) => s.dayOfWeek));
   const attendanceByDate = new Map(getAttendanceForEmployee(me.id).map((r) => [r.workDate, r]));
   const weekDays: WeekDay[] = getWeekDates(now).map((date, i) => {
@@ -191,7 +204,7 @@ export default function EmployeeHome() {
 
   const onTimeStreak = computeOnTimeStreak(weekDays);
 
-  const pendingRequest = getLeaveRequestsForEmployee(me.id)
+  const pendingRequest = myLeaveRequests
     .filter((r) => r.status === "pending")
     .sort((a, b) => a.startDate.localeCompare(b.startDate))[0];
 
@@ -222,12 +235,7 @@ export default function EmployeeHome() {
               {initials(me.first_name, me.last_name, me.display_name)}
             </div>
             <div>
-              <p className="text-lg font-semibold text-foreground">
-                {fullName}
-                {mockProfile?.nickname && (
-                  <span className="font-normal text-muted-foreground"> ({mockProfile.nickname})</span>
-                )}
-              </p>
+              <p className="text-lg font-semibold text-foreground">{fullName}</p>
               <Badge variant="secondary" className="mt-1">
                 {ROLE_LABEL_TH[me.role]}
               </Badge>
