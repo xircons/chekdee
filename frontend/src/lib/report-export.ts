@@ -8,7 +8,7 @@ import {
   type MonthlyReportRow,
 } from "@/lib/mock-data";
 
-const LETTERHEAD = "Checkdee (CAMT, Chiang Mai University)";
+const LETTERHEAD = "Checkdee โดย turnPRO";
 const DISCLAIMER =
   "รายงานนี้เป็นรายงานการเข้างานสำหรับใช้ภายในเท่านั้น ไม่ใช่เอกสารทางการของฝ่ายบุคคลหรือฝ่ายเงินเดือน";
 

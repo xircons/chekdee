@@ -8,7 +8,7 @@ import { AttendanceProvider } from "@/lib/attendance-store";
 import { MeContext, useSession } from "@/lib/session";
 
 // Full-screen routes (camera, etc.) opt out of the tab bar chrome.
-const FULL_SCREEN_ROUTES = ["/check-in/scan"];
+const FULL_SCREEN_ROUTES = ["/check-in/scan", "/check-in/confirm"];
 
 export default function EmployeeLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();

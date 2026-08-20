@@ -8,6 +8,7 @@ import {
   Check,
   Clock,
   FileText,
+  LogOut,
   Minus,
   Moon,
   QrCode,
@@ -89,7 +90,7 @@ const DAY_STATUS_BADGE_VARIANT: Record<DayIconStatus, DetailModalBadgeVariant> =
 
 function formatTime(iso: string | null): string {
   if (!iso) return "--:--";
-  return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return new Date(iso).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" });
 }
 
 function initials(first: string | null, last: string | null, fallback: string | null): string {
@@ -158,7 +159,7 @@ function computeOnTimeStreak(weekDays: WeekDay[]): number {
 
 export default function EmployeeHome() {
   const me = useMe();
-  const { today } = useTodayAttendance();
+  const { today, checkOut } = useTodayAttendance();
   const [selectedDay, setSelectedDay] = useState<WeekDay | null>(null);
   const [dayModalOpen, setDayModalOpen] = useState(false);
   const [requestModalOpen, setRequestModalOpen] = useState(false);
@@ -211,11 +212,11 @@ export default function EmployeeHome() {
     <div className="flex w-full flex-1 flex-col">
       <EmployeePageHeader
         title={`สวัสดี, ${me.first_name ?? me.display_name}`}
-        subtitle="ระบบบันทึกเวลาทำงาน turnPRO, Chiang Mai University"
+        subtitle="Checkdee โดย turnPRO."
       />
 
       <div className="flex flex-1 flex-col gap-5 px-6 pb-6">
-        <Card className="-mt-6 rounded-2xl py-0">
+        <Card className="-mt-6 rounded-2xl border border-slate-200 py-0 ring-0">
           <CardContent className="flex items-center gap-4 p-4">
             <div className="flex size-14 shrink-0 items-center justify-center rounded-full bg-brand-100 text-lg font-semibold text-brand-600">
               {initials(me.first_name, me.last_name, me.display_name)}
@@ -252,20 +253,37 @@ export default function EmployeeHome() {
           })}
         </div>
 
-        <Card className="rounded-2xl py-0">
+        <Card className="rounded-2xl border border-slate-200 py-0 ring-0">
           <CardContent className="flex flex-col gap-4 p-5">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs text-muted-foreground">สถานะวันนี้</p>
                 <p className="text-base font-bold text-foreground">{statusLabel}</p>
               </div>
-              <Link
-                href="/check-in/scan"
-                className="flex size-[90px] shrink-0 flex-col items-center justify-center gap-1 rounded-2xl bg-accent-600 text-white transition-transform active:scale-95"
-              >
-                <QrCode className="size-6" />
-                <span className="text-xs font-semibold">สแกน QR</span>
-              </Link>
+              {!today.checkInAt ? (
+                <Link
+                  href="/check-in/scan"
+                  className="flex size-[90px] shrink-0 flex-col items-center justify-center gap-1 rounded-2xl bg-accent-600 text-white transition-transform active:scale-95"
+                >
+                  <QrCode className="size-6" />
+                  <span className="text-xs font-semibold">สแกน QR</span>
+                </Link>
+              ) : !today.checkOutAt ? (
+                <Button
+                  onClick={() => checkOut()}
+                  className="flex size-[90px] shrink-0 flex-col items-center justify-center gap-1 rounded-2xl bg-accent-600 text-white transition-transform hover:bg-accent-700 active:scale-95"
+                >
+                  <LogOut className="size-6" />
+                  <span className="text-xs font-semibold">ออกงาน</span>
+                </Button>
+              ) : (
+                <div className="flex size-[90px] shrink-0 flex-col items-center justify-center gap-1 rounded-2xl bg-success text-success-foreground">
+                  <Check className="size-6 animate-in zoom-in-50 duration-150" strokeWidth={3} />
+                  <span className="text-xs font-semibold animate-in fade-in-0 zoom-in-50 duration-150">
+                    เสร็จสิ้น
+                  </span>
+                </div>
+              )}
             </div>
 
             <div className="border-t border-border" />
@@ -287,7 +305,7 @@ export default function EmployeeHome() {
           </CardContent>
         </Card>
 
-        <Card className="rounded-2xl py-0">
+        <Card className="rounded-2xl border border-slate-200 py-0 ring-0">
           <CardContent className="flex flex-col gap-4 p-5">
             <div className="flex items-center justify-between gap-2">
               <p className="text-sm font-semibold text-foreground">สรุปการเข้างานสัปดาห์นี้</p>

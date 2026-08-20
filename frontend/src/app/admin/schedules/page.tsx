@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { ACTION_BUTTON_CLASS, FIELD_CLASS } from "@/lib/admin-ui";
 import {
   getActiveEmployees,
   mockWorkSchedules,
@@ -19,10 +20,6 @@ const DAY_LABELS_TH = ["อาทิตย์", "จันทร์", "อัง
 const DAY_ABBR_TH = ["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"];
 const WEEKDAY_COPY_TARGETS = [2, 3, 4, 5]; // Tuesday–Friday, filled from Monday (index 1)
 const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
-
-const FIELD_CLASS =
-  "h-9 rounded-lg border-border bg-muted/40 px-4 text-sm focus-visible:border-brand-600 focus-visible:bg-card focus-visible:ring-brand-600/20";
-const ACTION_BUTTON_CLASS = "h-9 rounded-lg px-5 text-sm focus-visible:ring-brand-600/20";
 
 type DayEntry = { working: boolean; startTime: string; endTime: string };
 type Tab = "individual" | "import";

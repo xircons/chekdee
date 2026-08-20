@@ -35,13 +35,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { ACTION_BUTTON_CLASS, FIELD_CLASS } from "@/lib/admin-ui";
 import { mockHolidays, type MockHoliday } from "@/lib/mock-data";
 import { cn, formatThaiDate, parseIsoDateLocal } from "@/lib/utils";
-
-// Shared field/button sizing used across the admin shell (Employees/Schedules).
-const FIELD_CLASS =
-  "h-9 rounded-lg border-border bg-muted/40 px-4 text-sm focus-visible:border-brand-600 focus-visible:bg-card focus-visible:ring-brand-600/20";
-const ACTION_BUTTON_CLASS = "h-9 rounded-lg px-5 text-sm focus-visible:ring-brand-600/20";
 
 function toIsoDateLocal(date: Date): string {
   const y = date.getFullYear();

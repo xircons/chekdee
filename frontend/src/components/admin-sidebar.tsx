@@ -78,7 +78,7 @@ export function AdminSidebar() {
 
       <Button
         variant="outline"
-        className="mx-3 mb-4 h-11 gap-2 rounded-full"
+        className="mx-3 mb-4 h-11 gap-2 rounded-lg"
         onClick={() => {
           void logout().then(() => router.push("/login"));
         }}

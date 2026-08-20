@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter, Noto_Sans_Thai } from "next/font/google";
+import { IBM_Plex_Sans_Thai, Inter } from "next/font/google";
 import "./globals.css";
 
 const inter = Inter({
@@ -7,7 +7,7 @@ const inter = Inter({
   subsets: ["latin"],
 });
 
-const notoSansThai = Noto_Sans_Thai({
+const ibmPlexSansThai = IBM_Plex_Sans_Thai({
   variable: "--font-thai",
   subsets: ["thai"],
   weight: ["400", "500", "600", "700"],
@@ -22,7 +22,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="th"
-      className={`${inter.variable} ${notoSansThai.variable} h-full antialiased`}
+      className={`${inter.variable} ${ibmPlexSansThai.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
