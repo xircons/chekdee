@@ -520,6 +520,43 @@ paths:
         "409":
           description: Not checked in today, or already checked out today
 
+  /attendance-records/{id}/status:
+    patch:
+      operationId: correctAttendanceStatus
+      summary: >
+        Admin manual correction of a specific attendance record's status.
+        Writes a structured audit row (attendance_corrections) in the same
+        transaction as the update.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CorrectAttendanceStatusRequest"
+      responses:
+        "200":
+          description: Corrected record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceRecord"
+        "400":
+          description: Invalid status, or missing reason
+        "401":
+          description: Missing or invalid access token
+        "403":
+          description: Caller is not admin/supervisor/system_owner
+        "404":
+          description: Attendance record not found
+
   /reports/monthly:
     get:
       operationId: getMonthlyReport
@@ -1306,6 +1343,16 @@ components:
       required: [idempotency_key]
       properties:
         idempotency_key:
+          type: string
+
+    CorrectAttendanceStatusRequest:
+      type: object
+      required: [status, reason]
+      properties:
+        status:
+          type: string
+          enum: [present, late, absent]
+        reason:
           type: string
 
     AttendanceRecord:

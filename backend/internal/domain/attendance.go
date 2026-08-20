@@ -7,9 +7,10 @@ import (
 )
 
 var (
-	ErrAlreadyCheckedIn  = errors.New("employee already checked in today")
-	ErrNotCheckedIn      = errors.New("employee has not checked in today")
-	ErrAlreadyCheckedOut = errors.New("employee already checked out today")
+	ErrAlreadyCheckedIn         = errors.New("employee already checked in today")
+	ErrNotCheckedIn             = errors.New("employee has not checked in today")
+	ErrAlreadyCheckedOut        = errors.New("employee already checked out today")
+	ErrAttendanceRecordNotFound = errors.New("attendance record not found")
 )
 
 // AttendanceStatus uses English codes, not the frontend's Thai labels — see
@@ -38,6 +39,22 @@ type AttendanceRecord struct {
 	UpdatedAt  time.Time
 }
 
+// AttendanceCorrection is the structured old/new-value trail for manual
+// corrections (migration 000003's attendance_corrections table) --
+// separate from the general admin_audit_logs ledger: this one is queryable
+// per-field history for a single attendance record, not a chronological
+// log across all admin action types.
+type AttendanceCorrection struct {
+	ID                 string
+	AttendanceRecordID string
+	CorrectedBy        string
+	FieldName          string
+	OldValue           *string
+	NewValue           *string
+	Reason             *string
+	CreatedAt          time.Time
+}
+
 type AttendanceRepository interface {
 	GetForEmployeeDate(ctx context.Context, employeeID string, workDate time.Time) (*AttendanceRecord, error)
 	// GetByIdempotencyKey looks up a previously-completed check-in/out by
@@ -63,4 +80,14 @@ type AttendanceRepository interface {
 	// ListForMonth returns every attendance record (all employees) with
 	// work_date in [from, to) — the report queries' data source.
 	ListForMonth(ctx context.Context, from, to time.Time) ([]*AttendanceRecord, error)
+	// GetByID looks up a single record directly (not scoped to employee/
+	// date) — admin corrections target a specific record by id. Returns
+	// ErrAttendanceRecordNotFound if it doesn't exist.
+	GetByID(ctx context.Context, id string) (*AttendanceRecord, error)
+	// CorrectStatus updates a record's status and writes a structured
+	// attendance_corrections row in the same transaction. Only status is
+	// correctable for now — the only field the admin dashboard's
+	// correction dialog actually edits; the table's field_name column
+	// leaves room for more later without a schema change.
+	CorrectStatus(ctx context.Context, attendanceRecordID, correctedBy string, newStatus AttendanceStatus, reason string) (*AttendanceRecord, error)
 }

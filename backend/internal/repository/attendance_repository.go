@@ -243,6 +243,61 @@ func (r *AttendanceRepository) AutoCloseOpenRecords(ctx context.Context, cutoff 
 	return out, rows.Err()
 }
 
+func (r *AttendanceRepository) GetByID(ctx context.Context, id string) (*domain.AttendanceRecord, error) {
+	row := r.pool.QueryRow(ctx, `SELECT `+attendanceColumns+` FROM attendance_records WHERE id = $1`, id)
+	a, err := scanAttendance(row)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, domain.ErrAttendanceRecordNotFound
+	}
+	return a, err
+}
+
+// CorrectStatus locks the target row, updates its status, and inserts the
+// attendance_corrections audit row in one transaction -- the update and its
+// audit trail must never happen independently of each other.
+func (r *AttendanceRepository) CorrectStatus(ctx context.Context, attendanceRecordID, correctedBy string, newStatus domain.AttendanceStatus, reason string) (*domain.AttendanceRecord, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	row := tx.QueryRow(ctx, `SELECT `+attendanceColumns+` FROM attendance_records WHERE id = $1 FOR UPDATE`, attendanceRecordID)
+	existing, err := scanAttendance(row)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, domain.ErrAttendanceRecordNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	oldStatus := string(existing.Status)
+
+	updateRow := tx.QueryRow(ctx, `
+		UPDATE attendance_records SET status = $1, updated_at = now()
+		WHERE id = $2
+		RETURNING `+attendanceColumns,
+		newStatus, attendanceRecordID,
+	)
+	updated, err := scanAttendance(updateRow)
+	if err != nil {
+		return nil, err
+	}
+
+	newStatusStr := string(newStatus)
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO attendance_corrections (attendance_record_id, corrected_by, field_name, old_value, new_value, reason)
+		VALUES ($1, $2, 'status', $3, $4, $5)`,
+		attendanceRecordID, correctedBy, oldStatus, newStatusStr, reason,
+	); err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return updated, nil
+}
+
 // ListForMonth returns every attendance record (all employees) with
 // work_date in [from, to) — the report queries' data source.
 func (r *AttendanceRepository) ListForMonth(ctx context.Context, from, to time.Time) ([]*domain.AttendanceRecord, error) {

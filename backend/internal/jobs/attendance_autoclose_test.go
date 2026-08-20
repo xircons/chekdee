@@ -33,6 +33,12 @@ func (f *fakeAttendanceRepoForAutoClose) CheckOut(context.Context, string, time.
 func (f *fakeAttendanceRepoForAutoClose) ListForMonth(context.Context, time.Time, time.Time) ([]*domain.AttendanceRecord, error) {
 	return nil, nil
 }
+func (f *fakeAttendanceRepoForAutoClose) GetByID(context.Context, string) (*domain.AttendanceRecord, error) {
+	return nil, nil
+}
+func (f *fakeAttendanceRepoForAutoClose) CorrectStatus(context.Context, string, string, domain.AttendanceStatus, string) (*domain.AttendanceRecord, error) {
+	return nil, nil
+}
 func (f *fakeAttendanceRepoForAutoClose) AutoCloseOpenRecords(context.Context, time.Time) ([]*domain.AttendanceRecord, error) {
 	return f.closed, f.err
 }

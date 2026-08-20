@@ -225,3 +225,64 @@ func TestAttendanceRepository_AutoCloseOpenRecords(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, closedAgain)
 }
+
+func TestAttendanceRepository_CorrectStatus_UpdatesRecordAndWritesAuditRow(t *testing.T) {
+	databaseURL := requireDB(t)
+	pool, err := pgxpool.New(context.Background(), databaseURL)
+	require.NoError(t, err)
+	t.Cleanup(pool.Close)
+
+	employee := newTestEmployee(t, pool, "test-attendance-correct")
+	admin := newTestEmployee(t, pool, "test-attendance-correct-admin")
+	attendance := repository.NewAttendanceRepository(pool)
+	ctx := context.Background()
+
+	workDate := mustTime(t, "2006-01-02", "2026-06-01")
+	checkInAt := workDate.Add(9 * time.Hour)
+	rec, err := attendance.CheckIn(ctx, employee.ID, workDate, checkInAt, domain.AttendanceStatusPresent, "correct-key")
+	require.NoError(t, err)
+	require.Equal(t, domain.AttendanceStatusPresent, rec.Status)
+
+	// Cleanup order matters: attendance_corrections.attendance_record_id
+	// is ON DELETE RESTRICT, so it must be cleared before newTestEmployee's
+	// own cleanup (registered before this one, so it runs after, per
+	// t.Cleanup's LIFO order) deletes attendance_records.
+	t.Cleanup(func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM attendance_corrections WHERE attendance_record_id = $1", rec.ID)
+	})
+
+	corrected, err := attendance.CorrectStatus(ctx, rec.ID, admin.ID, domain.AttendanceStatusAbsent, "employee called in sick, forgot to submit leave")
+	require.NoError(t, err)
+	require.Equal(t, domain.AttendanceStatusAbsent, corrected.Status)
+	require.Equal(t, rec.ID, corrected.ID)
+
+	fetched, err := attendance.GetByID(ctx, rec.ID)
+	require.NoError(t, err)
+	require.Equal(t, domain.AttendanceStatusAbsent, fetched.Status, "the update must actually persist, not just be reflected in the return value")
+
+	var fieldName, oldValue, newValue, reason, correctedBy string
+	err = pool.QueryRow(ctx, `
+		SELECT field_name, old_value, new_value, reason, corrected_by::text
+		FROM attendance_corrections WHERE attendance_record_id = $1`,
+		rec.ID,
+	).Scan(&fieldName, &oldValue, &newValue, &reason, &correctedBy)
+	require.NoError(t, err)
+	require.Equal(t, "status", fieldName)
+	require.Equal(t, "present", oldValue)
+	require.Equal(t, "absent", newValue)
+	require.Equal(t, "employee called in sick, forgot to submit leave", reason)
+	require.Equal(t, admin.ID, correctedBy)
+}
+
+func TestAttendanceRepository_CorrectStatus_NotFound(t *testing.T) {
+	databaseURL := requireDB(t)
+	pool, err := pgxpool.New(context.Background(), databaseURL)
+	require.NoError(t, err)
+	t.Cleanup(pool.Close)
+
+	attendance := repository.NewAttendanceRepository(pool)
+	admin := newTestEmployee(t, pool, "test-attendance-correct-notfound")
+
+	_, err = attendance.CorrectStatus(context.Background(), "00000000-0000-0000-0000-000000000000", admin.ID, domain.AttendanceStatusAbsent, "reason")
+	require.ErrorIs(t, err, domain.ErrAttendanceRecordNotFound)
+}

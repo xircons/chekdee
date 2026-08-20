@@ -74,6 +74,12 @@ func (f *fakeAttendanceRepoForReport) AutoCloseOpenRecords(context.Context, time
 func (f *fakeAttendanceRepoForReport) ListForMonth(context.Context, time.Time, time.Time) ([]*domain.AttendanceRecord, error) {
 	return f.records, nil
 }
+func (f *fakeAttendanceRepoForReport) GetByID(context.Context, string) (*domain.AttendanceRecord, error) {
+	return nil, nil
+}
+func (f *fakeAttendanceRepoForReport) CorrectStatus(context.Context, string, string, domain.AttendanceStatus, string) (*domain.AttendanceRecord, error) {
+	return nil, nil
+}
 
 type fakeScheduleRepoForReport struct {
 	schedules map[string][]*domain.WorkSchedule

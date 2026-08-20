@@ -117,6 +117,14 @@ func (a *AttendanceUsecase) CheckOut(ctx context.Context, employeeID, idempotenc
 	return a.attendance.CheckOut(ctx, employeeID, workDate, now, idempotencyKey)
 }
 
+// CorrectStatus is the admin manual-correction action — thin pass-through
+// to the repository, which handles the update + audit-row atomicity.
+// Authorization (admin/supervisor/system_owner only) is the handler's
+// RequireRole middleware, not this usecase's job.
+func (a *AttendanceUsecase) CorrectStatus(ctx context.Context, attendanceRecordID, correctedBy string, newStatus domain.AttendanceStatus, reason string) (*domain.AttendanceRecord, error) {
+	return a.attendance.CorrectStatus(ctx, attendanceRecordID, correctedBy, newStatus, reason)
+}
+
 // computeStatus applies the no-grace-period rule: 0 minutes late or earlier
 // is present, up to 60 minutes late is late, over 60 (or no matching
 // schedule at all, so lateness can't be judged) falls back — see
