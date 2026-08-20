@@ -83,26 +83,28 @@ repository/usecase/handler consumes it yet**, see Group C #8) and
   sank this rename twice before, different mechanism); merged current `dev`
   into it to fix, re-verified, re-pushed. Awaiting merge.
 
-### Confirmed still-mock (the real backlog — grep + handler.go cross-check agrees with original audit)
+### Mock-data status as of the original audit (superseded by "Progress this session" above for what's since shipped)
 
-`page.tsx` files still importing real (non-type-only) helpers from
-`@/lib/mock-data`:
+`page.tsx` files that were still importing real (non-type-only) helpers
+from `@/lib/mock-data` at audit time — items 1-7 below are now fixed on
+their respective open PRs (see "Progress this session"); this list is kept
+as the historical record of what the audit found, not current state:
 
-- `admin/page.tsx` — `getActiveEmployees`, `getPendingLeaveRequests`,
-  `getSimulatedRoster`, `mockWorkSchedules`, `mockLeaveRequests`.
-- `admin/schedules/page.tsx` — `getActiveEmployees`, `mockWorkSchedules`.
-- `admin/employees/page.tsx` — `getMonthlyAttendanceStats` (heatmap only;
-  list/edit/offboard already real).
-- `(employee)/page.tsx` — `getAttendanceForEmployee`,
-  `getWorkScheduleForEmployee`, `mockEmployees`.
-- `(employee)/leave/page.tsx` — `getYearOfStudy`, `mockEmployees` (letter
-  template only; submit/list already real).
-- `(employee)/profile/page.tsx` — `mockEmployees`.
-- `kiosk/lobby-tv/page.tsx` — `getActiveEmployees`, `getEmployeesOnLeave`,
-  `getSimulatedRoster`, `mockWorkSchedules`, `MOCK_MONTHLY_ON_TIME`.
+- `admin/page.tsx` — fixed, PR #30.
+- `admin/schedules/page.tsx` — fixed, PR #31.
+- `admin/employees/page.tsx` (`getMonthlyAttendanceStats`, heatmap only) —
+  fixed, PR #33.
+- `(employee)/page.tsx` (`mockEmployees` nickname, pending-leave preview) —
+  fixed, PR #34. `getAttendanceForEmployee`/`getWorkScheduleForEmployee`
+  (weekly icons) still mock — blocked on item 9.
+- `(employee)/leave/page.tsx` (`getYearOfStudy`, `mockEmployees`) — fixed,
+  PR #35.
+- `(employee)/profile/page.tsx` (`mockEmployees`) — fixed, PR #32.
+- `kiosk/lobby-tv/page.tsx` — fixed, PR #36 (real UI redesign, see item 7
+  below).
 
 Three files import mock-data but only for **types**, already fully wired to
-real `lib/api-*.ts` calls — not part of the backlog: `admin/holidays/
+real `lib/api-*.ts` calls — never part of the backlog: `admin/holidays/
 page.tsx` (`MockHoliday` type), `admin/leave-requests/page.tsx`
 (`LeaveStatus`/`MockLeaveRequest` types), `(employee)/schedule/page.tsx`
 (`MockHoliday` type).
@@ -124,8 +126,24 @@ of truth for what's actually done vs still open:
 - PR #30 `feature/admin-dashboard` — item 1, admin dashboard.
 - PR #31 `feature/admin-schedules` — item 2, admin schedules.
 - PR #32 `feature/employee-profile` — item 3, employee profile.
+- PR #33 `feature/frontend-admin-employees` — item 4, admin/employees
+  detail-dialog heatmap + monthly stats.
+- PR #34 `feature/backend-attendance-today` — item 5, new
+  `GET /attendance/me/today` + employee home page hydration.
+- PR #35 `feature/employee-leave` — item 6, leave-letter template
+  correctness fix.
+- PR #36 `feature/kiosk-lobby-tv` — item 7, new `GET /kiosk/roster-stats` +
+  lobby-tv redesigned around aggregate-only data (real UI change, not just
+  a data swap — see the PR body).
 - (item 10, register page styling, needed no new work — already merged as
   PR #27 before this session started.)
+
+Three PRs independently added the same `getDailyLog`/`DailyLogRow` pair to
+`lib/api-reports.ts` (#30, #33) since they were opened in parallel off
+`dev` before either merged — this is expected with this session's
+one-branch-per-item approach and will reconcile to one copy naturally once
+both land; not a conflict to pre-resolve. Same story for `student_id`/
+`phone_number` on the `Me` type in `lib/session.ts` (#32, #35).
 
 ## Backlog
 
@@ -147,38 +165,38 @@ of truth for what's actually done vs still open:
    backend already sent them). Dropped `studentGen` display: no
    self-scoped endpoint returns it (`/auth/me` doesn't, `GET
    /employees/:id` does but is admin-only) — real minor gap, not faked.
-4. **`admin/employees/page.tsx` detail dialog** — wire the heatmap/
-   monthly-stats block to `GET /reports/daily-log?month=X&employee_id=Y`
-   instead of `getMonthlyAttendanceStats`. Verify response shape actually
-   fits `EmployeeAttendanceHeatmap`'s props before assuming drop-in; adapt
-   if not. (studentId/phoneNumber fields on this same page's edit form and
-   detail view were wired this session, committed on
-   `feature/frontend-admin-employees`.)
+4. **`admin/employees/page.tsx` detail dialog** — **done, PR #33.** Heatmap
+   now reads `GET /reports/daily-log` (per-employee) + `GET
+   /schedules/:employeeId` + `GET /leave-requests` (filtered client-side) +
+   `GET /holidays`. The three stat blocks (hours/late/absent) come from
+   `GET /reports/monthly` instead — matches the backend's worked-hours
+   calculation exactly rather than reimplementing it client-side.
 
 ### Group B — needs new backend work first
 
-5. **New `GET /attendance/me/today`** (exact path is an implementation
-   call, follow `handler.go` naming conventions) — authenticated employee's
-   own `attendance_records` row for today, or null. Fixes a real bug:
-   `(employee)/page.tsx`'s "checked in today?" comes from
-   `lib/attendance-store.tsx`, an in-memory-only stub that resets on
-   reload (file's own comment admits this) — check in via QR, reload, and
-   it shows "not checked in" despite the backend having it recorded. Wire
-   the home page to hydrate from this endpoint on load; keep
-   `attendance-store` only as the optimistic post-check-in update.
-6. **`(employee)/leave/page.tsx`** — the auto-generated leave-letter
-   template pulls student_id/phone_number/year via
-   `mockEmployees.find(e => e.id === me.id)` instead of real `/auth/me`
-   data. Correctness bug (a real letter could contain fake info), not just
-   cleanliness.
-7. **`kiosk/lobby-tv/page.tsx` roster/stats section** — mock, and the kiosk
-   authenticates via device token (`RequireKioskDevice`), not a user JWT,
-   so it can't call the role-gated `GET /reports/daily-log`. Plan: new
-   narrowly-scoped `GET /kiosk/roster-stats` behind `RequireKioskDevice`,
-   returning only aggregate/non-PII counts (checked-in count, on-leave
-   count, etc — no per-employee detail). Do **not** loosen
-   `/reports/daily-log`'s auth to accept device tokens — it returns
-   per-employee names/times, wrong for a public display.
+5. **New `GET /attendance/me/today`** — **done, PR #34.** Thin usecase
+   method over the already-existing `GetForEmployeeDate` repo call.
+   `AttendanceProvider` (`lib/attendance-store.tsx`) now hydrates from it on
+   mount; `checkIn()`/`checkOut()` stay as the optimistic local update.
+   Also fixed while in that file: dropped the mock `nickname` lookup, wired
+   the pending-leave-request preview to real `GET /leave-requests/me`
+   (already existed). Weekly attendance-history icons are still mock —
+   blocked on item 9 below, not this PR's scope.
+6. **`(employee)/leave/page.tsx`** — **done, PR #35.** `student_id`/
+   `phone_number` now from `me` (same `Me`-type addition as PR #32). Year of
+   study stays `"-"` — same real gap as item 3 (`student_gen` isn't exposed
+   by any self-scoped endpoint).
+7. **`kiosk/lobby-tv/page.tsx` roster/stats section** — **done, PR #36.**
+   New `GET /kiosk/roster-stats` (device-token auth, aggregate-only:
+   `total_active`/`checked_in`/`late`/`absent`/`on_leave`, no employee
+   identity). Did **not** loosen `/reports/daily-log`'s auth. This forced a
+   real UI redesign, not just a data swap: the old page's bubble chart
+   (`AdminBubbleChart`, one bubble per employee) and the named "recent
+   check-ins" list are both individual-level and can't be backed by an
+   aggregate-only endpoint — removed, replaced with an aggregate stat panel
+   (checked-in/total + late/absent/on-leave tiles). `AdminBubbleChart` is
+   left in the codebase, now unused — repurpose-or-remove is a product call
+   for later, not decided here.
 
 ### Group C — previously known gaps, still open
 
