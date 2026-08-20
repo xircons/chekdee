@@ -16,8 +16,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { approveLeaveRequest, listAllLeaveRequests, rejectLeaveRequest } from "@/lib/api-leave";
+import { getEmployeesByIds, type Employee } from "@/lib/api-employees";
 import { buildLeaveRequestEmail } from "@/lib/leave-email";
-import { mockEmployees, type LeaveStatus, type MockLeaveRequest } from "@/lib/mock-data";
+import { type LeaveStatus, type MockLeaveRequest } from "@/lib/mock-data";
 import { cn, formatThaiDate, formatThaiDateRange } from "@/lib/utils";
 
 const statusBadgeVariant: Record<LeaveStatus, "warning" | "success" | "danger"> = {
@@ -32,13 +33,28 @@ const statusLabelTh: Record<LeaveStatus, string> = {
   rejected: "ปฏิเสธแล้ว",
 };
 
-function findEmployee(employeeId: string) {
-  return mockEmployees.find((e) => e.id === employeeId);
-}
-
-function employeeName(employeeId: string): string {
-  const employee = findEmployee(employeeId);
-  return employee ? `${employee.firstName} ${employee.lastName}` : employeeId;
+// Never returns null silently: while the lookup is still in flight this
+// shows a loading placeholder, and if the lookup fails or the id wasn't
+// found this falls back to the raw id with a visible "name unavailable"
+// marker — never a blank cell, and never a stale mock name.
+function employeeDisplayName(
+  employeeId: string,
+  employeesById: Map<string, Employee>,
+  employeesLoading: boolean
+): { text: string; unavailable: boolean } {
+  const employee = employeesById.get(employeeId);
+  if (employee) {
+    const name = [employee.firstName, employee.lastName].filter(Boolean).join(" ");
+    if (name) return { text: name, unavailable: false };
+    // Found the employee but they have no name yet (registration not
+    // completed) — LINE display name is the next-best identifier, still not
+    // a lookup failure.
+    if (employee.lineDisplayName) return { text: employee.lineDisplayName, unavailable: false };
+  }
+  if (employeesLoading) {
+    return { text: "กำลังโหลด…", unavailable: false };
+  }
+  return { text: employeeId, unavailable: true };
 }
 
 function LeaveRequestTable({
@@ -46,11 +62,15 @@ function LeaveRequestTable({
   showActions,
   onRowClick,
   onDecide,
+  employeesById,
+  employeesLoading,
 }: {
   requests: MockLeaveRequest[];
   showActions: boolean;
   onRowClick: (request: MockLeaveRequest) => void;
   onDecide: (id: string, status: "approved" | "rejected") => void;
+  employeesById: Map<string, Employee>;
+  employeesLoading: boolean;
 }) {
   // table-fixed + matching widths on every column, so the รอดำเนินการ and
   // ดำเนินการแล้ว tables (two separate <table> elements) line up column-for-
@@ -69,65 +89,78 @@ function LeaveRequestTable({
         </TableRow>
       </TableHeader>
       <TableBody>
-        {requests.map((request) => (
-          <TableRow key={request.id}>
-            <TableCell className="truncate font-medium text-foreground">
-              {employeeName(request.employeeId)}
-            </TableCell>
-            <TableCell className="text-muted-foreground">
-              {request.leaveType ?? "-"}
-            </TableCell>
-            <TableCell>{formatThaiDateRange(request.startDate, request.endDate)}</TableCell>
-            <TableCell className="text-muted-foreground">
-              {formatThaiDate(new Date(request.submittedAt))}
-            </TableCell>
-            <TableCell>
-              <Badge variant={statusBadgeVariant[request.status]}>
-                {statusLabelTh[request.status]}
-              </Badge>
-            </TableCell>
-            <TableCell>
-              {/* Two grid slots instead of one centered flex group: the 1fr
-                  slot for อนุมัติ/ปฏิเสธ keeps the same width whether it's
-                  populated or empty (already-handled rows), and the auto
-                  slot pins the eye icon to the same x on every row — a
-                  centered flex group would shift the eye left/right per row
-                  depending on whether the other buttons render. */}
-              <div className="grid grid-cols-[1fr_auto] items-center gap-1.5">
-                <div className="flex items-center justify-end gap-1.5">
-                  {showActions && (
-                    <>
-                      <Button
-                        size="sm"
-                        className="cursor-pointer bg-success-foreground text-white hover:bg-success-foreground/90"
-                        onClick={() => onDecide(request.id, "approved")}
-                      >
-                        อนุมัติ
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="cursor-pointer"
-                        onClick={() => onDecide(request.id, "rejected")}
-                      >
-                        ปฏิเสธ
-                      </Button>
-                    </>
-                  )}
+        {requests.map((request) => {
+          const { text: employeeText, unavailable } = employeeDisplayName(
+            request.employeeId,
+            employeesById,
+            employeesLoading
+          );
+          return (
+            <TableRow key={request.id}>
+              <TableCell className="truncate font-medium text-foreground">
+                {unavailable ? (
+                  <span title="ไม่สามารถโหลดชื่อพนักงานได้" className="text-muted-foreground">
+                    {employeeText} <span className="text-xs">(ไม่พบชื่อ)</span>
+                  </span>
+                ) : (
+                  employeeText
+                )}
+              </TableCell>
+              <TableCell className="text-muted-foreground">
+                {request.leaveType ?? "-"}
+              </TableCell>
+              <TableCell>{formatThaiDateRange(request.startDate, request.endDate)}</TableCell>
+              <TableCell className="text-muted-foreground">
+                {formatThaiDate(new Date(request.submittedAt))}
+              </TableCell>
+              <TableCell>
+                <Badge variant={statusBadgeVariant[request.status]}>
+                  {statusLabelTh[request.status]}
+                </Badge>
+              </TableCell>
+              <TableCell>
+                {/* Two grid slots instead of one centered flex group: the 1fr
+                    slot for อนุมัติ/ปฏิเสธ keeps the same width whether it's
+                    populated or empty (already-handled rows), and the auto
+                    slot pins the eye icon to the same x on every row — a
+                    centered flex group would shift the eye left/right per row
+                    depending on whether the other buttons render. */}
+                <div className="grid grid-cols-[1fr_auto] items-center gap-1.5">
+                  <div className="flex items-center justify-end gap-1.5">
+                    {showActions && (
+                      <>
+                        <Button
+                          size="sm"
+                          className="cursor-pointer bg-success-foreground text-white hover:bg-success-foreground/90"
+                          onClick={() => onDecide(request.id, "approved")}
+                        >
+                          อนุมัติ
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="cursor-pointer"
+                          onClick={() => onDecide(request.id, "rejected")}
+                        >
+                          ปฏิเสธ
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                  <Button
+                    size="icon-sm"
+                    variant="ghost"
+                    aria-label="ดูรายละเอียด"
+                    className="text-muted-foreground"
+                    onClick={() => onRowClick(request)}
+                  >
+                    <Eye />
+                  </Button>
                 </div>
-                <Button
-                  size="icon-sm"
-                  variant="ghost"
-                  aria-label="ดูรายละเอียด"
-                  className="text-muted-foreground"
-                  onClick={() => onRowClick(request)}
-                >
-                  <Eye />
-                </Button>
-              </div>
-            </TableCell>
-          </TableRow>
-        ))}
+              </TableCell>
+            </TableRow>
+          );
+        })}
       </TableBody>
     </Table>
   );
@@ -141,9 +174,26 @@ export default function LeaveRequestsPage() {
   const [selectedRequest, setSelectedRequest] = useState<MockLeaveRequest | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
 
+  const [employeesById, setEmployeesById] = useState<Map<string, Employee>>(new Map());
+  const [employeesLoading, setEmployeesLoading] = useState(false);
+
   useEffect(() => {
     listAllLeaveRequests()
-      .then((rows) => setRequests(rows))
+      .then((rows) => {
+        setRequests(rows);
+        // Resolves every distinct employee referenced by this load in one
+        // batch (see getEmployeesByIds — there's no batch-by-ids endpoint
+        // yet, so this is N parallel single-employee lookups deduplicated
+        // by id). Chained here rather than a separate effect reacting to
+        // `requests`: employeeId never changes for a request once loaded
+        // (decide() below only ever updates status/decided fields), so
+        // there's nothing to re-resolve after an approve/reject.
+        const ids = rows.map((r) => r.employeeId);
+        setEmployeesLoading(true);
+        getEmployeesByIds(ids)
+          .then((resolved) => setEmployeesById(resolved))
+          .finally(() => setEmployeesLoading(false));
+      })
       .catch((err: Error) => setLoadError(err.message))
       .finally(() => setLoading(false));
   }, []);
@@ -171,7 +221,9 @@ export default function LeaveRequestsPage() {
   const pendingRequests = sortedRequests.filter((r) => r.status === "pending");
   const handledRequests = sortedRequests.filter((r) => r.status !== "pending");
 
-  const selectedEmployee = selectedRequest ? findEmployee(selectedRequest.employeeId) : undefined;
+  const selectedEmployeeName = selectedRequest
+    ? employeeDisplayName(selectedRequest.employeeId, employeesById, employeesLoading).text
+    : "";
   // The formal-letter body is a fixed template the employee fills in
   // themselves (see lib/leave-email.ts) — only the auto-generated subject
   // (name + dates) is meaningful here. Attachments are ephemeral local
@@ -179,7 +231,7 @@ export default function LeaveRequestsPage() {
   // model, so there's nothing to surface for them on the admin side yet.
   const selectedSubject = selectedRequest
     ? buildLeaveRequestEmail({
-        employeeName: selectedEmployee ? `${selectedEmployee.firstName} ${selectedEmployee.lastName}` : selectedRequest.employeeId,
+        employeeName: selectedEmployeeName,
         yearOfStudy: "",
         studentId: "",
         phoneNumber: "",
@@ -228,6 +280,8 @@ export default function LeaveRequestsPage() {
                   showActions
                   onRowClick={openDetail}
                   onDecide={decide}
+                  employeesById={employeesById}
+                  employeesLoading={employeesLoading}
                 />
               </div>
             </>
@@ -249,6 +303,8 @@ export default function LeaveRequestsPage() {
                   showActions={false}
                   onRowClick={openDetail}
                   onDecide={decide}
+                  employeesById={employeesById}
+                  employeesLoading={employeesLoading}
                 />
               </div>
             </>
