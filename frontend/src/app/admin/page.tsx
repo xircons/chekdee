@@ -27,12 +27,26 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { ACTION_BUTTON_CLASS, FIELD_CLASS } from "@/lib/admin-ui";
+import { correctAttendanceStatus } from "@/lib/api-attendance";
 import { type Employee, listEmployees } from "@/lib/api-employees";
 import { approveLeaveRequest, listAllLeaveRequests, rejectLeaveRequest } from "@/lib/api-leave";
 import { type DailyLogRow, getDailyLog } from "@/lib/api-reports";
-import type { AttendanceStatus, MockAttendanceCorrection, MockLeaveRequest } from "@/lib/mock-data";
+import type { AttendanceStatus, MockLeaveRequest } from "@/lib/mock-data";
 import { useMe } from "@/lib/session";
 import { cn, formatThaiDateWithDay } from "@/lib/utils";
+
+// The Thai-literal AttendanceStatus this page uses everywhere else ->
+// the backend's English enum PATCH /attendance-records/:id/status expects.
+function toBackendStatus(status: AttendanceStatus): "present" | "late" | "absent" {
+  switch (status) {
+    case "present":
+      return "present";
+    case "สาย":
+      return "late";
+    case "ขาด":
+      return "absent";
+  }
+}
 
 // The backend's English status enum only ever resolves to one of these
 // three at check-in time ("pending" is a DB-default sentinel CheckIn never
@@ -177,6 +191,7 @@ function CorrectionFormFields({
 // simply haven't checked in yet (the backend has no "no-show" status; ขาด
 // here always means "checked in 60+ minutes late", per ComputeCheckInStatus).
 type RosterEntry = {
+  attendanceRecordId: string;
   employee: Employee;
   checkInAt: Date;
   status: AttendanceStatus;
@@ -273,12 +288,8 @@ export default function AdminDashboard() {
   const [todayLog, setTodayLog] = useState<DailyLogRow[]>([]);
   const [requests, setRequests] = useState<MockLeaveRequest[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
-  // No backend endpoint exists yet for manual attendance corrections (see
-  // PLAN.md Group C #8) -- kept as local, session-only state exactly like
-  // before, so this dialog still works but a correction doesn't survive a
-  // reload until that endpoint lands.
-  const [corrections, setCorrections] = useState<MockAttendanceCorrection[]>([]);
   const [correctionTarget, setCorrectionTarget] = useState<RosterEntry | null>(null);
+  const [correctionError, setCorrectionError] = useState<string | null>(null);
 
   // Paused while the correction dialog is open, so a row's status can't
   // shift (or the entry vanish out of the list entirely) out from under the
@@ -317,18 +328,13 @@ export default function AdminDashboard() {
         const employee = employeesById.get(row.employeeId);
         const status = toAttendanceStatus(row.status);
         if (!employee || !status || !row.checkInAt) return [];
-        return [{ employee, checkInAt: new Date(row.checkInAt), status }];
+        return [{ attendanceRecordId: row.id, employee, checkInAt: new Date(row.checkInAt), status }];
       }),
     [todayLog, employeesById]
   );
 
-  const effectiveStatus = (employeeId: string, computed: AttendanceStatus | null): AttendanceStatus | null => {
-    const override = corrections.find((c) => c.employeeId === employeeId && c.date === todayIso);
-    return override ? override.newStatus : computed;
-  };
-
-  const absentToday = roster.filter((r) => effectiveStatus(r.employee.id, r.status) === "ขาด");
-  const lateToday = roster.filter((r) => effectiveStatus(r.employee.id, r.status) === "สาย");
+  const absentToday = roster.filter((r) => r.status === "ขาด");
+  const lateToday = roster.filter((r) => r.status === "สาย");
   const attendanceIssues: AttendanceIssue[] = [
     ...absentToday.map((entry) => ({ entry, status: "ขาด" as const })),
     ...lateToday.map((entry) => ({ entry, status: "สาย" as const })),
@@ -349,23 +355,28 @@ export default function AdminDashboard() {
     }
   };
 
-  const submitCorrection = (values: CorrectionForm) => {
+  const submitCorrection = async (values: CorrectionForm) => {
     if (!correctionTarget) return;
-    const previousStatus = effectiveStatus(correctionTarget.employee.id, correctionTarget.status);
-    setCorrections((prev) => [
-      ...prev,
-      {
-        id: crypto.randomUUID(),
-        employeeId: correctionTarget.employee.id,
-        date: todayIso,
-        previousStatus,
-        newStatus: values.status,
-        reason: values.reason,
-        correctedBy: me.id,
-        correctedAt: new Date().toISOString(),
-      },
-    ]);
-    setCorrectionTarget(null);
+    setCorrectionError(null);
+    try {
+      const corrected = await correctAttendanceStatus(
+        correctionTarget.attendanceRecordId,
+        toBackendStatus(values.status),
+        values.reason
+      );
+      setTodayLog((prev) =>
+        prev.map((row) =>
+          row.id === corrected.id
+            ? { ...row, status: corrected.status as DailyLogRow["status"] }
+            : row
+        )
+      );
+      setCorrectionTarget(null);
+    } catch (err) {
+      // Dialog stays open, error shown inline -- the admin's typed reason
+      // isn't lost on a failed submit.
+      setCorrectionError(err instanceof Error ? err.message : "บันทึกไม่สำเร็จ");
+    }
   };
 
   const quickStats = [
@@ -397,7 +408,13 @@ export default function AdminDashboard() {
       )}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <AttendanceIssuesCard issues={attendanceIssues} onCorrect={setCorrectionTarget} />
+        <AttendanceIssuesCard
+          issues={attendanceIssues}
+          onCorrect={(entry) => {
+            setCorrectionError(null);
+            setCorrectionTarget(entry);
+          }}
+        />
 
         <Card className="rounded-2xl border border-slate-200 ring-0">
           <CardHeader>
@@ -510,9 +527,12 @@ export default function AdminDashboard() {
               แก้ไขสถานะของ {correctionTarget ? employeeName(correctionTarget.employee) : ""}
             </DialogTitle>
           </DialogHeader>
+          {correctionError && (
+            <p className="text-sm text-danger-foreground">{correctionError}</p>
+          )}
           {correctionTarget && (
             <CorrectionFormFields
-              currentStatus={effectiveStatus(correctionTarget.employee.id, correctionTarget.status) ?? "ขาด"}
+              currentStatus={correctionTarget.status}
               onSubmit={submitCorrection}
               onCancel={() => setCorrectionTarget(null)}
             />

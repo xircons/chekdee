@@ -48,6 +48,7 @@ function toMonthlyReportRow(r: MonthlyReportRowResponse): MonthlyReportRow {
 // ("present" | "สาย" | "ขาด"), so callers map it themselves rather than this
 // module assuming which convention they want.
 type DailyLogRowResponse = {
+  id: string;
   date: string;
   employee_id: string;
   first_name: string | null;
@@ -59,6 +60,7 @@ type DailyLogRowResponse = {
 };
 
 export type DailyLogRow = {
+  id: string;
   date: string;
   employeeId: string;
   firstName: string | null;
@@ -71,6 +73,7 @@ export type DailyLogRow = {
 
 function toDailyLogRow(r: DailyLogRowResponse): DailyLogRow {
   return {
+    id: r.id,
     date: r.date,
     employeeId: r.employee_id,
     firstName: r.first_name,
