@@ -646,6 +646,118 @@ paths:
         "409":
           description: Export is not ready yet
 
+  /leave-requests:
+    post:
+      operationId: createLeaveRequest
+      summary: >
+        Submit a leave request for the authenticated employee. In-app
+        approval only — the employee sends a formal-Thai letter manually
+        (see lib/leave-email.ts on the frontend), no server-generated email
+        approval link.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateLeaveRequestRequest"
+      responses:
+        "201":
+          description: Leave request created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeaveRequest"
+        "400":
+          description: Invalid dates, or end_date before start_date
+        "401":
+          description: Missing or invalid access token
+    get:
+      operationId: listLeaveRequests
+      summary: Admin org-wide view, pending requests sorted first
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Leave requests
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LeaveRequest"
+        "401":
+          description: Missing or invalid access token
+        "403":
+          description: Caller is not admin/supervisor/system_owner
+
+  /leave-requests/me:
+    get:
+      operationId: getMyLeaveRequests
+      summary: The authenticated employee's own leave requests
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Leave requests
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LeaveRequest"
+        "401":
+          description: Missing or invalid access token
+
+  /leave-requests/{id}/approve:
+    post:
+      operationId: approveLeaveRequest
+      summary: Approve a pending leave request. A decision cannot be changed once made.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/LeaveRequestId"
+      responses:
+        "200":
+          description: Leave request approved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeaveRequest"
+        "401":
+          description: Missing or invalid access token
+        "403":
+          description: Caller is not admin/supervisor/system_owner
+        "404":
+          description: Leave request not found
+        "409":
+          description: Leave request already decided
+
+  /leave-requests/{id}/reject:
+    post:
+      operationId: rejectLeaveRequest
+      summary: Reject a pending leave request. A decision cannot be changed once made.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/LeaveRequestId"
+      responses:
+        "200":
+          description: Leave request rejected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeaveRequest"
+        "401":
+          description: Missing or invalid access token
+        "403":
+          description: Caller is not admin/supervisor/system_owner
+        "404":
+          description: Leave request not found
+        "409":
+          description: Leave request already decided
+
 components:
   parameters:
     EmployeeId:
@@ -675,6 +787,12 @@ components:
         pattern: "^\\d{4}-\\d{2}$"
         example: "2026-03"
     ExportId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    LeaveRequestId:
       name: id
       in: path
       required: true
@@ -1027,6 +1145,56 @@ components:
         error:
           type: string
           nullable: true
+
+    CreateLeaveRequestRequest:
+      type: object
+      required: [start_date, end_date]
+      properties:
+        leave_type:
+          type: string
+          description: Free-text leave category (ประเภทการลา), distinct from reason.
+        start_date:
+          type: string
+          format: date
+        end_date:
+          type: string
+          format: date
+        reason:
+          type: string
+
+    LeaveRequest:
+      type: object
+      required: [id, employee_id, start_date, end_date, status, created_at]
+      properties:
+        id:
+          type: string
+        employee_id:
+          type: string
+        leave_type:
+          type: string
+          nullable: true
+        start_date:
+          type: string
+          format: date
+        end_date:
+          type: string
+          format: date
+        reason:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [pending, approved, rejected]
+        decided_by:
+          type: string
+          nullable: true
+        decided_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
 
   securitySchemes:
     bearerAuth:

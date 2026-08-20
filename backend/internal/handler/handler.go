@@ -24,6 +24,7 @@ func RegisterRoutes(
 	kiosk *KioskHandler,
 	attendance *AttendanceHandler,
 	reports *ReportHandler,
+	leaves *LeaveHandler,
 	jwtIssuer *usecase.JWTIssuer,
 	deviceAuth *usecase.KioskDeviceUsecase,
 ) {
@@ -81,6 +82,12 @@ func RegisterRoutes(
 	e.POST("/reports/export", reports.RequestExport, RequireAuth(jwtIssuer), RequireRole(adminRoles...))
 	e.GET("/reports/export/:id", reports.GetExport, RequireAuth(jwtIssuer), RequireRole(adminRoles...))
 	e.GET("/reports/export/:id/download", reports.DownloadExport, RequireAuth(jwtIssuer), RequireRole(adminRoles...))
+
+	e.POST("/leave-requests", leaves.Create, RequireAuth(jwtIssuer))
+	e.GET("/leave-requests/me", leaves.Me, RequireAuth(jwtIssuer))
+	e.GET("/leave-requests", leaves.List, RequireAuth(jwtIssuer), RequireRole(adminRoles...))
+	e.POST("/leave-requests/:id/approve", leaves.Approve, RequireAuth(jwtIssuer), RequireRole(adminRoles...))
+	e.POST("/leave-requests/:id/reject", leaves.Reject, RequireAuth(jwtIssuer), RequireRole(adminRoles...))
 }
 
 // rateLimiter builds an in-memory per-IP limiter. Each source IP gets its own
