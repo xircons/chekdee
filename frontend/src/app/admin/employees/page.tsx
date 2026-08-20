@@ -54,7 +54,8 @@ import {
   type Employee,
   type EmployeeRole,
 } from "@/lib/api-employees";
-import { getMonthlyAttendanceStats, ROLE_LABEL_TH, type Role } from "@/lib/mock-data";
+import { getMonthlyReport, type MonthlyReportRow } from "@/lib/api-reports";
+import { ROLE_LABEL_TH, type Role } from "@/lib/mock-data";
 
 const directoryRoles: EmployeeRole[] = ["employee", "supervisor", "admin"];
 const PAGE_SIZE = 20;
@@ -272,6 +273,8 @@ export default function EmployeesPage() {
 
   const [detailEmployee, setDetailEmployee] = useState<Employee | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
+  const [monthStats, setMonthStats] = useState<MonthlyReportRow | null>(null);
+  const [monthStatsError, setMonthStatsError] = useState<string | null>(null);
 
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
@@ -326,9 +329,27 @@ export default function EmployeesPage() {
   };
 
   const openDetail = (employee: Employee) => {
+    // Reset here (an event handler, not the fetch effect below) so
+    // re-opening the dialog for a different employee never flashes the
+    // previously-opened employee's stats while the new fetch is in flight.
+    setMonthStats(null);
+    setMonthStatsError(null);
     setDetailEmployee(employee);
     setDetailOpen(true);
   };
+
+  // GET /reports/monthly is org-wide (same endpoint admin/reports.tsx
+  // uses) -- no per-employee variant, so this fetches every row and picks
+  // out the one for the opened employee. Matches the backend's own
+  // worked-hours-with-schedule-cap logic exactly, rather than
+  // reimplementing it client-side against GET /reports/daily-log.
+  useEffect(() => {
+    if (!detailEmployee) return;
+    const month = new Date().toISOString().slice(0, 7);
+    getMonthlyReport(month)
+      .then((rows) => setMonthStats(rows.find((r) => r.employeeId === detailEmployee.id) ?? null))
+      .catch((err: Error) => setMonthStatsError(err.message));
+  }, [detailEmployee]);
 
   const handleSubmit = async (values: EmployeeForm) => {
     if (!editingEmployee) return;
@@ -383,10 +404,6 @@ export default function EmployeesPage() {
       setOffboardSubmitting(false);
     }
   };
-
-  const monthStats = detailEmployee
-    ? getMonthlyAttendanceStats(detailEmployee.id, new Date().toISOString().slice(0, 7))
-    : null;
 
   const activeCount = employees.filter((e) => e.status === "active" && !e.offboardedAt).length;
   const offboardedCount = employees.filter((e) => e.offboardedAt !== null).length;
@@ -675,15 +692,12 @@ export default function EmployeesPage() {
               </div>
             </div>
 
-            {/* Attendance heatmap/monthly stats still read from mock-data.ts
-                (getMonthlyAttendanceStats, EmployeeAttendanceHeatmap) — there
-                is no per-employee attendance-summary endpoint yet. Both are
-                keyed by employee.id and safely render empty/zeroed for a
-                real employee id not present in the mock fixtures, rather
-                than crashing; wiring them is separate follow-up work. */}
+            {monthStatsError && (
+              <p className="text-xs text-danger-foreground">โหลดสถิติไม่สำเร็จ: {monthStatsError}</p>
+            )}
             {monthStats && (
               <div className="grid grid-cols-3 gap-2">
-                <AdminDetailInfoBlock label="ชั่วโมง (เดือนนี้)" value={String(monthStats.hours)} valueSize="sm" />
+                <AdminDetailInfoBlock label="ชั่วโมง (เดือนนี้)" value={String(monthStats.workedHours)} valueSize="sm" />
                 <AdminDetailInfoBlock label="สาย" value={String(monthStats.lateCount)} valueSize="sm" />
                 <AdminDetailInfoBlock label="ขาด" value={String(monthStats.absentCount)} valueSize="sm" />
               </div>
