@@ -50,12 +50,47 @@ func TestUserRepository_CreateFetchRegister(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "Updated Name", *updated.LineDisplayName)
 
-	registered, err := repo.CompleteRegistration(ctx, created.ID, "First", "Last", "68")
+	registered, err := repo.CompleteRegistration(ctx, created.ID, "First", "Last", "68", nil, nil)
 	require.NoError(t, err)
 	require.True(t, registered.IsRegistered())
 	require.Equal(t, "First", *registered.FirstName)
 	require.Equal(t, "Last", *registered.LastName)
 	require.Equal(t, "68", *registered.StudentGen)
+	require.Nil(t, registered.StudentID, "optional, not supplied")
+	require.Nil(t, registered.PhoneNumber, "optional, not supplied")
+}
+
+// TestUserRepository_CompleteRegistration_WithStudentIDAndPhoneNumber
+// round-trips the two optional fields end to end: supplied at registration,
+// persisted, and readable back via a fresh GetByID (not just echoed in the
+// RETURNING clause).
+func TestUserRepository_CompleteRegistration_WithStudentIDAndPhoneNumber(t *testing.T) {
+	databaseURL := requireDB(t)
+
+	pool, err := pgxpool.New(context.Background(), databaseURL)
+	require.NoError(t, err)
+	t.Cleanup(pool.Close)
+
+	repo := repository.NewUserRepository(pool)
+	ctx := context.Background()
+
+	lineUserID := "test-register-profile-fields-" + time.Now().Format("20060102150405.000000000")
+	created, err := repo.CreateEmployeeFromLine(ctx, lineUserID, "Test User", "")
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM users WHERE id = $1", created.ID)
+	})
+
+	studentID, phoneNumber := "652110145", "082-345-6789"
+	registered, err := repo.CompleteRegistration(ctx, created.ID, "First", "Last", "68", &studentID, &phoneNumber)
+	require.NoError(t, err)
+	require.Equal(t, "652110145", *registered.StudentID)
+	require.Equal(t, "082-345-6789", *registered.PhoneNumber)
+
+	fetched, err := repo.GetByID(ctx, created.ID)
+	require.NoError(t, err)
+	require.Equal(t, "652110145", *fetched.StudentID)
+	require.Equal(t, "082-345-6789", *fetched.PhoneNumber)
 }
 
 func TestUserRepository_GetByLineUserID_NotFound(t *testing.T) {
@@ -103,7 +138,7 @@ func TestUserRepository_List_FiltersAndPaginates(t *testing.T) {
 	})
 
 	firstName, lastName := marker+" Alice", "Employee"
-	_, err = repo.Update(ctx, alice.ID, &firstName, &lastName, &teamID)
+	_, err = repo.Update(ctx, alice.ID, &firstName, &lastName, &teamID, nil, nil)
 	require.NoError(t, err)
 
 	// search: both rows share the marker in first_name.
@@ -174,15 +209,33 @@ func TestUserRepository_Update(t *testing.T) {
 	})
 
 	first, last := "New", "Name"
-	updated, err := repo.Update(ctx, created.ID, &first, &last, nil)
+	studentID, phoneNumber := "672110160", "081-234-5678"
+	updated, err := repo.Update(ctx, created.ID, &first, &last, nil, &studentID, &phoneNumber)
 	require.NoError(t, err)
 	require.Equal(t, "New", *updated.FirstName)
 	require.Equal(t, "Name", *updated.LastName)
 	require.Nil(t, updated.TeamID)
+	require.Equal(t, "672110160", *updated.StudentID)
+	require.Equal(t, "081-234-5678", *updated.PhoneNumber)
 	// Role/offboarding must be untouched by Update — see the interface
 	// doc comment for why those are separate methods.
 	require.Equal(t, domain.RoleEmployee, updated.Role)
 	require.Nil(t, updated.OffboardedAt)
+
+	// Round-trip: a fresh GetByID sees the same values, confirming they
+	// actually persisted rather than just being echoed back in the
+	// RETURNING clause.
+	fetched, err := repo.GetByID(ctx, created.ID)
+	require.NoError(t, err)
+	require.Equal(t, "672110160", *fetched.StudentID)
+	require.Equal(t, "081-234-5678", *fetched.PhoneNumber)
+
+	// nil clears them — Update is a full replace of these fields, not a
+	// partial patch (same contract as team_id above).
+	cleared, err := repo.Update(ctx, created.ID, &first, &last, nil, nil, nil)
+	require.NoError(t, err)
+	require.Nil(t, cleared.StudentID)
+	require.Nil(t, cleared.PhoneNumber)
 }
 
 func TestUserRepository_Update_NotFound(t *testing.T) {
@@ -194,7 +247,7 @@ func TestUserRepository_Update_NotFound(t *testing.T) {
 
 	repo := repository.NewUserRepository(pool)
 	first, last := "X", "Y"
-	_, err = repo.Update(context.Background(), "00000000-0000-0000-0000-000000000000", &first, &last, nil)
+	_, err = repo.Update(context.Background(), "00000000-0000-0000-0000-000000000000", &first, &last, nil, nil, nil)
 	require.ErrorIs(t, err, domain.ErrUserNotFound)
 }
 

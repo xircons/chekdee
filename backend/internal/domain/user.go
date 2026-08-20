@@ -52,9 +52,11 @@ type User struct {
 	Username     *string
 	PasswordHash *string
 
-	FirstName  *string
-	LastName   *string
-	StudentGen *string
+	FirstName   *string
+	LastName    *string
+	StudentGen  *string
+	StudentID   *string
+	PhoneNumber *string
 
 	RegistrationCompletedAt *time.Time
 

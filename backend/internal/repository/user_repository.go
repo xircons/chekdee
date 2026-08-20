@@ -29,6 +29,7 @@ const userColumns = `
 	id::text, role::text, status::text, team_id::text,
 	line_user_id, line_display_name, line_picture_url,
 	username, password_hash, first_name, last_name, student_gen,
+	student_id, phone_number,
 	registration_completed_at,
 	offboarded_at, offboarded_by::text, offboarded_reason,
 	created_at, updated_at`
@@ -41,6 +42,7 @@ func scanUser(row pgx.Row) (*domain.User, error) {
 		&u.ID, &role, &status, &u.TeamID,
 		&u.LineUserID, &u.LineDisplayName, &u.LinePictureURL,
 		&u.Username, &u.PasswordHash, &u.FirstName, &u.LastName, &u.StudentGen,
+		&u.StudentID, &u.PhoneNumber,
 		&u.RegistrationCompletedAt,
 		&u.OffboardedAt, &u.OffboardedBy, &u.OffboardedReason,
 		&u.CreatedAt, &u.UpdatedAt,
@@ -100,14 +102,15 @@ func (r *UserRepository) UpdateLineProfile(ctx context.Context, id, displayName,
 	return err
 }
 
-func (r *UserRepository) CompleteRegistration(ctx context.Context, id, firstName, lastName, studentGen string) (*domain.User, error) {
+func (r *UserRepository) CompleteRegistration(ctx context.Context, id, firstName, lastName, studentGen string, studentID, phoneNumber *string) (*domain.User, error) {
 	row := r.pool.QueryRow(ctx, `
 		UPDATE users
 		SET first_name = $2, last_name = $3, student_gen = $4,
+		    student_id = $5, phone_number = $6,
 		    registration_completed_at = now(), updated_at = now()
 		WHERE id = $1
 		RETURNING `+userColumns,
-		id, firstName, lastName, studentGen,
+		id, firstName, lastName, studentGen, studentID, phoneNumber,
 	)
 	return scanUser(row)
 }
@@ -208,13 +211,14 @@ func (r *UserRepository) List(ctx context.Context, filter domain.EmployeeListFil
 
 // Update edits profile fields only — see the interface doc comment for why
 // role/offboarding are separate methods.
-func (r *UserRepository) Update(ctx context.Context, id string, firstName, lastName, teamID *string) (*domain.User, error) {
+func (r *UserRepository) Update(ctx context.Context, id string, firstName, lastName, teamID, studentID, phoneNumber *string) (*domain.User, error) {
 	row := r.pool.QueryRow(ctx, `
 		UPDATE users
-		SET first_name = $2, last_name = $3, team_id = $4::uuid, updated_at = now()
+		SET first_name = $2, last_name = $3, team_id = $4::uuid,
+		    student_id = $5, phone_number = $6, updated_at = now()
 		WHERE id = $1
 		RETURNING `+userColumns,
-		id, firstName, lastName, teamID,
+		id, firstName, lastName, teamID, studentID, phoneNumber,
 	)
 	u, err := scanUser(row)
 	if errors.Is(err, pgx.ErrNoRows) {

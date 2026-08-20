@@ -23,7 +23,7 @@ type UserRepository interface {
 	GetByUsername(ctx context.Context, username string) (*User, error)
 	CreateEmployeeFromLine(ctx context.Context, lineUserID, displayName, pictureURL string) (*User, error)
 	UpdateLineProfile(ctx context.Context, id, displayName, pictureURL string) error
-	CompleteRegistration(ctx context.Context, id, firstName, lastName, studentGen string) (*User, error)
+	CompleteRegistration(ctx context.Context, id, firstName, lastName, studentGen string, studentID, phoneNumber *string) (*User, error)
 	CreateSystemOwner(ctx context.Context, username, passwordHash string) (*User, error)
 	// ListActiveEmployees returns every non-offboarded employee — the
 	// roster the monthly report iterates over.
@@ -33,13 +33,14 @@ type UserRepository interface {
 	// filterable and paginated, unlike ListActiveEmployees above (which is
 	// role-locked to "employee" and exists only to feed the report).
 	List(ctx context.Context, filter EmployeeListFilter) ([]*User, int, error)
-	// Update edits profile fields only (first_name, last_name, team_id).
-	// Never touches role, username, password_hash, or offboarded_* — those
-	// go through UpdateRole / Offboard, which are distinct, more sensitive
-	// actions with their own audit-log entries. Best-effort audited by the
-	// caller (usecase), not transactional — see UpdateRole/Offboard below
-	// for why those two are different.
-	Update(ctx context.Context, id string, firstName, lastName, teamID *string) (*User, error)
+	// Update edits profile fields only (first_name, last_name, team_id,
+	// student_id, phone_number). Never touches role, username,
+	// password_hash, or offboarded_* — those go through UpdateRole /
+	// Offboard, which are distinct, more sensitive actions with their own
+	// audit-log entries. Best-effort audited by the caller (usecase), not
+	// transactional — see UpdateRole/Offboard below for why those two are
+	// different.
+	Update(ctx context.Context, id string, firstName, lastName, teamID, studentID, phoneNumber *string) (*User, error)
 	// UpdateRole changes a user's role and writes auditEntry in the same
 	// transaction as the UPDATE, so a privilege change can never commit
 	// without its audit trail (or vice versa). The usecase layer owns the
