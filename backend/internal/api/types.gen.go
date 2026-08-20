@@ -14,7 +14,26 @@ import (
 	"time"
 
 	"github.com/getkin/kin-openapi/openapi3"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 )
+
+// Defines values for HolidaySource.
+const (
+	Manual    HolidaySource = "manual"
+	NagerDate HolidaySource = "nager_date"
+)
+
+// Valid indicates whether the value is a known member of the HolidaySource enum.
+func (e HolidaySource) Valid() bool {
+	switch e {
+	case Manual:
+		return true
+	case NagerDate:
+		return true
+	default:
+		return false
+	}
+}
 
 // Defines values for UserRole.
 const (
@@ -54,22 +73,73 @@ type CompleteRegistrationRequest struct {
 	StudentGen string `json:"student_gen"`
 }
 
+// CreateHolidayRequest defines model for CreateHolidayRequest.
+type CreateHolidayRequest struct {
+	Date      openapi_types.Date `json:"date"`
+	LocalName *string            `json:"local_name,omitempty"`
+	Name      string             `json:"name"`
+}
+
 // HealthStatus defines model for HealthStatus.
 type HealthStatus struct {
 	// Status Example: ok
 	Status string `json:"status"`
 }
 
+// Holiday defines model for Holiday.
+type Holiday struct {
+	Date      openapi_types.Date `json:"date"`
+	Id        string             `json:"id"`
+	LocalName *string            `json:"local_name,omitempty"`
+	Name      string             `json:"name"`
+	Source    HolidaySource      `json:"source"`
+}
+
+// HolidaySource defines model for Holiday.Source.
+type HolidaySource string
+
+// LineAuthorizeResponse defines model for LineAuthorizeResponse.
+type LineAuthorizeResponse struct {
+	AuthorizeUrl string `json:"authorize_url"`
+}
+
 // LineLoginRequest defines model for LineLoginRequest.
 type LineLoginRequest struct {
 	Code        string `json:"code"`
 	RedirectUri string `json:"redirect_uri"`
+
+	// State Must equal the state returned by /auth/line/authorize.
+	State string `json:"state"`
 }
 
 // PasswordLoginRequest defines model for PasswordLoginRequest.
 type PasswordLoginRequest struct {
 	Password string `json:"password"`
 	Username string `json:"username"`
+}
+
+// ReplaceScheduleRequest defines model for ReplaceScheduleRequest.
+type ReplaceScheduleRequest struct {
+	Rows []ReplaceScheduleRow `json:"rows"`
+}
+
+// ReplaceScheduleRow defines model for ReplaceScheduleRow.
+type ReplaceScheduleRow struct {
+	DayOfWeek     int                 `json:"day_of_week"`
+	EffectiveFrom openapi_types.Date  `json:"effective_from"`
+	EffectiveTo   *openapi_types.Date `json:"effective_to,omitempty"`
+
+	// EndTime Example: 17:00:00
+	EndTime string `json:"end_time"`
+
+	// StartTime Example: 09:00:00
+	StartTime string `json:"start_time"`
+}
+
+// UpdateHolidayRequest defines model for UpdateHolidayRequest.
+type UpdateHolidayRequest struct {
+	LocalName *string `json:"local_name,omitempty"`
+	Name      string  `json:"name"`
 }
 
 // User defines model for User.
@@ -86,6 +156,39 @@ type User struct {
 // UserRole defines model for User.Role.
 type UserRole string
 
+// WorkSchedule defines model for WorkSchedule.
+type WorkSchedule struct {
+	// DayOfWeek 0 = Sunday
+	DayOfWeek     int                 `json:"day_of_week"`
+	EffectiveFrom openapi_types.Date  `json:"effective_from"`
+	EffectiveTo   *openapi_types.Date `json:"effective_to,omitempty"`
+	EmployeeId    string              `json:"employee_id"`
+
+	// EndTime Example: 17:00:00
+	EndTime string `json:"end_time"`
+	Id      string `json:"id"`
+
+	// StartTime Example: 09:00:00
+	StartTime string `json:"start_time"`
+}
+
+// EmployeeId defines model for EmployeeId.
+type EmployeeId = string
+
+// HolidayId defines model for HolidayId.
+type HolidayId = string
+
+// LineAuthorizeParams defines parameters for LineAuthorize.
+type LineAuthorizeParams struct {
+	RedirectUri string `form:"redirect_uri" json:"redirect_uri"`
+}
+
+// ListHolidaysParams defines parameters for ListHolidays.
+type ListHolidaysParams struct {
+	From openapi_types.Date `form:"from" json:"from"`
+	To   openapi_types.Date `form:"to" json:"to"`
+}
+
 // LineLoginJSONRequestBody defines body for LineLogin for application/json ContentType.
 type LineLoginJSONRequestBody = LineLoginRequest
 
@@ -95,34 +198,63 @@ type PasswordLoginJSONRequestBody = PasswordLoginRequest
 // CompleteRegistrationJSONRequestBody defines body for CompleteRegistration for application/json ContentType.
 type CompleteRegistrationJSONRequestBody = CompleteRegistrationRequest
 
+// CreateHolidayJSONRequestBody defines body for CreateHoliday for application/json ContentType.
+type CreateHolidayJSONRequestBody = CreateHolidayRequest
+
+// UpdateHolidayJSONRequestBody defines body for UpdateHoliday for application/json ContentType.
+type UpdateHolidayJSONRequestBody = UpdateHolidayRequest
+
+// ReplaceEmployeeScheduleJSONRequestBody defines body for ReplaceEmployeeSchedule for application/json ContentType.
+type ReplaceEmployeeScheduleJSONRequestBody = ReplaceScheduleRequest
+
 // Base64 encoded, compressed with deflate, json marshaled OpenAPI spec.
 // Stored as a slice of fixed-width chunks rather than one concatenated
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
+	"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",
+	"/ncAAAD//w==",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

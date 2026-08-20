@@ -7,10 +7,16 @@ import (
 	"github.com/labstack/echo/v4/middleware"
 	"golang.org/x/time/rate"
 
+	"checkdee-backend/internal/domain"
 	"checkdee-backend/internal/usecase"
 )
 
-func RegisterRoutes(e *echo.Echo, auth *AuthHandler, jwtIssuer *usecase.JWTIssuer) {
+// adminRoles gates the admin-mutating schedule/holiday routes — the same
+// trio the frontend's /admin/leave-requests already treats as equivalent
+// (the sidebar doesn't yet vary by role; that's a later Phase 4 concern).
+var adminRoles = []domain.Role{domain.RoleAdmin, domain.RoleSupervisor, domain.RoleSystemOwner}
+
+func RegisterRoutes(e *echo.Echo, auth *AuthHandler, schedules *ScheduleHandler, holidays *HolidayHandler, jwtIssuer *usecase.JWTIssuer) {
 	e.GET("/healthz", HealthCheck)
 
 	// Per-IP throttles on the credential-accepting endpoints. Password login
@@ -32,6 +38,18 @@ func RegisterRoutes(e *echo.Echo, auth *AuthHandler, jwtIssuer *usecase.JWTIssue
 	// routes under Echo's router.
 	e.POST("/auth/register", auth.CompleteRegistration, RequireAuth(jwtIssuer))
 	e.GET("/auth/me", auth.Me, RequireAuth(jwtIssuer))
+
+	e.GET("/schedules/me", schedules.Me, RequireAuth(jwtIssuer))
+	e.GET("/schedules/:employeeId", schedules.ListForEmployee, RequireAuth(jwtIssuer), RequireRole(adminRoles...))
+	e.PUT("/schedules/:employeeId", schedules.Replace, RequireAuth(jwtIssuer), RequireRole(adminRoles...))
+
+	// Holidays are readable by any authenticated user (employees need them
+	// on their own calendar view); only admin/supervisor/system_owner can
+	// mutate the calendar.
+	e.GET("/holidays", holidays.List, RequireAuth(jwtIssuer))
+	e.POST("/holidays", holidays.Create, RequireAuth(jwtIssuer), RequireRole(adminRoles...))
+	e.PUT("/holidays/:id", holidays.Update, RequireAuth(jwtIssuer), RequireRole(adminRoles...))
+	e.DELETE("/holidays/:id", holidays.Delete, RequireAuth(jwtIssuer), RequireRole(adminRoles...))
 }
 
 // rateLimiter builds an in-memory per-IP limiter. Each source IP gets its own
