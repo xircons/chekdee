@@ -1,0 +1,11 @@
+REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM checkdee_app;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+    REVOKE SELECT, INSERT, UPDATE, DELETE ON TABLES FROM checkdee_app;
+REVOKE USAGE ON SCHEMA public FROM checkdee_app;
+
+DO $$
+BEGIN
+    EXECUTE format('REVOKE CONNECT ON DATABASE %I FROM checkdee_app', current_database());
+END $$;
+
+DROP ROLE IF EXISTS checkdee_app;
