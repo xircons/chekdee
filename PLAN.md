@@ -119,31 +119,51 @@ forked from; it does not retroactively update every already-opened PR.
 Treat this section, not the per-item backlog markers below, as the source
 of truth for what's actually done vs still open:
 
+**All 11 backlog items are done.** 11 PRs open, none merged yet (not
+merging them myself — see the session's own instructions). In branch-number
+order:
+
+- PR #28 `feature/rename-chekdee` — item 11, Checkdee→Chekdee rename. Was
+  stale (predated the register-page restyle merge); fixed by merging `dev`
+  in, re-verified with `git grep`.
 - PR #29 `chore/plan-status` — this file, tracked in git for the first time.
-- PR #28 `feature/rename-chekdee` — Checkdee→Chekdee rename (item 11).
-  Was stale (predated the register-page restyle merge); fixed by merging
-  `dev` in, re-verified.
-- PR #30 `feature/admin-dashboard` — item 1, admin dashboard.
+- PR #30 `feature/admin-dashboard` — item 1 (admin dashboard wired to real
+  data) + a follow-up commit for item 8's frontend half (correction dialog
+  wired to `PATCH /attendance-records/:id/status`, PR #37).
 - PR #31 `feature/admin-schedules` — item 2, admin schedules.
 - PR #32 `feature/employee-profile` — item 3, employee profile.
 - PR #33 `feature/frontend-admin-employees` — item 4, admin/employees
   detail-dialog heatmap + monthly stats.
-- PR #34 `feature/backend-attendance-today` — item 5, new
-  `GET /attendance/me/today` + employee home page hydration.
+- PR #34 `feature/backend-attendance-today` — item 5 (new
+  `GET /attendance/me/today` + employee home hydration) + a follow-up
+  commit for item 9's frontend half (weekly attendance icons wired to
+  `GET /reports/daily-log/me`, PR #38).
 - PR #35 `feature/employee-leave` — item 6, leave-letter template
   correctness fix.
 - PR #36 `feature/kiosk-lobby-tv` — item 7, new `GET /kiosk/roster-stats` +
   lobby-tv redesigned around aggregate-only data (real UI change, not just
   a data swap — see the PR body).
+- PR #37 `feature/backend-attendance-corrections` — item 8's backend half:
+  `PATCH /attendance-records/:id/status`, plus adding `id` to
+  `DailyLogRow` (needed so the frontend half had something to target).
+- PR #38 `feature/employee-attendance-history` — item 9's backend half:
+  `GET /reports/daily-log/me`.
 - (item 10, register page styling, needed no new work — already merged as
   PR #27 before this session started.)
 
-Three PRs independently added the same `getDailyLog`/`DailyLogRow` pair to
-`lib/api-reports.ts` (#30, #33) since they were opened in parallel off
-`dev` before either merged — this is expected with this session's
-one-branch-per-item approach and will reconcile to one copy naturally once
-both land; not a conflict to pre-resolve. Same story for `student_id`/
-`phone_number` on the `Me` type in `lib/session.ts` (#32, #35).
+**Pattern used for items 8 and 9**: new backend endpoint on its own branch,
+then the frontend wiring landed as a *follow-up commit on the existing
+page's branch* (not a new branch) once the endpoint's shape was known —
+matches CLAUDE.md's "one branch per page" rule, since the correction
+dialog and the weekly icons are both existing UI on pages already being
+touched by open PRs, not new pages.
+
+Several PRs independently added the same helper (`getDailyLog`/
+`DailyLogRow` in `lib/api-reports.ts`: #30, #33; `student_id`/
+`phone_number` on the `Me` type in `lib/session.ts`: #32, #35) since they
+were opened in parallel off `dev` before any of them merged — expected with
+this session's one-branch-per-item approach, will reconcile to one copy
+naturally once they land; not a conflict to pre-resolve.
 
 ## Backlog
 
@@ -200,20 +220,25 @@ both land; not a conflict to pre-resolve. Same story for `student_id`/
 
 ### Group C — previously known gaps, still open
 
-8. **Manual attendance-record correction (admin)** — `attendance_
-   corrections` table exists (migration 000003) but has no
-   repository/usecase/handler. Design the endpoint against its actual
-   columns (`attendance_record_id`, `corrected_by`, `field_name`,
-   `old_value`, `new_value`, `reason`). No frontend surface for this
-   exists yet either (there was a mock-only "correction dialog" referenced
-   in an earlier planning note under the Flow Update section, but nothing
-   real) — check `admin/employees`/`admin/reports` for where it belongs;
-   build minimal UI if genuinely nothing exists.
-9. **Employee self-view of attendance history** — `/reports/monthly` and
-   `/reports/daily-log` are admin-only. Decide: employee-scoped variant, or
-   loosen existing endpoints to allow a non-admin caller scoped to
-   `employee_id=self`. Wire whichever frontend page should show it (check
-   `(employee)/profile` for a placeholder, or add a new page).
+8. **Manual attendance-record correction (admin)** — **done, PR #37
+   (backend) + follow-up commit on PR #30 (frontend).** New `PATCH
+   /attendance-records/:id/status`, `AttendanceRepository.CorrectStatus`
+   (locks the row, updates status, inserts the `attendance_corrections`
+   audit row, one transaction). Correction dialog already existed on
+   `admin/page.tsx` (built as part of item 1) and was mock/session-only;
+   now calls the real endpoint. Needed a small companion change — `GET
+   /reports/daily-log` didn't expose the underlying `attendance_records.id`
+   at all, so there was nothing for the dialog to target; added `id` to
+   `DailyLogRow` (PR #37) to close that gap.
+9. **Employee self-view of attendance history** — **done, PR #38
+   (backend) + follow-up commit on PR #34 (frontend).** Decision: added a
+   separate self-scoped `GET /reports/daily-log/me` (forces `employeeID` to
+   the JWT's own subject, ignores any `employee_id` query param) rather
+   than loosening the admin endpoint's auth — matches the `/schedules/me`
+   vs `/schedules/:employeeId` split already established. Wired to the
+   employee home page's weekly attendance-history icons (the actual
+   existing consumer — no new page needed). Did not add `/reports/monthly/me`:
+   no frontend surface currently needs a self-scoped monthly aggregate.
 
 ### Group D — done this session
 
