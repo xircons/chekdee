@@ -27,21 +27,29 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { ACTION_BUTTON_CLASS, FIELD_CLASS } from "@/lib/admin-ui";
-import {
-  getActiveEmployees,
-  getEmployeesOnLeave,
-  getPendingLeaveRequests,
-  getSimulatedRoster,
-  mockLeaveRequests,
-  mockWorkSchedules,
-  type AttendanceStatus,
-  type MockAttendanceCorrection,
-  type MockEmployee,
-  type MockLeaveRequest,
-  type SimulatedRosterEntry,
-} from "@/lib/mock-data";
+import { type Employee, listEmployees } from "@/lib/api-employees";
+import { approveLeaveRequest, listAllLeaveRequests, rejectLeaveRequest } from "@/lib/api-leave";
+import { type DailyLogRow, getDailyLog } from "@/lib/api-reports";
+import type { AttendanceStatus, MockAttendanceCorrection, MockLeaveRequest } from "@/lib/mock-data";
 import { useMe } from "@/lib/session";
 import { cn, formatThaiDateWithDay } from "@/lib/utils";
+
+// The backend's English status enum only ever resolves to one of these
+// three at check-in time ("pending" is a DB-default sentinel CheckIn never
+// actually returns) -- maps 1:1 to the frontend's Thai-literal
+// AttendanceStatus used everywhere else on this page.
+function toAttendanceStatus(status: DailyLogRow["status"]): AttendanceStatus | null {
+  switch (status) {
+    case "present":
+      return "present";
+    case "late":
+      return "สาย";
+    case "absent":
+      return "ขาด";
+    default:
+      return null;
+  }
+}
 
 const PREVIEW_LIMIT = 4;
 const RECENT_CHECKIN_LIMIT = 6;
@@ -59,12 +67,23 @@ function toIsoDateLocal(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
-function employeeName(employee: MockEmployee): string {
-  return `${employee.firstName} ${employee.lastName}`;
+// firstName/lastName are nullable on the real Employee (registration may not
+// be complete yet) -- falls back to the LINE display name, then the id.
+function employeeName(employee: Employee): string {
+  const name = [employee.firstName, employee.lastName].filter(Boolean).join(" ");
+  return name || employee.lineDisplayName || employee.id;
 }
 
-function initials(employee: MockEmployee): string {
-  return `${employee.firstName[0] ?? ""}${employee.lastName[0] ?? ""}`.toUpperCase();
+function initials(employee: Employee): string {
+  const name = [employee.firstName, employee.lastName].filter(Boolean).join(" ") || employee.lineDisplayName;
+  if (!name) return "?";
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase();
 }
 
 function relativeTimeTh(from: Date, now: Date): string {
@@ -152,8 +171,19 @@ function CorrectionFormFields({
   );
 }
 
+// Built from today's GET /reports/daily-log rows -- a stored attendance
+// record only exists once an employee has actually checked in, so unlike
+// the old mock's getSimulatedRoster, this never includes employees who
+// simply haven't checked in yet (the backend has no "no-show" status; ขาด
+// here always means "checked in 60+ minutes late", per ComputeCheckInStatus).
+type RosterEntry = {
+  employee: Employee;
+  checkInAt: Date;
+  status: AttendanceStatus;
+};
+
 type AttendanceIssue = {
-  entry: SimulatedRosterEntry;
+  entry: RosterEntry;
   status: "ขาด" | "สาย";
 };
 
@@ -175,7 +205,7 @@ function AttendanceIssuesCard({
   onCorrect,
 }: {
   issues: AttendanceIssue[];
-  onCorrect: (entry: SimulatedRosterEntry) => void;
+  onCorrect: (entry: RosterEntry) => void;
 }) {
   return (
     <Card className="rounded-2xl border border-slate-200 ring-0">
@@ -208,8 +238,8 @@ function AttendanceIssuesCard({
                     <Badge variant={ISSUE_BADGE_VARIANT[status]}>{STATUS_LABEL_TH[status]}</Badge>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    นัดเข้างาน{" "}
-                    {entry.scheduledStart.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })}
+                    เช็คอิน{" "}
+                    {entry.checkInAt.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })}
                   </p>
                 </div>
               </div>
@@ -237,25 +267,59 @@ export default function AdminDashboard() {
   const me = useMe();
   const [now, setNow] = useState<Date>(() => new Date());
   const todayIso = toIsoDateLocal(now);
+  const monthIso = todayIso.slice(0, 7);
 
-  const [requests, setRequests] = useState<MockLeaveRequest[]>(mockLeaveRequests);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [todayLog, setTodayLog] = useState<DailyLogRow[]>([]);
+  const [requests, setRequests] = useState<MockLeaveRequest[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  // No backend endpoint exists yet for manual attendance corrections (see
+  // PLAN.md Group C #8) -- kept as local, session-only state exactly like
+  // before, so this dialog still works but a correction doesn't survive a
+  // reload until that endpoint lands.
   const [corrections, setCorrections] = useState<MockAttendanceCorrection[]>([]);
-  const [correctionTarget, setCorrectionTarget] = useState<SimulatedRosterEntry | null>(null);
+  const [correctionTarget, setCorrectionTarget] = useState<RosterEntry | null>(null);
 
-  // Paused while the correction dialog is open, so a row's status/scheduled
-  // time can't shift (or the entry vanish out of the list entirely) out
-  // from under the admin mid-correction. Resumes once it closes.
+  // Paused while the correction dialog is open, so a row's status can't
+  // shift (or the entry vanish out of the list entirely) out from under the
+  // admin mid-correction. Resumes once it closes.
   useEffect(() => {
     if (correctionTarget) return;
     const timer = setInterval(() => setNow(new Date()), CLOCK_TICK_MS);
     return () => clearInterval(timer);
   }, [correctionTarget]);
 
-  const employees = useMemo(() => getActiveEmployees(), []);
-  const roster = useMemo(() => getSimulatedRoster(employees, mockWorkSchedules, now), [employees, now]);
-  const onLeaveIds = useMemo(
-    () => new Set(getEmployeesOnLeave(todayIso).map((r) => r.employeeId)),
-    [todayIso]
+  useEffect(() => {
+    Promise.all([
+      // 200 is the backend's max page size (see EmployeeUsecase.List) --
+      // fine for this dashboard's summary stats at the org's current size;
+      // a real "more than 200 employees" org would need this to paginate.
+      listEmployees({ status: "active", limit: 200 }),
+      getDailyLog(monthIso),
+      listAllLeaveRequests(),
+    ])
+      .then(([employeeResult, logRows, leaveRows]) => {
+        setEmployees(employeeResult.employees);
+        setTodayLog(logRows.filter((row) => row.date === todayIso));
+        setRequests(leaveRows);
+      })
+      .catch((err: Error) => setLoadError(err.message));
+    // Refetches when the calendar day/month rolls over, not on every 60s
+    // clock tick -- the loaded data doesn't go stale minute to minute the
+    // way the on-screen clock display does.
+  }, [monthIso, todayIso]);
+
+  const employeesById = useMemo(() => new Map(employees.map((e) => [e.id, e])), [employees]);
+
+  const roster: RosterEntry[] = useMemo(
+    () =>
+      todayLog.flatMap((row) => {
+        const employee = employeesById.get(row.employeeId);
+        const status = toAttendanceStatus(row.status);
+        if (!employee || !status || !row.checkInAt) return [];
+        return [{ employee, checkInAt: new Date(row.checkInAt), status }];
+      }),
+    [todayLog, employeesById]
   );
 
   const effectiveStatus = (employeeId: string, computed: AttendanceStatus | null): AttendanceStatus | null => {
@@ -263,32 +327,26 @@ export default function AdminDashboard() {
     return override ? override.newStatus : computed;
   };
 
-  const absentToday = roster.filter(
-    (r) => !onLeaveIds.has(r.employee.id) && effectiveStatus(r.employee.id, r.status) === "ขาด"
-  );
-  const lateToday = roster.filter(
-    (r) => !onLeaveIds.has(r.employee.id) && effectiveStatus(r.employee.id, r.status) === "สาย"
-  );
+  const absentToday = roster.filter((r) => effectiveStatus(r.employee.id, r.status) === "ขาด");
+  const lateToday = roster.filter((r) => effectiveStatus(r.employee.id, r.status) === "สาย");
   const attendanceIssues: AttendanceIssue[] = [
     ...absentToday.map((entry) => ({ entry, status: "ขาด" as const })),
     ...lateToday.map((entry) => ({ entry, status: "สาย" as const })),
   ];
 
-  const recentCheckins = roster
-    .filter((r): r is SimulatedRosterEntry & { checkInAt: Date } => r.checkInAt !== null)
+  const recentCheckins = [...roster]
     .sort((a, b) => b.checkInAt.getTime() - a.checkInAt.getTime())
     .slice(0, RECENT_CHECKIN_LIMIT);
 
-  const pendingRequests = getPendingLeaveRequests().filter((r) =>
-    requests.some((live) => live.id === r.id && live.status === "pending")
-  );
+  const pendingRequests = requests.filter((r) => r.status === "pending");
 
-  const decide = (id: string, status: "approved" | "rejected") => {
-    setRequests((prev) =>
-      prev.map((r) =>
-        r.id === id ? { ...r, status, decidedBy: me.id, decidedAt: new Date().toISOString() } : r
-      )
-    );
+  const decide = async (id: string, status: "approved" | "rejected") => {
+    try {
+      const decided = status === "approved" ? await approveLeaveRequest(id) : await rejectLeaveRequest(id);
+      setRequests((prev) => prev.map((r) => (r.id === id ? decided : r)));
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : "ดำเนินการไม่สำเร็จ");
+    }
   };
 
   const submitCorrection = (values: CorrectionForm) => {
@@ -311,7 +369,7 @@ export default function AdminDashboard() {
   };
 
   const quickStats = [
-    { label: "เข้างานวันนี้", value: `${roster.filter((r) => r.checkInAt !== null).length}/${employees.length}` },
+    { label: "เข้างานวันนี้", value: `${roster.length}/${employees.length}` },
     { label: "คำขอลารออนุมัติ", value: String(pendingRequests.length) },
     { label: "ขาดวันนี้", value: String(absentToday.length) },
   ];
@@ -333,6 +391,10 @@ export default function AdminDashboard() {
           ))}
         </div>
       </header>
+
+      {loadError && (
+        <p className="text-sm text-danger-foreground">โหลดข้อมูลไม่สำเร็จ: {loadError}</p>
+      )}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <AttendanceIssuesCard issues={attendanceIssues} onCorrect={setCorrectionTarget} />
