@@ -50,7 +50,7 @@ func New(
 		// Explicit allow-list, not a wildcard: credentials (the refresh
 		// cookie) are only released to these origins.
 		AllowOrigins:     cfg.AllowedOrigins,
-		AllowMethods:     []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodOptions},
+		AllowMethods:     []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodOptions},
 		AllowHeaders:     []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAuthorization},
 		AllowCredentials: true,
 	}))
