@@ -39,4 +39,8 @@ type KioskDeviceRepository interface {
 	GetActiveByDeviceID(ctx context.Context, deviceID string) (*KioskDevice, error)
 	// ListActive returns the current active row per device (one per screen).
 	ListActive(ctx context.Context) ([]*KioskDevice, error)
+	// ListAll returns the latest row per device_id, active or revoked — the
+	// admin device list, which needs to show revoked screens too (unlike
+	// ListActive, which only feeds token-verification paths).
+	ListAll(ctx context.Context) ([]*KioskDevice, error)
 }

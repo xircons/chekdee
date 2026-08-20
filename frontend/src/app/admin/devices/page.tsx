@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Check, Copy, RefreshCw, Trash2 } from "lucide-react";
@@ -36,14 +36,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ACTION_BUTTON_CLASS, FIELD_CLASS } from "@/lib/admin-ui";
-import { mockKioskDevices, type MockKioskDevice } from "@/lib/mock-data";
+import {
+  createKioskDevice,
+  listKioskDevices,
+  revokeKioskDevice,
+  rotateKioskDevice,
+  type KioskDevice,
+} from "@/lib/api-devices";
 import { cn, formatThaiDate } from "@/lib/utils";
-
-// Only the last 4 characters ever render — the full token/URL is shown
-// once, right after creation, and never again after that dialog closes.
-function maskToken(token: string): string {
-  return token.length <= 4 ? "••••" : `••••••••${token.slice(-4)}`;
-}
 
 function buildKioskUrl(token: string): string {
   const origin = typeof window !== "undefined" ? window.location.origin : "";
@@ -52,7 +52,6 @@ function buildKioskUrl(token: string): string {
 
 const deviceSchema = z.object({
   name: z.string().trim().min(1, "กรุณากรอกชื่ออุปกรณ์"),
-  location: z.string().trim().min(1, "กรุณากรอกสถานที่"),
 });
 
 type DeviceForm = z.infer<typeof deviceSchema>;
@@ -61,7 +60,7 @@ function DeviceFormFields({
   onSubmit,
   onCancel,
 }: {
-  onSubmit: (values: DeviceForm) => void;
+  onSubmit: (values: DeviceForm) => Promise<void>;
   onCancel: () => void;
 }) {
   const {
@@ -70,7 +69,7 @@ function DeviceFormFields({
     formState: { errors, isSubmitting },
   } = useForm<DeviceForm>({
     resolver: zodResolver(deviceSchema),
-    defaultValues: { name: "", location: "" },
+    defaultValues: { name: "" },
   });
 
   return (
@@ -79,17 +78,6 @@ function DeviceFormFields({
         <Label htmlFor="name">ชื่ออุปกรณ์</Label>
         <Input id="name" placeholder="เช่น จอ Lobby ชั้น 1" className={FIELD_CLASS} {...register("name")} />
         {errors.name && <p className="text-xs text-danger-foreground">{errors.name.message}</p>}
-      </div>
-
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor="location">สถานที่</Label>
-        <Input
-          id="location"
-          placeholder="เช่น อาคาร CAMT ชั้น 1"
-          className={FIELD_CLASS}
-          {...register("location")}
-        />
-        {errors.location && <p className="text-xs text-danger-foreground">{errors.location.message}</p>}
       </div>
 
       <DialogFooter>
@@ -109,50 +97,80 @@ function DeviceFormFields({
 }
 
 export default function DevicesPage() {
-  const [devices, setDevices] = useState<MockKioskDevice[]>(mockKioskDevices);
+  const [devices, setDevices] = useState<KioskDevice[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
   const [formOpen, setFormOpen] = useState(false);
-  const [revealDevice, setRevealDevice] = useState<MockKioskDevice | null>(null);
-  const [revokeTarget, setRevokeTarget] = useState<MockKioskDevice | null>(null);
-  const [rotateTarget, setRotateTarget] = useState<MockKioskDevice | null>(null);
+  const [revealDevice, setRevealDevice] = useState<{ device: KioskDevice; token: string } | null>(null);
+  const [revokeTarget, setRevokeTarget] = useState<KioskDevice | null>(null);
+  const [rotateTarget, setRotateTarget] = useState<KioskDevice | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  const copyLink = (device: MockKioskDevice) => {
-    void navigator.clipboard.writeText(buildKioskUrl(device.tokenHash));
+  // Tokens the backend has actually shown us this session (right after
+  // create/rotate) — the only ones a "copy link" click can work for, since
+  // the backend never re-exposes a raw token past that first response.
+  const [knownTokens, setKnownTokens] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    listKioskDevices()
+      .then((rows) => setDevices(rows))
+      .catch((err: Error) => setLoadError(err.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const copyLink = (device: KioskDevice) => {
+    const token = knownTokens[device.id];
+    if (!token) return;
+    void navigator.clipboard.writeText(buildKioskUrl(token));
     setCopiedId(device.id);
     setTimeout(() => setCopiedId((id) => (id === device.id ? null : id)), 1500);
   };
 
-  const handleCreate = (values: DeviceForm) => {
-    const newDevice: MockKioskDevice = {
-      id: crypto.randomUUID(),
-      name: values.name,
-      location: values.location,
-      tokenHash: crypto.randomUUID().replace(/-/g, ""),
-      createdAt: new Date().toISOString(),
-      revokedAt: null,
-    };
-    setDevices((prev) => [newDevice, ...prev]);
-    setFormOpen(false);
-    setRevealDevice(newDevice);
+  const handleCreate = async (values: DeviceForm) => {
+    setActionError(null);
+    try {
+      const { device, token } = await createKioskDevice(values.name);
+      setDevices((prev) => [device, ...prev]);
+      setKnownTokens((prev) => ({ ...prev, [device.id]: token }));
+      setFormOpen(false);
+      setRevealDevice({ device, token });
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "สร้างอุปกรณ์ไม่สำเร็จ");
+    }
   };
 
-  const confirmRevoke = () => {
+  const confirmRevoke = async () => {
     if (!revokeTarget) return;
-    setDevices((prev) =>
-      prev.map((d) => (d.id === revokeTarget.id ? { ...d, revokedAt: new Date().toISOString() } : d))
-    );
-    setRevokeTarget(null);
+    setActionError(null);
+    try {
+      await revokeKioskDevice(revokeTarget.deviceId);
+      setDevices((prev) =>
+        prev.map((d) =>
+          d.id === revokeTarget.id ? { ...d, revokedAt: new Date().toISOString() } : d
+        )
+      );
+      setRevokeTarget(null);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "เพิกถอนอุปกรณ์ไม่สำเร็จ");
+    }
   };
 
-  // Invalidates the current token and issues a new one — name/location/
-  // createdAt are untouched, only tokenHash changes. Cheaper than
-  // revoke-and-recreate for a leaked-token scenario.
-  const confirmRotate = () => {
+  // Rotate replaces the device's active row server-side (new id, same
+  // device_id) — swap it in place in the list rather than re-fetching.
+  const confirmRotate = async () => {
     if (!rotateTarget) return;
-    const rotated: MockKioskDevice = { ...rotateTarget, tokenHash: crypto.randomUUID().replace(/-/g, "") };
-    setDevices((prev) => prev.map((d) => (d.id === rotateTarget.id ? rotated : d)));
-    setRotateTarget(null);
-    setRevealDevice(rotated);
+    setActionError(null);
+    try {
+      const { device, token } = await rotateKioskDevice(rotateTarget.deviceId);
+      setDevices((prev) => prev.map((d) => (d.id === rotateTarget.id ? device : d)));
+      setKnownTokens((prev) => ({ ...prev, [device.id]: token }));
+      setRotateTarget(null);
+      setRevealDevice({ device, token });
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "หมุนคีย์อุปกรณ์ไม่สำเร็จ");
+    }
   };
 
   return (
@@ -175,83 +193,104 @@ export default function DevicesPage() {
           </CardAction>
         </CardHeader>
         <CardContent>
-          <Table className="table-fixed">
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[19%]">ชื่ออุปกรณ์</TableHead>
-                <TableHead className="w-[18%]">สถานที่</TableHead>
-                <TableHead className="w-[19%]">ลิงก์อุปกรณ์</TableHead>
-                <TableHead className="w-[14%]">สร้างเมื่อ</TableHead>
-                <TableHead className="w-[12%]">สถานะ</TableHead>
-                <TableHead className="w-[18%] text-center">จัดการ</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {devices.map((device) => (
-                <TableRow key={device.id}>
-                  <TableCell className="truncate font-medium text-foreground">{device.name}</TableCell>
-                  <TableCell className="truncate text-muted-foreground">{device.location}</TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-1">
-                      <code className="truncate text-xs text-muted-foreground">
-                        {maskToken(device.tokenHash)}
-                      </code>
-                      <Button
-                        size="icon-sm"
-                        variant="ghost"
-                        aria-label="คัดลอกลิงก์"
-                        className="text-muted-foreground"
-                        disabled={!!device.revokedAt}
-                        onClick={() => copyLink(device)}
-                      >
-                        {copiedId === device.id ? (
-                          <Check className="text-success-foreground" />
-                        ) : (
-                          <Copy />
-                        )}
-                      </Button>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {formatThaiDate(new Date(device.createdAt))}
-                  </TableCell>
-                  <TableCell>
-                    {device.revokedAt ? (
-                      <span className="font-medium text-danger-foreground">ถูกเพิกถอน</span>
-                    ) : (
-                      <span className="font-medium text-success-foreground">ใช้งานอยู่</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-center">
-                    {device.revokedAt ? (
-                      <span className="text-muted-foreground">—</span>
-                    ) : (
-                      <div className="flex justify-center gap-1">
-                        <Button
-                          size="icon-sm"
-                          variant="ghost"
-                          aria-label="หมุนคีย์"
-                          className="text-muted-foreground hover:bg-warning hover:text-warning-foreground"
-                          onClick={() => setRotateTarget(device)}
-                        >
-                          <RefreshCw />
-                        </Button>
-                        <Button
-                          size="icon-sm"
-                          variant="ghost"
-                          aria-label="เพิกถอน"
-                          className="text-muted-foreground hover:bg-danger hover:text-danger-foreground"
-                          onClick={() => setRevokeTarget(device)}
-                        >
-                          <Trash2 />
-                        </Button>
-                      </div>
-                    )}
-                  </TableCell>
+          {actionError && (
+            <p className="mb-4 rounded-md border border-danger bg-danger px-3 py-2 text-sm text-danger-foreground">
+              {actionError}
+            </p>
+          )}
+
+          {loading && <p className="text-sm text-muted-foreground">กำลังโหลด…</p>}
+          {!loading && loadError && (
+            <p className="text-sm text-danger-foreground">โหลดข้อมูลไม่สำเร็จ: {loadError}</p>
+          )}
+          {!loading && !loadError && devices.length === 0 && (
+            <p className="text-sm text-muted-foreground">ยังไม่มีอุปกรณ์</p>
+          )}
+
+          {!loading && !loadError && devices.length > 0 && (
+            <Table className="table-fixed">
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[24%]">ชื่ออุปกรณ์</TableHead>
+                  <TableHead className="w-[23%]">ลิงก์อุปกรณ์</TableHead>
+                  <TableHead className="w-[18%]">สร้างเมื่อ</TableHead>
+                  <TableHead className="w-[15%]">สถานะ</TableHead>
+                  <TableHead className="w-[20%] text-center">จัดการ</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {devices.map((device) => {
+                  const isRevoked = !!device.revokedAt;
+                  const hasKnownToken = !!knownTokens[device.id];
+                  return (
+                    <TableRow key={device.id}>
+                      <TableCell className="truncate font-medium text-foreground">{device.name}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1">
+                          <code className="truncate text-xs text-muted-foreground">{device.maskedToken}</code>
+                          <Button
+                            size="icon-sm"
+                            variant="ghost"
+                            aria-label="คัดลอกลิงก์"
+                            className="text-muted-foreground"
+                            disabled={isRevoked || !hasKnownToken}
+                            title={
+                              !hasKnownToken
+                                ? "ต้องหมุนคีย์เพื่อรับลิงก์ใหม่ที่คัดลอกได้ — ระบบไม่แสดงลิงก์เต็มซ้ำ"
+                                : undefined
+                            }
+                            onClick={() => copyLink(device)}
+                          >
+                            {copiedId === device.id ? (
+                              <Check className="text-success-foreground" />
+                            ) : (
+                              <Copy />
+                            )}
+                          </Button>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {formatThaiDate(new Date(device.createdAt))}
+                      </TableCell>
+                      <TableCell>
+                        {isRevoked ? (
+                          <span className="font-medium text-danger-foreground">ถูกเพิกถอน</span>
+                        ) : (
+                          <span className="font-medium text-success-foreground">ใช้งานอยู่</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {isRevoked ? (
+                          <span className="text-muted-foreground">—</span>
+                        ) : (
+                          <div className="flex justify-center gap-1">
+                            <Button
+                              size="icon-sm"
+                              variant="ghost"
+                              aria-label="หมุนคีย์"
+                              className="text-muted-foreground hover:bg-warning hover:text-warning-foreground"
+                              onClick={() => setRotateTarget(device)}
+                            >
+                              <RefreshCw />
+                            </Button>
+                            <Button
+                              size="icon-sm"
+                              variant="ghost"
+                              aria-label="เพิกถอน"
+                              className="text-muted-foreground hover:bg-danger hover:text-danger-foreground"
+                              onClick={() => setRevokeTarget(device)}
+                            >
+                              <Trash2 />
+                            </Button>
+                          </div>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
 
@@ -273,23 +312,23 @@ export default function DevicesPage() {
       <Dialog open={!!revealDevice} onOpenChange={(open) => !open && setRevealDevice(null)}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>ลิงก์อุปกรณ์ &quot;{revealDevice?.name}&quot;</DialogTitle>
+            <DialogTitle>ลิงก์อุปกรณ์ &quot;{revealDevice?.device.name}&quot;</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
             คัดลอกลิงก์นี้ไปเปิดที่จอทีวี — ระบบจะไม่แสดงลิงก์แบบเต็มอีกหลังจากปิดหน้าต่างนี้
           </p>
           <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2">
             <code className="flex-1 break-all font-mono text-xs text-foreground">
-              {revealDevice ? buildKioskUrl(revealDevice.tokenHash) : ""}
+              {revealDevice ? buildKioskUrl(revealDevice.token) : ""}
             </code>
             <Button
               size="icon-sm"
               variant="ghost"
               aria-label="คัดลอกลิงก์"
               className="shrink-0"
-              onClick={() => revealDevice && copyLink(revealDevice)}
+              onClick={() => revealDevice && copyLink(revealDevice.device)}
             >
-              {revealDevice && copiedId === revealDevice.id ? (
+              {revealDevice && copiedId === revealDevice.device.id ? (
                 <Check className="text-success-foreground" />
               ) : (
                 <Copy />
@@ -317,7 +356,7 @@ export default function DevicesPage() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>ยกเลิก</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={confirmRevoke}>
+            <AlertDialogAction variant="destructive" onClick={() => void confirmRevoke()}>
               เพิกถอน
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -330,12 +369,12 @@ export default function DevicesPage() {
             <AlertDialogTitle>หมุนคีย์อุปกรณ์ {rotateTarget?.name}?</AlertDialogTitle>
             <AlertDialogDescription>
               ลิงก์เดิมจะใช้งานไม่ได้ทันทีและไม่สามารถย้อนกลับได้ — จอทีวีที่เปิดลิงก์เดิมค้างอยู่จะหลุดจากระบบ
-              ต้องเปิดลิงก์ใหม่แทน ชื่อและสถานที่ของอุปกรณ์จะไม่เปลี่ยนแปลง
+              ต้องเปิดลิงก์ใหม่แทน ชื่ออุปกรณ์จะไม่เปลี่ยนแปลง
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>ยกเลิก</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={confirmRotate}>
+            <AlertDialogAction variant="destructive" onClick={() => void confirmRotate()}>
               หมุนคีย์
             </AlertDialogAction>
           </AlertDialogFooter>

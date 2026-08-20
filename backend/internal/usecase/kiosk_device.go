@@ -46,6 +46,10 @@ func (k *KioskDeviceUsecase) ListActive(ctx context.Context) ([]*domain.KioskDev
 	return k.devices.ListActive(ctx)
 }
 
+func (k *KioskDeviceUsecase) ListAll(ctx context.Context) ([]*domain.KioskDevice, error) {
+	return k.devices.ListAll(ctx)
+}
+
 // VerifyToken looks up the device by a presented raw token, for the kiosk
 // (device-authenticated, not user-JWT-authenticated) routes.
 func (k *KioskDeviceUsecase) VerifyToken(ctx context.Context, rawToken string) (*domain.KioskDevice, error) {
