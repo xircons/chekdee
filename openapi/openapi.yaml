@@ -25,6 +25,30 @@ paths:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
 
+  /auth/line/authorize:
+    get:
+      operationId: lineAuthorize
+      summary: >
+        Begin a LINE login. Mints a CSRF state and an id_token nonce, binds
+        them to short-lived httpOnly cookies, and returns the LINE
+        authorization URL to redirect the user to. The state is echoed back as
+        a query parameter on the callback and must be sent to /auth/line/login.
+      parameters:
+        - name: redirect_uri
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Authorization URL issued (sets state and nonce cookies)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LineAuthorizeResponse"
+        "400":
+          description: Missing redirect_uri
+
   /auth/line/login:
     post:
       operationId: lineLogin
@@ -159,14 +183,24 @@ components:
           type: string
           example: ok
 
+    LineAuthorizeResponse:
+      type: object
+      required: [authorize_url]
+      properties:
+        authorize_url:
+          type: string
+
     LineLoginRequest:
       type: object
-      required: [code, redirect_uri]
+      required: [code, redirect_uri, state]
       properties:
         code:
           type: string
         redirect_uri:
           type: string
+        state:
+          type: string
+          description: Must equal the state returned by /auth/line/authorize.
 
     PasswordLoginRequest:
       type: object

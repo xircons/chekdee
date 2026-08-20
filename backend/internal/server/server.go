@@ -26,6 +26,15 @@ func New(cfg *config.Config, logger *slog.Logger, authHandler *handler.AuthHandl
 	e.HidePort = true
 	e.Use(middleware.Recover())
 	e.Use(middleware.RequestID())
+	e.Use(middleware.Secure()) // X-Frame-Options, X-Content-Type-Options, etc.
+	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
+		// Explicit allow-list, not a wildcard: credentials (the refresh
+		// cookie) are only released to these origins.
+		AllowOrigins:     cfg.AllowedOrigins,
+		AllowMethods:     []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodOptions},
+		AllowHeaders:     []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAuthorization},
+		AllowCredentials: true,
+	}))
 
 	handler.RegisterRoutes(e, authHandler, jwtIssuer)
 

@@ -47,6 +47,25 @@ func (r *RefreshTokenRepository) GetActive(ctx context.Context, tokenHash string
 	return &rt, nil
 }
 
+func (r *RefreshTokenRepository) GetByHash(ctx context.Context, tokenHash string) (*domain.RefreshToken, error) {
+	row := r.pool.QueryRow(ctx, `
+		SELECT id::text, user_id::text, token_hash, expires_at, revoked_at
+		FROM refresh_tokens
+		WHERE token_hash = $1`,
+		tokenHash,
+	)
+
+	var rt domain.RefreshToken
+	err := row.Scan(&rt.ID, &rt.UserID, &rt.TokenHash, &rt.ExpiresAt, &rt.RevokedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, domain.ErrRefreshTokenInvalid
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &rt, nil
+}
+
 func (r *RefreshTokenRepository) Revoke(ctx context.Context, tokenHash string) error {
 	_, err := r.pool.Exec(ctx, `UPDATE refresh_tokens SET revoked_at = now() WHERE token_hash = $1`, tokenHash)
 	return err
