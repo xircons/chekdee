@@ -90,7 +90,7 @@ const DAY_STATUS_BADGE_VARIANT: Record<DayIconStatus, DetailModalBadgeVariant> =
 
 function formatTime(iso: string | null): string {
   if (!iso) return "--:--";
-  return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return new Date(iso).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" });
 }
 
 function initials(first: string | null, last: string | null, fallback: string | null): string {
@@ -212,7 +212,7 @@ export default function EmployeeHome() {
     <div className="flex w-full flex-1 flex-col">
       <EmployeePageHeader
         title={`สวัสดี, ${me.first_name ?? me.display_name}`}
-        subtitle="ระบบบันทึกเวลาทำงาน turnPRO, Chiang Mai University"
+        subtitle="Checkdee โดย turnPRO."
       />
 
       <div className="flex flex-1 flex-col gap-5 px-6 pb-6">
