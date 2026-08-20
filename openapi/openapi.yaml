@@ -1410,8 +1410,10 @@ components:
 
     DailyLogRow:
       type: object
-      required: [date, employee_id, status, auto_closed]
+      required: [id, date, employee_id, status, auto_closed]
       properties:
+        id:
+          type: string
         date:
           type: string
           format: date

@@ -60,6 +60,7 @@ func (h *ReportHandler) Monthly(c echo.Context) error {
 }
 
 type dailyLogRowView struct {
+	ID         string  `json:"id"`
 	Date       string  `json:"date"`
 	EmployeeID string  `json:"employee_id"`
 	FirstName  *string `json:"first_name"`
@@ -72,7 +73,7 @@ type dailyLogRowView struct {
 
 func toDailyLogRowView(r domain.DailyLogRow) dailyLogRowView {
 	v := dailyLogRowView{
-		Date: r.Date.Format(dateLayout), EmployeeID: r.EmployeeID,
+		ID: r.ID, Date: r.Date.Format(dateLayout), EmployeeID: r.EmployeeID,
 		FirstName: r.FirstName, LastName: r.LastName,
 		Status: string(r.Status), AutoClosed: r.AutoClosed,
 	}

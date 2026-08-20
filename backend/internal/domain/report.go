@@ -26,8 +26,13 @@ type MonthlyReportRow struct {
 }
 
 // DailyLogRow is the long-format per-record row backing the export's daily
-// detail sheet and the admin's calendar-heatmap view.
+// detail sheet and the admin's calendar-heatmap view. ID is the underlying
+// attendance_records.id -- needed so the admin dashboard's manual-correction
+// action (PATCH /attendance-records/:id/status) has something to target;
+// added alongside that endpoint since daily-log was otherwise the only
+// admin-facing read of today's per-employee records and had no id to act on.
 type DailyLogRow struct {
+	ID         string
 	Date       time.Time
 	EmployeeID string
 	FirstName  *string
