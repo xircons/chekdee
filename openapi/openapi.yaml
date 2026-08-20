@@ -575,6 +575,31 @@ paths:
         "403":
           description: Caller is not admin/supervisor/system_owner
 
+  /reports/daily-log/me:
+    get:
+      operationId: getMyDailyLog
+      summary: >
+        The caller's own daily attendance log for a month -- always forced
+        to their own id, unlike /reports/daily-log which is admin-only.
+        Backs the employee home page's weekly attendance-history icons.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Month"
+      responses:
+        "200":
+          description: Daily log rows for the caller
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DailyLogRow"
+        "400":
+          description: Missing or invalid month
+        "401":
+          description: Missing or invalid access token
+
   /reports/export:
     post:
       operationId: requestReportExport

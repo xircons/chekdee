@@ -81,6 +81,9 @@ func RegisterRoutes(
 
 	e.GET("/reports/monthly", reports.Monthly, RequireAuth(jwtIssuer), RequireRole(adminRoles...))
 	e.GET("/reports/daily-log", reports.DailyLog, RequireAuth(jwtIssuer), RequireRole(adminRoles...))
+	// Employee-scoped: any authenticated caller, always forced to their own
+	// id (see MyDailyLog's doc comment) -- not gated by RequireRole.
+	e.GET("/reports/daily-log/me", reports.MyDailyLog, RequireAuth(jwtIssuer))
 	e.POST("/reports/export", reports.RequestExport, RequireAuth(jwtIssuer), RequireRole(adminRoles...))
 	e.GET("/reports/export/:id", reports.GetExport, RequireAuth(jwtIssuer), RequireRole(adminRoles...))
 	e.GET("/reports/export/:id/download", reports.DownloadExport, RequireAuth(jwtIssuer), RequireRole(adminRoles...))
