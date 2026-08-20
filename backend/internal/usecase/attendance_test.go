@@ -181,7 +181,17 @@ func TestAttendanceUsecase_CheckIn_LateStatusFromSchedule(t *testing.T) {
 	// coincidence on a host whose local zone happens to be Bangkok.
 	bangkok, err := time.LoadLocation("Asia/Bangkok")
 	require.NoError(t, err)
-	nowBangkok := time.Now().In(bangkok)
+	// Fixed, deterministic instant — not time.Now(). A same-day work
+	// schedule can't represent ">60 minutes late" if fewer than 60 minutes
+	// of the Bangkok calendar day have elapsed yet (a schedule's start_time
+	// always combines with *today's* date, see computeStatus), so a
+	// time.Now()-based version of this test was flaky for roughly the first
+	// hour after Bangkok midnight — caught by an actual CI run landing in
+	// that window. 10:30 on a fixed Wednesday has no such boundary risk.
+	nowBangkok := time.Date(2026, 3, 4, 10, 30, 0, 0, bangkok)
+	reset := usecase.SetClockForTest(func() time.Time { return nowBangkok })
+	t.Cleanup(reset)
+
 	dayOfWeek := int16(nowBangkok.Weekday())
 	// Scheduled to start 2 hours before "now" so this check-in lands well
 	// past the 60-minute absent threshold.

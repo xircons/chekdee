@@ -18,6 +18,25 @@ var (
 	ErrDeviceNotActive = domain.ErrKioskDeviceNotFound
 )
 
+// clockNow is indirected through a package variable, not called as
+// time.Now() directly, so a test can substitute a fixed instant — see
+// SetClockForTest and TestAttendanceUsecase_CheckIn_LateStatusFromSchedule,
+// which needs a deterministic "now" to test the late/absent threshold: a
+// same-day work schedule can't represent ">60 minutes late" if fewer than
+// 60 minutes of the Bangkok calendar day have elapsed yet, which made a
+// time.Now()-based version of that test flaky for roughly the first hour
+// after Bangkok midnight. Production never overrides this.
+var clockNow = time.Now
+
+// SetClockForTest overrides the clock CheckIn/CheckOut use to determine
+// "now". Returns a reset func restoring the previous clock — call it via
+// t.Cleanup. Test-only; not for production use.
+func SetClockForTest(fn func() time.Time) (reset func()) {
+	prev := clockNow
+	clockNow = fn
+	return func() { clockNow = prev }
+}
+
 type AttendanceUsecase struct {
 	attendance domain.AttendanceRepository
 	schedules  domain.WorkScheduleRepository
@@ -79,7 +98,7 @@ func (a *AttendanceUsecase) CheckIn(ctx context.Context, employeeID, qrToken, id
 		return nil, err
 	}
 
-	now := time.Now()
+	now := clockNow()
 	workDate := bangkokWorkDate(now)
 
 	status, err := a.computeStatus(ctx, employeeID, workDate, now)
@@ -93,7 +112,7 @@ func (a *AttendanceUsecase) CheckIn(ctx context.Context, employeeID, qrToken, id
 // CheckOut is a plain in-app action — no QR, no camera step, per the flow
 // update that replaced the original checkout design.
 func (a *AttendanceUsecase) CheckOut(ctx context.Context, employeeID, idempotencyKey string) (*domain.AttendanceRecord, error) {
-	now := time.Now()
+	now := clockNow()
 	workDate := bangkokWorkDate(now)
 	return a.attendance.CheckOut(ctx, employeeID, workDate, now, idempotencyKey)
 }
