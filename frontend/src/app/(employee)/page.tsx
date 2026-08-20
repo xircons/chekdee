@@ -158,7 +158,7 @@ function computeOnTimeStreak(weekDays: WeekDay[]): number {
 
 export default function EmployeeHome() {
   const me = useMe();
-  const { today } = useTodayAttendance();
+  const { today, checkOut } = useTodayAttendance();
   const [selectedDay, setSelectedDay] = useState<WeekDay | null>(null);
   const [dayModalOpen, setDayModalOpen] = useState(false);
   const [requestModalOpen, setRequestModalOpen] = useState(false);
@@ -267,6 +267,17 @@ export default function EmployeeHome() {
                 <span className="text-xs font-semibold">สแกน QR</span>
               </Link>
             </div>
+
+            {today.checkInAt && (
+              <Button
+                variant="outline"
+                disabled={today.checkOutAt !== null}
+                onClick={() => checkOut()}
+                className="h-11 w-full rounded-full font-semibold"
+              >
+                ออกงาน
+              </Button>
+            )}
 
             <div className="border-t border-border" />
 

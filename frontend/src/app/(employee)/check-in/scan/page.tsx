@@ -2,10 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, X, Zap, ZapOff } from "lucide-react";
+import { X, Zap, ZapOff } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { CheckInMessage } from "@/components/check-in-message";
+import { CheckInSuccess } from "@/components/check-in-success";
 import { useTodayAttendance } from "@/lib/attendance-store";
+import { DESKTOP_INNER_FRAME, DESKTOP_OUTER_FRAME } from "@/lib/check-in-frame";
 import { cn } from "@/lib/utils";
 
 type ScanState = "requesting" | "denied" | "scanning" | "success";
@@ -14,26 +17,14 @@ type ScanState = "requesting" | "denied" | "scanning" | "success";
 // lib.dom.d.ts capability/constraint types yet.
 type TorchCapabilities = MediaTrackCapabilities & { torch?: boolean };
 
-// Shared with the main scanning screen below — same outer/inner recipe as
-// the employee shell's own framing ((employee)/layout.tsx), just wrapped in
-// `fixed inset-0` instead of sitting in normal document flow, since this
-// route bypasses that shell entirely (it's in FULL_SCREEN_ROUTES). Width is
-// derived from height via aspect-[9/19.5], not a fixed pixel width, so the
-// ratio holds at any viewport height and matches every other page exactly.
-const DESKTOP_OUTER_FRAME =
-  "fixed inset-0 z-50 flex min-h-full w-full flex-1 flex-col md:h-screen md:min-h-0 md:flex-none md:bg-muted md:py-8";
-const DESKTOP_INNER_FRAME =
-  "mx-auto flex min-h-full w-full flex-1 flex-col md:w-auto md:min-h-0 md:aspect-[9/19.5] md:max-w-none md:overflow-hidden md:rounded-3xl md:shadow-xl md:ring-1 md:ring-foreground/10";
-
 export default function ScanCheckInPage() {
   const router = useRouter();
-  const { today, checkIn, checkOut } = useTodayAttendance();
+  const { today, checkIn } = useTodayAttendance();
+  const alreadyCheckedIn = today.checkInAt !== null;
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [state, setState] = useState<ScanState>("requesting");
   const [torchOn, setTorchOn] = useState(false);
-  const [showCheck, setShowCheck] = useState(false);
-  const [countdown, setCountdown] = useState(5);
 
   // setState only happens inside the promise callbacks here, never
   // synchronously — safe to call directly from the mount effect below.
@@ -49,10 +40,15 @@ export default function ScanCheckInPage() {
   };
 
   useEffect(() => {
+    // Only check-in is QR-based (check-out is a plain button on the home
+    // page) — if today's check-in is already recorded, this route has
+    // nothing left to do, so skip the camera prompt entirely.
+    if (alreadyCheckedIn) return;
     requestCamera();
     return () => {
       streamRef.current?.getTracks().forEach((track) => track.stop());
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const retry = () => {
@@ -66,37 +62,14 @@ export default function ScanCheckInPage() {
     // detected code shortly after the camera feed starts.
     const timer = setTimeout(() => {
       setState("success");
-      if (today.checkInAt) {
-        checkOut();
-      } else {
-        checkIn();
-      }
+      checkIn();
       streamRef.current?.getTracks().forEach((track) => track.stop());
     }, 2200);
     return () => clearTimeout(timer);
-    // checkIn/checkOut aren't memoized by the provider and router is stable;
-    // only `state` should re-trigger this one-shot timer.
+    // checkIn isn't memoized by the provider; only `state` should
+    // re-trigger this one-shot timer.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state]);
-
-  useEffect(() => {
-    if (state !== "success") return;
-    // Matches the dot-grow animation's duration — the check mark and text
-    // reveal right as the circle finishes popping in, not after a pause.
-    const revealTimer = setTimeout(() => setShowCheck(true), 400);
-    return () => clearTimeout(revealTimer);
-  }, [state]);
-
-  // Ticks the redirect countdown once the check mark is revealed; hits 0 and navigates home.
-  useEffect(() => {
-    if (!showCheck) return;
-    if (countdown <= 0) {
-      router.push("/");
-      return;
-    }
-    const tick = setTimeout(() => setCountdown((c) => c - 1), 1000);
-    return () => clearTimeout(tick);
-  }, [showCheck, countdown, router]);
 
   const toggleTorch = async () => {
     const track = streamRef.current?.getVideoTracks()[0];
@@ -109,74 +82,11 @@ export default function ScanCheckInPage() {
   };
 
   if (state === "success") {
-    return (
-      <div className={DESKTOP_OUTER_FRAME}>
-        <div
-          className={cn(
-            "flex flex-col items-center justify-center gap-5 bg-white px-8 text-center",
-            DESKTOP_INNER_FRAME
-          )}
-        >
-          {/* Sized and positioned once, up front — the reveal blocks below reserve
-              their space from the start so this circle never has to re-center. */}
-          <div className="flex size-24 items-center justify-center rounded-full bg-success-foreground animate-dot-grow">
-            {showCheck && (
-              <Check className="size-12 animate-in text-white zoom-in-50 duration-150" strokeWidth={3} />
-            )}
-          </div>
+    return <CheckInSuccess />;
+  }
 
-          {/* Each line reveals in priority order — the confirmation itself first,
-              supporting detail next, exit action last — fading + settling in
-              place rather than fading the whole block at once. */}
-          <div className="flex flex-col items-center gap-1">
-            <p
-              className={cn(
-                "text-xl font-bold text-brand-900",
-                showCheck
-                  ? "animate-in fade-in-0 slide-in-from-bottom-1 fill-mode-both duration-300"
-                  : "invisible",
-              )}
-            >
-              บันทึกเวลาสำเร็จ
-            </p>
-            <p
-              className={cn(
-                "text-sm text-muted-foreground",
-                showCheck
-                  ? "animate-in fade-in-0 slide-in-from-bottom-1 fill-mode-both delay-100 duration-300"
-                  : "invisible",
-              )}
-            >
-              ระบบบันทึกเวลาเข้างานของคุณเรียบร้อยแล้ว
-            </p>
-          </div>
-
-          <div className="flex flex-col items-center gap-3">
-            <Button
-              onClick={() => router.push("/")}
-              className={cn(
-                "rounded-full bg-brand-600 px-8 font-semibold text-white hover:bg-brand-900",
-                showCheck
-                  ? "animate-in fade-in-0 slide-in-from-bottom-1 fill-mode-both delay-200 duration-300"
-                  : "invisible",
-              )}
-            >
-              กลับหน้าหลัก
-            </Button>
-            <p
-              className={cn(
-                "text-xs text-muted-foreground",
-                showCheck
-                  ? "animate-in fade-in-0 slide-in-from-bottom-1 fill-mode-both delay-300 duration-300"
-                  : "invisible",
-              )}
-            >
-              กำลังกลับไปหน้าหลักใน {countdown} วินาที
-            </p>
-          </div>
-        </div>
-      </div>
-    );
+  if (alreadyCheckedIn) {
+    return <CheckInMessage message="เช็คอินไปแล้ววันนี้" />;
   }
 
   return (
