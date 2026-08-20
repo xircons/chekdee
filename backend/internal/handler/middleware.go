@@ -11,8 +11,9 @@ import (
 )
 
 const (
-	ctxUserIDKey = "user_id"
-	ctxRoleKey   = "role"
+	ctxUserIDKey   = "user_id"
+	ctxRoleKey     = "role"
+	ctxDeviceIDKey = "device_id"
 )
 
 // RequireAuth parses the Authorization: Bearer <token> header and stashes
@@ -57,5 +58,33 @@ func RequireRole(roles ...domain.Role) echo.MiddlewareFunc {
 
 func userIDFromContext(c echo.Context) string {
 	id, _ := c.Get(ctxUserIDKey).(string)
+	return id
+}
+
+// RequireKioskDevice authenticates a kiosk route via the device's long-lived
+// link token (query param, matching the frontend's existing
+// `/kiosk/lobby-tv?token=` convention) — not a user JWT. Distinct from
+// RequireAuth: kiosks have no user session.
+func RequireKioskDevice(devices *usecase.KioskDeviceUsecase) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			token := c.QueryParam("token")
+			if token == "" {
+				return echo.NewHTTPError(http.StatusUnauthorized, "missing device token")
+			}
+
+			device, err := devices.VerifyToken(c.Request().Context(), token)
+			if err != nil {
+				return echo.NewHTTPError(http.StatusUnauthorized, "invalid or revoked device token")
+			}
+
+			c.Set(ctxDeviceIDKey, device.DeviceID)
+			return next(c)
+		}
+	}
+}
+
+func deviceIDFromContext(c echo.Context) string {
+	id, _ := c.Get(ctxDeviceIDKey).(string)
 	return id
 }

@@ -350,6 +350,172 @@ paths:
         "403":
           description: Caller is not admin/supervisor/system_owner
 
+  /kiosk/devices:
+    get:
+      operationId: listKioskDevices
+      summary: List active kiosk devices, tokens masked
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Active devices
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/KioskDevice"
+        "401":
+          description: Missing or invalid access token
+        "403":
+          description: Caller is not admin/supervisor/system_owner
+    post:
+      operationId: createKioskDevice
+      summary: >
+        Create a new kiosk device. The response includes the full token —
+        the only two times that ever happens (here and rotate).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateKioskDeviceRequest"
+      responses:
+        "201":
+          description: Device created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KioskDeviceWithToken"
+        "400":
+          description: Missing required fields
+        "401":
+          description: Missing or invalid access token
+        "403":
+          description: Caller is not admin/supervisor/system_owner
+
+  /kiosk/devices/{deviceId}/rotate:
+    post:
+      operationId: rotateKioskDevice
+      summary: Issue a new token for an existing device, invalidating the old one immediately
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/DeviceId"
+      responses:
+        "200":
+          description: New token issued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KioskDeviceWithToken"
+        "401":
+          description: Missing or invalid access token
+        "403":
+          description: Caller is not admin/supervisor/system_owner
+        "404":
+          description: Device not found
+
+  /kiosk/devices/{deviceId}/revoke:
+    post:
+      operationId: revokeKioskDevice
+      summary: Kill a device's live session immediately and permanently
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/DeviceId"
+      responses:
+        "204":
+          description: Device revoked
+        "401":
+          description: Missing or invalid access token
+        "403":
+          description: Caller is not admin/supervisor/system_owner
+        "404":
+          description: Device not found
+
+  /kiosk/qr-token:
+    get:
+      operationId: getKioskQRToken
+      summary: >
+        Mint the next rotating QR payload for this screen. Device-token
+        authenticated (query param, not a user bearer token) — the kiosk TV
+        polls this roughly every 15s.
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: A freshly signed QR payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QRTokenResponse"
+        "401":
+          description: Missing, invalid, or revoked device token
+
+  /attendance/check-in:
+    post:
+      operationId: checkIn
+      summary: >
+        Verify a scanned QR payload (signature, expiry, single-use) and
+        record the check-in, computing the no-grace-period late/absent
+        status against the employee's schedule for today.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CheckInRequest"
+      responses:
+        "200":
+          description: Check-in recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceRecord"
+        "400":
+          description: Missing qr_token or idempotency_key
+        "401":
+          description: Missing/invalid access token, or the qr_token is invalid/expired/device inactive
+        "409":
+          description: QR code already used, or already checked in today
+
+  /attendance/check-out:
+    post:
+      operationId: checkOut
+      summary: >
+        Plain in-app checkout — no QR, no camera step, per the flow update
+        that replaced the original checkout design.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CheckOutRequest"
+      responses:
+        "200":
+          description: Check-out recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceRecord"
+        "400":
+          description: Missing idempotency_key
+        "401":
+          description: Missing or invalid access token
+        "409":
+          description: Not checked in today, or already checked out today
+
 components:
   parameters:
     EmployeeId:
@@ -360,6 +526,12 @@ components:
         type: string
     HolidayId:
       name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    DeviceId:
+      name: deviceId
       in: path
       required: true
       schema:
@@ -547,6 +719,92 @@ components:
           type: string
         local_name:
           type: string
+
+    KioskDevice:
+      type: object
+      required: [id, device_id, name, masked_token]
+      properties:
+        id:
+          type: string
+        device_id:
+          type: string
+        name:
+          type: string
+        masked_token:
+          type: string
+          example: "••••••••ab12"
+        created_by:
+          type: string
+          nullable: true
+
+    KioskDeviceWithToken:
+      allOf:
+        - $ref: "#/components/schemas/KioskDevice"
+        - type: object
+          required: [token]
+          properties:
+            token:
+              type: string
+              description: The full raw device token. Only ever returned here and from rotate.
+
+    CreateKioskDeviceRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+
+    QRTokenResponse:
+      type: object
+      required: [token, expires_at]
+      properties:
+        token:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+
+    CheckInRequest:
+      type: object
+      required: [qr_token, idempotency_key]
+      properties:
+        qr_token:
+          type: string
+        idempotency_key:
+          type: string
+          description: Client-generated, stable across retries of the same logical attempt.
+
+    CheckOutRequest:
+      type: object
+      required: [idempotency_key]
+      properties:
+        idempotency_key:
+          type: string
+
+    AttendanceRecord:
+      type: object
+      required: [id, employee_id, work_date, status, auto_closed]
+      properties:
+        id:
+          type: string
+        employee_id:
+          type: string
+        work_date:
+          type: string
+          format: date
+        check_in_at:
+          type: string
+          nullable: true
+          example: "09:03:00"
+        check_out_at:
+          type: string
+          nullable: true
+          example: "17:05:00"
+        status:
+          type: string
+          enum: [pending, present, late, absent]
+        auto_closed:
+          type: boolean
 
   securitySchemes:
     bearerAuth:

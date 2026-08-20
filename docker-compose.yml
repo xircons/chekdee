@@ -24,6 +24,7 @@ services:
       DATABASE_URL: postgres://checkdee:checkdee@postgres:5432/checkdee?sslmode=disable
       APP_DATABASE_URL: postgres://checkdee_app:checkdee-app-dev-only-change-me@postgres:5432/checkdee?sslmode=disable
       JWT_SECRET: dev-only-secret-change-me-min-32-bytes-long
+      QR_SIGNING_SECRET: dev-only-qr-secret-change-me-min-32-bytes
     ports:
       - "8080:8080"
     depends_on:

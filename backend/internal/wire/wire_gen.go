@@ -13,6 +13,7 @@ import (
 	"checkdee-backend/internal/jobs"
 	"checkdee-backend/internal/lineclient"
 	"checkdee-backend/internal/nagerclient"
+	"checkdee-backend/internal/qrsign"
 	"checkdee-backend/internal/repository"
 	"checkdee-backend/internal/server"
 	"checkdee-backend/internal/usecase"
@@ -45,15 +46,24 @@ func InitializeServer(logger *slog.Logger) (*server.Server, error) {
 	holidayRepository := repository.NewHolidayRepository(pool)
 	holidayUsecase := usecase.NewHolidayUsecase(holidayRepository)
 	holidayHandler := handler.NewHolidayHandler(holidayUsecase)
+	kioskDeviceRepository := repository.NewKioskDeviceRepository(pool)
+	kioskDeviceUsecase := usecase.NewKioskDeviceUsecase(kioskDeviceRepository)
+	attendanceRepository := repository.NewAttendanceRepository(pool)
+	qrNonceRepository := repository.NewQRNonceRepository(pool)
+	signer := provideQRSigner(configConfig)
+	attendanceUsecase := usecase.NewAttendanceUsecase(attendanceRepository, workScheduleRepository, kioskDeviceRepository, qrNonceRepository, signer)
+	kioskHandler := handler.NewKioskHandler(kioskDeviceUsecase, attendanceUsecase)
+	attendanceHandler := handler.NewAttendanceHandler(attendanceUsecase)
 	nagerclientClient := provideNagerClient()
 	holidaySyncWorker := jobs.NewHolidaySyncWorker(nagerclientClient, holidayRepository)
-	workers := provideRiverWorkers(holidaySyncWorker)
+	attendanceAutoCloseWorker := jobs.NewAttendanceAutoCloseWorker(attendanceRepository)
+	workers := provideRiverWorkers(holidaySyncWorker, attendanceAutoCloseWorker)
 	v := providePeriodicJobs()
 	riverClient, err := jobs.NewClient(pool, workers, v)
 	if err != nil {
 		return nil, err
 	}
-	serverServer := server.New(configConfig, logger, authHandler, scheduleHandler, holidayHandler, jwtIssuer, riverClient)
+	serverServer := server.New(configConfig, logger, authHandler, scheduleHandler, holidayHandler, kioskHandler, attendanceHandler, jwtIssuer, kioskDeviceUsecase, riverClient)
 	return serverServer, nil
 }
 
@@ -78,22 +88,30 @@ func provideNagerClient() *nagerclient.Client {
 	return nagerclient.New()
 }
 
-// provideRiverWorkers registers every worker this process runs. Holiday
-// sync is the first; later PRs (attendance auto-close, leave notifications)
-// add theirs here too.
-func provideRiverWorkers(holidaySyncWorker *jobs.HolidaySyncWorker) *river.Workers {
+func provideQRSigner(cfg *config.Config) *qrsign.Signer {
+	return qrsign.NewSigner(cfg.QRSigningSecret)
+}
+
+// provideRiverWorkers registers every worker this process runs.
+func provideRiverWorkers(holidaySyncWorker *jobs.HolidaySyncWorker, attendanceAutoCloseWorker *jobs.AttendanceAutoCloseWorker) *river.Workers {
 	workers := jobs.Workers()
 	river.AddWorker(workers, holidaySyncWorker)
+	river.AddWorker(workers, attendanceAutoCloseWorker)
 	return workers
 }
 
-// providePeriodicJobs schedules holiday sync to run once a day, always for
-// the current year — UpsertSynced's "manual edits win" guard makes re-runs
-// safe. RunOnStart means a fresh deploy doesn't wait a full day for the
-// first sync.
+// providePeriodicJobs schedules holiday sync (daily, current year,
+// UpsertSynced's "manual edits win" guard makes re-runs safe, RunOnStart so
+// a fresh deploy doesn't wait a day) and attendance auto-close (hourly —
+// cheap no-op once a day's stragglers are closed, since the underlying
+// UPDATE only ever touches rows still missing a checkout).
 func providePeriodicJobs() []*river.PeriodicJob {
 	return []*river.PeriodicJob{river.NewPeriodicJob(river.PeriodicInterval(24*time.Hour), func() (river.JobArgs, *river.InsertOpts) {
 		return jobs.HolidaySyncArgs{Year: time.Now().Year()}, nil
+	},
+		&river.PeriodicJobOpts{RunOnStart: true},
+	), river.NewPeriodicJob(river.PeriodicInterval(1*time.Hour), func() (river.JobArgs, *river.InsertOpts) {
+		return jobs.AttendanceAutoCloseArgs{}, nil
 	},
 		&river.PeriodicJobOpts{RunOnStart: true},
 	),

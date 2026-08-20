@@ -16,7 +16,16 @@ import (
 // (the sidebar doesn't yet vary by role; that's a later Phase 4 concern).
 var adminRoles = []domain.Role{domain.RoleAdmin, domain.RoleSupervisor, domain.RoleSystemOwner}
 
-func RegisterRoutes(e *echo.Echo, auth *AuthHandler, schedules *ScheduleHandler, holidays *HolidayHandler, jwtIssuer *usecase.JWTIssuer) {
+func RegisterRoutes(
+	e *echo.Echo,
+	auth *AuthHandler,
+	schedules *ScheduleHandler,
+	holidays *HolidayHandler,
+	kiosk *KioskHandler,
+	attendance *AttendanceHandler,
+	jwtIssuer *usecase.JWTIssuer,
+	deviceAuth *usecase.KioskDeviceUsecase,
+) {
 	e.GET("/healthz", HealthCheck)
 
 	// Per-IP throttles on the credential-accepting endpoints. Password login
@@ -50,6 +59,21 @@ func RegisterRoutes(e *echo.Echo, auth *AuthHandler, schedules *ScheduleHandler,
 	e.POST("/holidays", holidays.Create, RequireAuth(jwtIssuer), RequireRole(adminRoles...))
 	e.PUT("/holidays/:id", holidays.Update, RequireAuth(jwtIssuer), RequireRole(adminRoles...))
 	e.DELETE("/holidays/:id", holidays.Delete, RequireAuth(jwtIssuer), RequireRole(adminRoles...))
+
+	// Kiosk device management is admin-only; there is no other PR in the
+	// backend work breakdown for it, and attendance check-in needs a way to
+	// create/verify device tokens, so it's bundled into this PR.
+	e.GET("/kiosk/devices", kiosk.List, RequireAuth(jwtIssuer), RequireRole(adminRoles...))
+	e.POST("/kiosk/devices", kiosk.Create, RequireAuth(jwtIssuer), RequireRole(adminRoles...))
+	e.POST("/kiosk/devices/:deviceId/rotate", kiosk.Rotate, RequireAuth(jwtIssuer), RequireRole(adminRoles...))
+	e.POST("/kiosk/devices/:deviceId/revoke", kiosk.Revoke, RequireAuth(jwtIssuer), RequireRole(adminRoles...))
+
+	// Device-token authenticated (not a user JWT) — the kiosk TV polls this
+	// every ~15s to rotate its displayed QR.
+	e.GET("/kiosk/qr-token", kiosk.QRToken, RequireKioskDevice(deviceAuth))
+
+	e.POST("/attendance/check-in", attendance.CheckIn, RequireAuth(jwtIssuer))
+	e.POST("/attendance/check-out", attendance.CheckOut, RequireAuth(jwtIssuer))
 }
 
 // rateLimiter builds an in-memory per-IP limiter. Each source IP gets its own
