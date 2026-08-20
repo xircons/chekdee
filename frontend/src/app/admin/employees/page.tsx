@@ -1,9 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ChevronLeft, ChevronRight, IdCard, Phone, Search, User, Users } from "lucide-react";
+import { ChevronLeft, ChevronRight, Search, User, Users } from "lucide-react";
 import { z } from "zod";
 
 import { AdminDetailDialog, AdminDetailInfoBlock } from "@/components/admin-detail-dialog";
@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -47,16 +47,21 @@ import {
 } from "@/components/ui/table";
 import { ACTION_BUTTON_CLASS, FIELD_CLASS } from "@/lib/admin-ui";
 import {
-  getMonthlyAttendanceStats,
-  mockEmployees,
-  ROLE_LABEL_TH,
-  type MockEmployee,
-  type Role,
-} from "@/lib/mock-data";
-import { useMe } from "@/lib/session";
+  listEmployees,
+  offboardEmployee,
+  updateEmployee,
+  updateEmployeeRole,
+  type Employee,
+  type EmployeeRole,
+} from "@/lib/api-employees";
+import { getMonthlyAttendanceStats, ROLE_LABEL_TH, type Role } from "@/lib/mock-data";
 
-const directoryRoles: Role[] = ["employee", "supervisor", "admin"];
+const directoryRoles: EmployeeRole[] = ["employee", "supervisor", "admin"];
 const PAGE_SIZE = 20;
+// How long to wait after the last keystroke before sending a search request
+// — the search box drives a real server-side query now (GET /employees's
+// own search param), not a client-side filter over an already-loaded list.
+const SEARCH_DEBOUNCE_MS = 300;
 // Shared with the icon-prefixed inputs (ชื่อ, นามสกุล, Directory search) so
 // their focus state reads as one design pass instead of the default gray ring.
 const ICON_INPUT_CLASS = `${FIELD_CLASS} pl-9`;
@@ -69,12 +74,11 @@ const employeeSchema = z.object({
   firstName: z.string().trim().min(1, "กรุณากรอกชื่อ"),
   lastName: z.string().trim().min(1, "กรุณากรอกนามสกุล"),
   role: z.enum(["employee", "supervisor", "admin"] as const),
-  studentGen: z.string().trim().optional(),
 });
 
 type EmployeeForm = z.infer<typeof employeeSchema>;
 
-function statusBadge(employee: MockEmployee) {
+function statusBadge(employee: Employee) {
   if (employee.offboardedAt) {
     return <Badge variant="danger">พ้นสภาพแล้ว</Badge>;
   }
@@ -84,24 +88,38 @@ function statusBadge(employee: MockEmployee) {
   return <Badge variant="secondary">ไม่ใช้งาน</Badge>;
 }
 
-function initials(employee: MockEmployee): string {
-  return `${employee.firstName[0] ?? ""}${employee.lastName[0] ?? ""}`.toUpperCase();
+// Never returns an empty string: falls back to the LINE display name, then
+// the raw id — an employee can exist before completing registration (no
+// first_name/last_name yet), and this must still show something.
+function displayName(employee: Employee): string {
+  const name = [employee.firstName, employee.lastName].filter(Boolean).join(" ");
+  if (name) return name;
+  if (employee.lineDisplayName) return employee.lineDisplayName;
+  return employee.id;
+}
+
+function initials(employee: Employee): string {
+  const parts = displayName(employee).split(" ").filter(Boolean);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return displayName(employee).slice(0, 2).toUpperCase();
 }
 
 function EmployeeFormFields({
   defaultValues,
   onSubmit,
   onCancel,
+  submitting,
 }: {
   defaultValues: EmployeeForm;
   onSubmit: (values: EmployeeForm) => void;
   onCancel: () => void;
+  submitting: boolean;
 }) {
   const {
     register,
     handleSubmit,
     control,
-    formState: { errors, isSubmitting },
+    formState: { errors },
   } = useForm<EmployeeForm>({
     resolver: zodResolver(employeeSchema),
     defaultValues,
@@ -183,21 +201,16 @@ function EmployeeFormFields({
         />
       </div>
 
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor="studentGen">รุ่นนักศึกษา (ถ้ามี)</Label>
-        <Input id="studentGen" placeholder="เช่น 7" className={FIELD_CLASS} {...register("studentGen")} />
-      </div>
-
       <DialogFooter>
         <Button type="button" variant="outline" className={ACTION_BUTTON_CLASS} onClick={onCancel}>
           ยกเลิก
         </Button>
         <Button
           type="submit"
-          disabled={isSubmitting}
+          disabled={submitting}
           className={`${ACTION_BUTTON_CLASS} bg-accent-600 text-white hover:bg-accent-700`}
         >
-          {isSubmitting ? "กำลังบันทึก..." : "บันทึก"}
+          {submitting ? "กำลังบันทึก..." : "บันทึก"}
         </Button>
       </DialogFooter>
     </form>
@@ -205,31 +218,42 @@ function EmployeeFormFields({
 }
 
 export default function EmployeesPage() {
-  const me = useMe();
-  const [employees, setEmployees] = useState<MockEmployee[]>(mockEmployees);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  // Derived rather than a separate setState call at the top of the fetch
+  // effect below (which would be a synchronous setState-in-effect) —
+  // loading is simply "haven't finished loading the currently-requested
+  // search/role/page combination yet".
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
+
   const [formOpen, setFormOpen] = useState(false);
-  const [editingEmployee, setEditingEmployee] = useState<MockEmployee | null>(null);
-  const [offboardTarget, setOffboardTarget] = useState<MockEmployee | null>(null);
-  const [detailEmployee, setDetailEmployee] = useState<MockEmployee | null>(null);
+  const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
+  const [editSubmitting, setEditSubmitting] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+
+  const [offboardTarget, setOffboardTarget] = useState<Employee | null>(null);
+  const [offboardSubmitting, setOffboardSubmitting] = useState(false);
+  const [offboardError, setOffboardError] = useState<string | null>(null);
+
+  const [detailEmployee, setDetailEmployee] = useState<Employee | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
+
+  const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
-  const [roleFilter, setRoleFilter] = useState<Role | "all">("all");
+  const [roleFilter, setRoleFilter] = useState<EmployeeRole | "all">("all");
   const [page, setPage] = useState(1);
   const [pageResetKey, setPageResetKey] = useState("");
 
-  const filteredEmployees = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    return employees.filter((e) => {
-      const matchesQuery =
-        query.length === 0 || `${e.firstName} ${e.lastName}`.toLowerCase().includes(query);
-      const matchesRole = roleFilter === "all" || e.role === roleFilter;
-      return matchesQuery && matchesRole;
-    });
-  }, [employees, search, roleFilter]);
+  // Debounce the search box before it drives a real request.
+  useEffect(() => {
+    const timer = setTimeout(() => setSearch(searchInput.trim()), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
 
   // Jump back to page 1 whenever the search/filter criteria change, so a
-  // narrower result set never leaves the view stuck on a now-empty page.
-  // Adjusted directly during render (React's documented pattern for
+  // narrower result set never leaves the view stuck on a now out-of-range
+  // page. Adjusted directly during render (React's documented pattern for
   // deriving state from a changed input) rather than in an effect.
   const resetKey = `${search}|${roleFilter}`;
   if (resetKey !== pageResetKey) {
@@ -237,88 +261,104 @@ export default function EmployeesPage() {
     setPage(1);
   }
 
-  const totalPages = Math.max(1, Math.ceil(filteredEmployees.length / PAGE_SIZE));
-  const currentPage = Math.min(page, totalPages);
-  const pagedEmployees = filteredEmployees.slice(
-    (currentPage - 1) * PAGE_SIZE,
-    currentPage * PAGE_SIZE
-  );
+  // Filtering and pagination happen server-side (GET /employees's own
+  // search/role/limit/offset params) — this list is never re-filtered or
+  // re-sliced client-side.
+  const fetchKey = `${search}|${roleFilter}|${page}`;
+  useEffect(() => {
+    listEmployees({
+      search: search || undefined,
+      role: roleFilter === "all" ? undefined : roleFilter,
+      limit: PAGE_SIZE,
+      offset: (page - 1) * PAGE_SIZE,
+    })
+      .then(({ employees: rows, total: count }) => {
+        setEmployees(rows);
+        setTotal(count);
+        setLoadError(null);
+      })
+      .catch((err: Error) => setLoadError(err.message))
+      .finally(() => setLoadedKey(fetchKey));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, roleFilter, page]);
 
-  const totalCount = employees.length;
-  const activeCount = employees.filter((e) => e.status === "active" && !e.offboardedAt).length;
-  const offboardedCount = employees.filter((e) => e.offboardedAt !== null).length;
+  const loading = loadedKey !== fetchKey;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-  const openCreateForm = () => {
-    setEditingEmployee(null);
-    setFormOpen(true);
-  };
-
-  const openEditForm = (employee: MockEmployee) => {
+  const openEditForm = (employee: Employee) => {
+    setEditError(null);
     setEditingEmployee(employee);
     setFormOpen(true);
   };
 
-  const openDetail = (employee: MockEmployee) => {
+  const openDetail = (employee: Employee) => {
     setDetailEmployee(employee);
     setDetailOpen(true);
   };
 
-  const handleSubmit = (values: EmployeeForm) => {
-    if (editingEmployee) {
-      setEmployees((prev) =>
-        prev.map((e) =>
-          e.id === editingEmployee.id
-            ? {
-              ...e,
-              firstName: values.firstName,
-              lastName: values.lastName,
-              role: values.role,
-              studentGen: values.studentGen || null,
-              displayName: `${values.firstName} ${values.lastName[0]}.`,
-            }
-            : e
-        )
-      );
-    } else {
-      const newEmployee: MockEmployee = {
-        id: crypto.randomUUID(),
-        role: values.role,
-        status: "active",
-        teamId: mockEmployees[0]?.teamId ?? "team-1",
+  const handleSubmit = async (values: EmployeeForm) => {
+    if (!editingEmployee) return;
+    setEditError(null);
+    setEditSubmitting(true);
+    try {
+      const profileUpdated = await updateEmployee(editingEmployee.id, {
         firstName: values.firstName,
         lastName: values.lastName,
-        studentGen: values.studentGen || null,
-        displayName: `${values.firstName} ${values.lastName[0]}.`,
-        pictureUrl: null,
-        offboardedAt: null,
-        offboardedBy: null,
-        offboardedReason: null,
-      };
-      setEmployees((prev) => [newEmployee, ...prev]);
+        teamId: editingEmployee.teamId,
+      });
+      setEmployees((prev) => prev.map((e) => (e.id === profileUpdated.id ? profileUpdated : e)));
+
+      // Only call the separate, more sensitive role-change endpoint if the
+      // role actually changed. A system_owner target's role is never sent
+      // for change even if the form displays "employee" for it (system_owner
+      // isn't a selectable option) — comparing against the real underlying
+      // role here, not the form's display fallback, avoids firing a
+      // guaranteed-to-403 role-change on every edit of a system_owner row.
+      if (editingEmployee.role !== "system_owner" && values.role !== editingEmployee.role) {
+        const roleUpdated = await updateEmployeeRole(editingEmployee.id, values.role);
+        setEmployees((prev) => prev.map((e) => (e.id === roleUpdated.id ? roleUpdated : e)));
+      }
+
+      setFormOpen(false);
+    } catch (err) {
+      // Dialog stays open so the admin can see the error and retry — any
+      // profile-field update above already committed and is reflected in
+      // the table even if a subsequent role-change 403'd.
+      setEditError(err instanceof Error ? err.message : "บันทึกไม่สำเร็จ");
+    } finally {
+      setEditSubmitting(false);
     }
-    setFormOpen(false);
   };
 
-  const confirmOffboard = () => {
+  const confirmOffboard = async () => {
     if (!offboardTarget) return;
-    setEmployees((prev) =>
-      prev.map((e) =>
-        e.id === offboardTarget.id
-          ? { ...e, offboardedAt: new Date().toISOString(), offboardedBy: me.id, offboardedReason: null }
-          : e
-      )
-    );
-    setOffboardTarget(null);
+    setOffboardError(null);
+    setOffboardSubmitting(true);
+    try {
+      const offboarded = await offboardEmployee(offboardTarget.id);
+      setEmployees((prev) => prev.map((e) => (e.id === offboarded.id ? offboarded : e)));
+      setOffboardTarget(null);
+    } catch (err) {
+      // Dialog stays open, error shown inline — covers both the 403
+      // (insufficient rank, or target is system_owner) and 409 (already
+      // offboarded by someone else between page load and this click) cases.
+      setOffboardError(err instanceof Error ? err.message : "ดำเนินการไม่สำเร็จ");
+    } finally {
+      setOffboardSubmitting(false);
+    }
   };
 
   const monthStats = detailEmployee
     ? getMonthlyAttendanceStats(detailEmployee.id, new Date().toISOString().slice(0, 7))
     : null;
 
+  const activeCount = employees.filter((e) => e.status === "active" && !e.offboardedAt).length;
+  const offboardedCount = employees.filter((e) => e.offboardedAt !== null).length;
+
   const bannerStats = [
-    { label: "พนักงานทั้งหมด", value: String(totalCount) },
-    { label: "ใช้งานอยู่", value: String(activeCount) },
-    { label: "พ้นสภาพแล้ว", value: String(offboardedCount) },
+    { label: "พนักงานทั้งหมด", value: String(total) },
+    { label: "ใช้งานอยู่ (หน้านี้)", value: String(activeCount) },
+    { label: "พ้นสภาพแล้ว (หน้านี้)", value: String(offboardedCount) },
   ];
 
   return (
@@ -340,24 +380,19 @@ export default function EmployeesPage() {
       <Card className="rounded-2xl border border-slate-200 ring-0">
         <CardHeader>
           <CardTitle>รายชื่อพนักงาน</CardTitle>
-          <CardAction>
-            <Button className={`${ACTION_BUTTON_CLASS} bg-accent-600 text-white hover:bg-accent-700`} onClick={openCreateForm}>
-              เพิ่มพนักงาน
-            </Button>
-          </CardAction>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative min-w-48 flex-1">
               <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
                 placeholder="ค้นหาจากชื่อ"
                 className={`w-full ${ICON_INPUT_CLASS}`}
               />
             </div>
-            <Select value={roleFilter} onValueChange={(v) => setRoleFilter(v as Role | "all")}>
+            <Select value={roleFilter} onValueChange={(v) => setRoleFilter(v as EmployeeRole | "all")}>
               <SelectTrigger className={`w-48 ${SELECT_TRIGGER_CLASS}`}>
                 <SelectValue placeholder="ทั้งหมด">
                   {(value: string | null) =>
@@ -381,85 +416,92 @@ export default function EmployeesPage() {
             </Select>
           </div>
 
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>ชื่อ</TableHead>
-                <TableHead>ตำแหน่ง</TableHead>
-                <TableHead>สถานะ</TableHead>
-                <TableHead>รุ่นนักศึกษา</TableHead>
-                <TableHead className="text-right">จัดการ</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {pagedEmployees.map((employee) => (
-                <TableRow
-                  key={employee.id}
-                  className="cursor-pointer"
-                  onClick={() => openDetail(employee)}
-                >
-                  <TableCell className="font-medium text-foreground">
-                    <div className="flex items-center gap-3">
-                      <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-100 text-xs font-semibold text-brand-600">
-                        {initials(employee)}
-                      </div>
-                      <span>
-                        {employee.firstName} {employee.lastName}
-                      </span>
-                    </div>
-                  </TableCell>
-                  <TableCell>{ROLE_LABEL_TH[employee.role]}</TableCell>
-                  <TableCell>{statusBadge(employee)}</TableCell>
-                  <TableCell>{employee.studentGen ? `(${employee.studentGen})` : "—"}</TableCell>
-                  <TableCell className="text-right">
-                    {employee.offboardedAt ? (
-                      <span className="text-muted-foreground">—</span>
-                    ) : (
-                      <div className="flex justify-end gap-2" onClick={(e) => e.stopPropagation()}>
-                        <Button
-                          variant="outline"
-                          className={`${ACTION_BUTTON_CLASS} border-slate-200 text-muted-foreground`}
-                          onClick={() => openEditForm(employee)}
-                        >
-                          แก้ไข
-                        </Button>
-                        <Button
-                          variant="outline"
-                          className={`${ACTION_BUTTON_CLASS} border-danger-foreground/30 text-danger-foreground hover:bg-danger hover:text-danger-foreground`}
-                          onClick={() => setOffboardTarget(employee)}
-                        >
-                          พ้นสภาพ
-                        </Button>
-                      </div>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-              {pagedEmployees.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground">
-                    ไม่พบพนักงานที่ตรงกับการค้นหา
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+          {loading && <p className="text-sm text-muted-foreground">กำลังโหลด…</p>}
+          {!loading && loadError && (
+            <p className="text-sm text-danger-foreground">โหลดข้อมูลไม่สำเร็จ: {loadError}</p>
+          )}
 
-          {filteredEmployees.length > 0 && (
+          {!loading && !loadError && (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>ชื่อ</TableHead>
+                  <TableHead>ตำแหน่ง</TableHead>
+                  <TableHead>สถานะ</TableHead>
+                  <TableHead>รุ่นนักศึกษา</TableHead>
+                  <TableHead className="text-right">จัดการ</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {employees.map((employee) => (
+                  <TableRow
+                    key={employee.id}
+                    className="cursor-pointer"
+                    onClick={() => openDetail(employee)}
+                  >
+                    <TableCell className="font-medium text-foreground">
+                      <div className="flex items-center gap-3">
+                        <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-100 text-xs font-semibold text-brand-600">
+                          {initials(employee)}
+                        </div>
+                        <span>{displayName(employee)}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell>{ROLE_LABEL_TH[employee.role]}</TableCell>
+                    <TableCell>{statusBadge(employee)}</TableCell>
+                    <TableCell>{employee.studentGen ? `(${employee.studentGen})` : "—"}</TableCell>
+                    <TableCell className="text-right">
+                      {employee.offboardedAt ? (
+                        <span className="text-muted-foreground">—</span>
+                      ) : (
+                        <div className="flex justify-end gap-2" onClick={(e) => e.stopPropagation()}>
+                          <Button
+                            variant="outline"
+                            className={`${ACTION_BUTTON_CLASS} border-slate-200 text-muted-foreground`}
+                            onClick={() => openEditForm(employee)}
+                          >
+                            แก้ไข
+                          </Button>
+                          <Button
+                            variant="outline"
+                            className={`${ACTION_BUTTON_CLASS} border-danger-foreground/30 text-danger-foreground hover:bg-danger hover:text-danger-foreground`}
+                            onClick={() => {
+                              setOffboardError(null);
+                              setOffboardTarget(employee);
+                            }}
+                          >
+                            พ้นสภาพ
+                          </Button>
+                        </div>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {employees.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center text-muted-foreground">
+                      ไม่พบพนักงานที่ตรงกับการค้นหา
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          )}
+
+          {!loading && !loadError && total > 0 && (
             <div className="flex items-center justify-between">
               <p className="text-xs text-muted-foreground">
-                แสดง {(currentPage - 1) * PAGE_SIZE + 1}
+                แสดง {(page - 1) * PAGE_SIZE + 1}
                 {"–"}
-                {Math.min(currentPage * PAGE_SIZE, filteredEmployees.length)} จาก{" "}
-                {filteredEmployees.length}
+                {Math.min(page * PAGE_SIZE, total)} จาก {total}
               </p>
               {totalPages > 1 && (
                 <div className="flex items-center gap-1">
                   <Button
                     size="sm"
                     variant="outline"
-                    disabled={currentPage === 1}
-                    onClick={() => setPage(currentPage - 1)}
+                    disabled={page === 1}
+                    onClick={() => setPage(page - 1)}
                   >
                     <ChevronLeft className="size-4" />
                   </Button>
@@ -467,11 +509,9 @@ export default function EmployeesPage() {
                     <Button
                       key={pageNumber}
                       size="sm"
-                      variant={pageNumber === currentPage ? "default" : "outline"}
+                      variant={pageNumber === page ? "default" : "outline"}
                       className={
-                        pageNumber === currentPage
-                          ? "bg-accent-600 text-white hover:bg-accent-700"
-                          : undefined
+                        pageNumber === page ? "bg-accent-600 text-white hover:bg-accent-700" : undefined
                       }
                       onClick={() => setPage(pageNumber)}
                     >
@@ -481,8 +521,8 @@ export default function EmployeesPage() {
                   <Button
                     size="sm"
                     variant="outline"
-                    disabled={currentPage === totalPages}
-                    onClick={() => setPage(currentPage + 1)}
+                    disabled={page === totalPages}
+                    onClick={() => setPage(page + 1)}
                   >
                     <ChevronRight className="size-4" />
                   </Button>
@@ -493,43 +533,68 @@ export default function EmployeesPage() {
         </CardContent>
       </Card>
 
+      {/* Create is intentionally not offered here — there is no
+          POST /employees endpoint by design. Employees are created only via
+          LINE self-registration (see backend auth.go); this dialog is
+          edit-only. */}
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editingEmployee ? "แก้ไขข้อมูลพนักงาน" : "เพิ่มพนักงาน"}</DialogTitle>
+            <DialogTitle>แก้ไขข้อมูลพนักงาน</DialogTitle>
           </DialogHeader>
-          {formOpen && (
+          {editError && (
+            <p className="rounded-md border border-danger bg-danger px-3 py-2 text-sm text-danger-foreground">
+              {editError}
+            </p>
+          )}
+          {formOpen && editingEmployee && (
             <EmployeeFormFields
               defaultValues={{
-                firstName: editingEmployee?.firstName ?? "",
-                lastName: editingEmployee?.lastName ?? "",
-                role: editingEmployee?.role === "system_owner" ? "employee" : editingEmployee?.role ?? "employee",
-                studentGen: editingEmployee?.studentGen ?? "",
+                firstName: editingEmployee.firstName ?? "",
+                lastName: editingEmployee.lastName ?? "",
+                role: editingEmployee.role === "system_owner" ? "employee" : editingEmployee.role,
               }}
               onSubmit={handleSubmit}
               onCancel={() => setFormOpen(false)}
+              submitting={editSubmitting}
             />
           )}
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={!!offboardTarget} onOpenChange={(open) => !open && setOffboardTarget(null)}>
+      <AlertDialog
+        open={!!offboardTarget}
+        onOpenChange={(open) => {
+          if (!open) {
+            setOffboardTarget(null);
+            setOffboardError(null);
+          }
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>ให้ {offboardTarget?.firstName} พ้นสภาพ?</AlertDialogTitle>
+            <AlertDialogTitle>
+              ให้ {offboardTarget ? displayName(offboardTarget) : ""} พ้นสภาพ?
+            </AlertDialogTitle>
             <AlertDialogDescription>
               การดำเนินการนี้เป็นการลบแบบไม่ถาวร ข้อมูลและประวัติการเข้างานของพนักงานจะยังคงอยู่
               เพียงแค่ถูกทำเครื่องหมายว่าพ้นสภาพและไม่สามารถเช็คอินได้อีก
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {offboardError && (
+            <p className="rounded-md border border-danger bg-danger px-3 py-2 text-sm text-danger-foreground">
+              {offboardError}
+            </p>
+          )}
           <AlertDialogFooter>
             <AlertDialogCancel className={ACTION_BUTTON_CLASS}>ยกเลิก</AlertDialogCancel>
             <AlertDialogAction
               variant="destructive"
               className={ACTION_BUTTON_CLASS}
-              onClick={confirmOffboard}
+              disabled={offboardSubmitting}
+              onClick={() => void confirmOffboard()}
             >
-              พ้นสภาพ
+              {offboardSubmitting ? "กำลังดำเนินการ..." : "พ้นสภาพ"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -539,7 +604,7 @@ export default function EmployeesPage() {
         open={detailOpen}
         onOpenChange={setDetailOpen}
         icon={Users}
-        title={detailEmployee ? `${detailEmployee.firstName} ${detailEmployee.lastName}` : ""}
+        title={detailEmployee ? displayName(detailEmployee) : ""}
         badgeText={detailEmployee ? ROLE_LABEL_TH[detailEmployee.role] : ""}
         badgeVariant="default"
         footer={
@@ -555,17 +620,21 @@ export default function EmployeesPage() {
                 {initials(detailEmployee)}
               </div>
               <div className="flex flex-col gap-0.5 text-sm">
-                <div className="flex items-center gap-1.5 text-foreground">
-                  <IdCard className="size-3.5 text-muted-foreground" />
-                  {detailEmployee.studentId ?? "ไม่มีข้อมูลรหัสนักศึกษา"}
-                </div>
-                <div className="flex items-center gap-1.5 text-foreground">
-                  <Phone className="size-3.5 text-muted-foreground" />
-                  {detailEmployee.phoneNumber ?? "ไม่มีข้อมูลเบอร์โทรศัพท์"}
-                </div>
+                <span className="font-medium text-foreground">{displayName(detailEmployee)}</span>
+                <span className="text-xs text-muted-foreground">
+                  {detailEmployee.registrationCompletedAt
+                    ? "ลงทะเบียนเสร็จสิ้นแล้ว"
+                    : "ยังไม่ได้ลงทะเบียน"}
+                </span>
               </div>
             </div>
 
+            {/* Attendance heatmap/monthly stats still read from mock-data.ts
+                (getMonthlyAttendanceStats, EmployeeAttendanceHeatmap) — there
+                is no per-employee attendance-summary endpoint yet. Both are
+                keyed by employee.id and safely render empty/zeroed for a
+                real employee id not present in the mock fixtures, rather
+                than crashing; wiring them is separate follow-up work. */}
             {monthStats && (
               <div className="grid grid-cols-3 gap-2">
                 <AdminDetailInfoBlock label="ชั่วโมง (เดือนนี้)" value={String(monthStats.hours)} valueSize="sm" />

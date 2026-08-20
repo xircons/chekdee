@@ -1,10 +1,7 @@
 import { apiFetch } from "@/lib/api";
 
 // Wire-format shape from GET /employees and GET /employees/:id (snake_case,
-// per feature/backend-employees's openapi.yaml Employee schema — PR #21,
-// not yet merged to dev as of writing, so this is written directly against
-// its documented contract rather than tested end-to-end against a running
-// backend; re-verify once that PR merges).
+// per openapi/openapi.yaml's Employee schema).
 type EmployeeResponse = {
   id: string;
   role: "system_owner" | "admin" | "supervisor" | "employee";
@@ -96,4 +93,87 @@ export async function getEmployeesByIds(ids: string[]): Promise<Map<string, Empl
     }
   });
   return employees;
+}
+
+export type EmployeeRole = "admin" | "supervisor" | "employee";
+export type EmployeeOffboardStatus = "active" | "offboarded";
+
+export type EmployeeListFilter = {
+  search?: string;
+  role?: EmployeeRole;
+  status?: EmployeeOffboardStatus;
+  teamId?: string;
+  limit?: number;
+  offset?: number;
+};
+
+type EmployeeListResponse = {
+  employees: EmployeeResponse[];
+  total: number;
+};
+
+// GET /employees — filtering/pagination happens server-side (search matches
+// first_name/last_name/line_display_name; status filters on offboarded_at,
+// not the separate active/inactive status column — see EmployeeListFilter
+// on the backend). Callers should not re-filter or re-paginate the result
+// client-side; the returned `total` is the count before limit/offset.
+export async function listEmployees(
+  filter: EmployeeListFilter = {}
+): Promise<{ employees: Employee[]; total: number }> {
+  const params = new URLSearchParams();
+  if (filter.search) params.set("search", filter.search);
+  if (filter.role) params.set("role", filter.role);
+  if (filter.status) params.set("status", filter.status);
+  if (filter.teamId) params.set("team_id", filter.teamId);
+  if (filter.limit != null) params.set("limit", String(filter.limit));
+  if (filter.offset != null) params.set("offset", String(filter.offset));
+
+  const qs = params.toString();
+  const res = await apiFetch(`/employees${qs ? `?${qs}` : ""}`);
+  const body = await parseOrThrow<EmployeeListResponse>(res);
+  return { employees: body.employees.map(toEmployee), total: body.total };
+}
+
+// PATCH /employees/:id — profile fields only. The backend does not accept
+// student_gen (set only once, during the employee's own LINE registration)
+// or anything else here; see UpdateEmployeeRequest in openapi.yaml.
+export async function updateEmployee(
+  id: string,
+  input: { firstName: string; lastName: string; teamId: string | null }
+): Promise<Employee> {
+  const res = await apiFetch(`/employees/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      first_name: input.firstName,
+      last_name: input.lastName,
+      team_id: input.teamId,
+    }),
+  });
+  return toEmployee(await parseOrThrow<EmployeeResponse>(res));
+}
+
+// PATCH /employees/:id/role — a separate, more sensitive, audit-logged
+// action from updateEmployee above (matches the backend's own separation).
+// Rejects (403) a transition to/from system_owner, and (403) an actor who
+// doesn't outrank both the target's current role and the requested role.
+export async function updateEmployeeRole(id: string, role: EmployeeRole): Promise<Employee> {
+  const res = await apiFetch(`/employees/${id}/role`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ role }),
+  });
+  return toEmployee(await parseOrThrow<EmployeeResponse>(res));
+}
+
+// POST /employees/:id/offboard — soft-delete. Rejects (403) a system_owner
+// target, (409) an already-offboarded target, and (403) an actor who
+// doesn't outrank the target's current role.
+export async function offboardEmployee(id: string, reason?: string): Promise<Employee> {
+  const res = await apiFetch(`/employees/${id}/offboard`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ reason: reason ?? "" }),
+  });
+  return toEmployee(await parseOrThrow<EmployeeResponse>(res));
 }
