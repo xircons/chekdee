@@ -807,6 +807,186 @@ paths:
         "404":
           description: Notification not found (or belongs to another user)
 
+  /employees:
+    get:
+      operationId: listEmployees
+      summary: >
+        The employee directory, filterable and paginated. Distinct from
+        /reports' internal ListActiveEmployees (role-locked to "employee",
+        unfiltered) — this backs the admin UI's employee list, roster, and
+        employee-picker dropdowns.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: team_id
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: role
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [admin, supervisor, employee]
+        - name: status
+          in: query
+          required: false
+          description: >
+            Filters on offboarded_at, not the separate active/inactive
+            status column.
+          schema:
+            type: string
+            enum: [active, offboarded]
+        - name: search
+          in: query
+          required: false
+          description: Matched against first_name, last_name, and line_display_name.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Matching employees and the total count before pagination
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmployeeListResponse"
+        "401":
+          description: Missing or invalid access token
+        "403":
+          description: Caller is not admin/supervisor/system_owner
+
+  /employees/{id}:
+    get:
+      operationId: getEmployee
+      summary: Get one employee
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/EmployeeUserId"
+      responses:
+        "200":
+          description: The employee
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Employee"
+        "401":
+          description: Missing or invalid access token
+        "403":
+          description: Caller is not admin/supervisor/system_owner
+        "404":
+          description: Employee not found
+    patch:
+      operationId: updateEmployee
+      summary: >
+        Edit profile fields only (first_name, last_name, team_id). Role and
+        offboarding go through their own endpoints below — distinct, more
+        sensitive actions with their own audit-log entries.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/EmployeeUserId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateEmployeeRequest"
+      responses:
+        "200":
+          description: Employee updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Employee"
+        "400":
+          description: Missing first_name or last_name
+        "401":
+          description: Missing or invalid access token
+        "403":
+          description: Caller is not admin/supervisor/system_owner
+        "404":
+          description: Employee not found
+
+  /employees/{id}/role:
+    patch:
+      operationId: updateEmployeeRole
+      summary: >
+        Change an employee's role. Rejects any transition to or from
+        system_owner — that account is bootstrapped out-of-band via
+        cmd/seedowner only, never promoted/demoted through this API.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/EmployeeUserId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateEmployeeRoleRequest"
+      responses:
+        "200":
+          description: Role updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Employee"
+        "400":
+          description: Missing role
+        "401":
+          description: Missing or invalid access token
+        "403":
+          description: >
+            Caller is not admin/supervisor/system_owner, or the requested
+            change would move the role to or from system_owner
+        "404":
+          description: Employee not found
+
+  /employees/{id}/offboard:
+    post:
+      operationId: offboardEmployee
+      summary: >
+        Soft-delete an employee (offboarded_at/by/reason) — users are never
+        hard-deleted, see design.md. Rejects an already-offboarded target
+        and a system_owner target.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/EmployeeUserId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OffboardEmployeeRequest"
+      responses:
+        "200":
+          description: Employee offboarded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Employee"
+        "401":
+          description: Missing or invalid access token
+        "403":
+          description: Caller is not admin/supervisor/system_owner, or target is system_owner
+        "404":
+          description: Employee not found
+        "409":
+          description: Employee already offboarded
+
 components:
   parameters:
     EmployeeId:
@@ -848,6 +1028,12 @@ components:
       schema:
         type: string
     NotificationId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    EmployeeUserId:
       name: id
       in: path
       required: true
@@ -1284,6 +1470,90 @@ components:
         created_at:
           type: string
           format: date-time
+
+    Employee:
+      type: object
+      required: [id, role, status, created_at]
+      properties:
+        id:
+          type: string
+        role:
+          type: string
+          enum: [system_owner, admin, supervisor, employee]
+        status:
+          type: string
+          enum: [active, inactive]
+        team_id:
+          type: string
+          nullable: true
+        first_name:
+          type: string
+          nullable: true
+        last_name:
+          type: string
+          nullable: true
+        student_gen:
+          type: string
+          nullable: true
+        line_display_name:
+          type: string
+          nullable: true
+        line_picture_url:
+          type: string
+          nullable: true
+        registration_completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        offboarded_at:
+          type: string
+          format: date-time
+          nullable: true
+        offboarded_reason:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    EmployeeListResponse:
+      type: object
+      required: [employees, total]
+      properties:
+        employees:
+          type: array
+          items:
+            $ref: "#/components/schemas/Employee"
+        total:
+          type: integer
+          description: Total matching rows before limit/offset pagination.
+
+    UpdateEmployeeRequest:
+      type: object
+      required: [first_name, last_name]
+      properties:
+        first_name:
+          type: string
+        last_name:
+          type: string
+        team_id:
+          type: string
+          nullable: true
+
+    UpdateEmployeeRoleRequest:
+      type: object
+      required: [role]
+      properties:
+        role:
+          type: string
+          enum: [admin, supervisor, employee]
+          description: system_owner is rejected — see the endpoint summary.
+
+    OffboardEmployeeRequest:
+      type: object
+      properties:
+        reason:
+          type: string
 
   securitySchemes:
     bearerAuth:

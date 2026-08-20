@@ -155,6 +155,7 @@ func InitializeServer(logger *slog.Logger) (*server.Server, error) {
 		usecase.NewAuditLogUsecase,
 		usecase.NewLeaveUsecase,
 		usecase.NewNotificationUsecase,
+		usecase.NewEmployeeUsecase,
 		jobs.NewHolidaySyncWorker,
 		jobs.NewAttendanceAutoCloseWorker,
 		jobs.NewLeaveDecisionNotifyWorker,
@@ -166,6 +167,7 @@ func InitializeServer(logger *slog.Logger) (*server.Server, error) {
 		handler.NewReportHandler,
 		handler.NewLeaveHandler,
 		handler.NewNotificationHandler,
+		handler.NewEmployeeHandler,
 		server.New,
 	)
 	return nil, nil

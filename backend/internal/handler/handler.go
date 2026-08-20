@@ -26,6 +26,7 @@ func RegisterRoutes(
 	reports *ReportHandler,
 	leaves *LeaveHandler,
 	notifications *NotificationHandler,
+	employees *EmployeeHandler,
 	jwtIssuer *usecase.JWTIssuer,
 	deviceAuth *usecase.KioskDeviceUsecase,
 ) {
@@ -92,6 +93,14 @@ func RegisterRoutes(
 
 	e.GET("/notifications/me", notifications.Me, RequireAuth(jwtIssuer))
 	e.POST("/notifications/:id/read", notifications.MarkRead, RequireAuth(jwtIssuer))
+
+	// Employee directory is admin-only, same trio as schedules/holidays
+	// mutations — see adminRoles above.
+	e.GET("/employees", employees.List, RequireAuth(jwtIssuer), RequireRole(adminRoles...))
+	e.GET("/employees/:id", employees.Get, RequireAuth(jwtIssuer), RequireRole(adminRoles...))
+	e.PATCH("/employees/:id", employees.Update, RequireAuth(jwtIssuer), RequireRole(adminRoles...))
+	e.PATCH("/employees/:id/role", employees.UpdateRole, RequireAuth(jwtIssuer), RequireRole(adminRoles...))
+	e.POST("/employees/:id/offboard", employees.Offboard, RequireAuth(jwtIssuer), RequireRole(adminRoles...))
 }
 
 // rateLimiter builds an in-memory per-IP limiter. Each source IP gets its own

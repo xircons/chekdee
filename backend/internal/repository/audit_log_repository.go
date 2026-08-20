@@ -31,18 +31,32 @@ func scanAuditLog(row pgx.Row) (*domain.AdminAuditLog, error) {
 	return &l, nil
 }
 
-// Create writes one audit log entry. The write path is intentionally the
-// only mutation this repository offers — there is no Update or Delete, and
-// PR 4 also locks this down at the DB role level so an append-only ledger
-// holds even against a compromised app credential.
-func (r *AuditLogRepository) Create(ctx context.Context, l *domain.AdminAuditLog) (*domain.AdminAuditLog, error) {
-	row := r.pool.QueryRow(ctx, `
+// auditLogInserter is satisfied structurally by both *pgxpool.Pool and
+// pgx.Tx (both expose this exact QueryRow signature) — lets insertAuditLog
+// run standalone (AuditLogRepository.Create, against the pool) or as one
+// statement inside another repository's transaction (e.g.
+// UserRepository.UpdateRole/Offboard, against that call's pgx.Tx) without
+// either repository needing to know about the other's concrete type.
+type auditLogInserter interface {
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
+func insertAuditLog(ctx context.Context, q auditLogInserter, l *domain.AdminAuditLog) (*domain.AdminAuditLog, error) {
+	row := q.QueryRow(ctx, `
 		INSERT INTO admin_audit_logs (actor_id, action, target_type, target_id, reason, metadata)
 		VALUES ($1, $2, $3, $4, $5, $6)
 		RETURNING `+auditLogColumns,
 		l.ActorID, l.Action, l.TargetType, l.TargetID, l.Reason, l.Metadata,
 	)
 	return scanAuditLog(row)
+}
+
+// Create writes one audit log entry. The write path is intentionally the
+// only mutation this repository offers — there is no Update or Delete, and
+// PR 4 also locks this down at the DB role level so an append-only ledger
+// holds even against a compromised app credential.
+func (r *AuditLogRepository) Create(ctx context.Context, l *domain.AdminAuditLog) (*domain.AdminAuditLog, error) {
+	return insertAuditLog(ctx, r.pool, l)
 }
 
 func (r *AuditLogRepository) ListForTarget(ctx context.Context, targetType, targetID string) ([]*domain.AdminAuditLog, error) {

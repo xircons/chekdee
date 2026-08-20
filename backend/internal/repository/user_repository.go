@@ -144,3 +144,183 @@ func (r *UserRepository) CreateSystemOwner(ctx context.Context, username, passwo
 	)
 	return scanUser(row)
 }
+
+// employeeListWhere is shared between List's row query and its count query
+// so the two can never drift out of sync with each other.
+const employeeListWhere = `
+	($1::uuid IS NULL OR team_id = $1)
+	AND ($2::text IS NULL OR role::text = $2)
+	AND (
+		$3::text IS NULL
+		OR ($3 = 'active' AND offboarded_at IS NULL)
+		OR ($3 = 'offboarded' AND offboarded_at IS NOT NULL)
+	)
+	AND (
+		$4::text IS NULL
+		OR first_name ILIKE '%' || $4 || '%'
+		OR last_name ILIKE '%' || $4 || '%'
+		OR line_display_name ILIKE '%' || $4 || '%'
+	)`
+
+// List is the employee-directory listing behind GET /employees.
+func (r *UserRepository) List(ctx context.Context, filter domain.EmployeeListFilter) ([]*domain.User, int, error) {
+	var role *string
+	if filter.Role != nil {
+		s := string(*filter.Role)
+		role = &s
+	}
+	var search *string
+	if filter.Search != "" {
+		search = &filter.Search
+	}
+
+	var total int
+	if err := r.pool.QueryRow(ctx, `
+		SELECT count(*) FROM users WHERE `+employeeListWhere,
+		filter.TeamID, role, filter.OffboardStatus, search,
+	).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	rows, err := r.pool.Query(ctx, `
+		SELECT `+userColumns+`
+		FROM users
+		WHERE `+employeeListWhere+`
+		ORDER BY first_name, last_name
+		LIMIT $5 OFFSET $6`,
+		filter.TeamID, role, filter.OffboardStatus, search, filter.Limit, filter.Offset,
+	)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var out []*domain.User
+	for rows.Next() {
+		u, err := scanUser(rows)
+		if err != nil {
+			return nil, 0, err
+		}
+		out = append(out, u)
+	}
+	return out, total, rows.Err()
+}
+
+// Update edits profile fields only — see the interface doc comment for why
+// role/offboarding are separate methods.
+func (r *UserRepository) Update(ctx context.Context, id string, firstName, lastName, teamID *string) (*domain.User, error) {
+	row := r.pool.QueryRow(ctx, `
+		UPDATE users
+		SET first_name = $2, last_name = $3, team_id = $4::uuid, updated_at = now()
+		WHERE id = $1
+		RETURNING `+userColumns,
+		id, firstName, lastName, teamID,
+	)
+	u, err := scanUser(row)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, domain.ErrUserNotFound
+	}
+	return u, err
+}
+
+// getByIDTx is GetByID run inside an already-open transaction, so the
+// disambiguating re-check in UpdateRole/Offboard below sees a consistent
+// view with the UPDATE that just ran in the same tx.
+func getByIDTx(ctx context.Context, tx pgx.Tx, id string) (*domain.User, error) {
+	row := tx.QueryRow(ctx, `SELECT `+userColumns+` FROM users WHERE id = $1`, id)
+	u, err := scanUser(row)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, domain.ErrUserNotFound
+	}
+	return u, err
+}
+
+// UpdateRole and the audit log entry commit together or not at all — see
+// the interface doc comment. WHERE role <> 'system_owner' is a DB-level
+// backstop against a race between the usecase's own system_owner check and
+// this write; 0 rows matched is disambiguated below into not-found vs.
+// still-system_owner (there is no third possibility for UpdateRole, unlike
+// Offboard's extra "already offboarded" case).
+func (r *UserRepository) UpdateRole(ctx context.Context, id string, role domain.Role, auditEntry *domain.AdminAuditLog) (*domain.User, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	row := tx.QueryRow(ctx, `
+		UPDATE users SET role = $2, updated_at = now()
+		WHERE id = $1 AND role <> 'system_owner'
+		RETURNING `+userColumns,
+		id, string(role),
+	)
+	u, err := scanUser(row)
+	if errors.Is(err, pgx.ErrNoRows) {
+		existing, getErr := getByIDTx(ctx, tx, id)
+		if getErr != nil {
+			return nil, getErr
+		}
+		if existing.Role == domain.RoleSystemOwner {
+			return nil, domain.ErrCannotModifySystemOwnerRole
+		}
+		return nil, domain.ErrUserNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err := insertAuditLog(ctx, tx, auditEntry); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return u, nil
+}
+
+// Offboard soft-deletes a user and writes the audit log entry in the same
+// transaction. WHERE role <> 'system_owner' is the same DB-level backstop
+// UpdateRole has; 0 rows matched is disambiguated below into not-found,
+// still-system_owner, or already-offboarded — the same three-way split
+// LeaveRequestRepository.Decide does for "not pending anymore" vs.
+// "doesn't exist".
+func (r *UserRepository) Offboard(ctx context.Context, id string, reason *string, auditEntry *domain.AdminAuditLog) (*domain.User, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	row := tx.QueryRow(ctx, `
+		UPDATE users
+		SET offboarded_at = now(), offboarded_by = $2, offboarded_reason = $3, updated_at = now()
+		WHERE id = $1 AND offboarded_at IS NULL AND role <> 'system_owner'
+		RETURNING `+userColumns,
+		id, auditEntry.ActorID, reason,
+	)
+	u, err := scanUser(row)
+	if errors.Is(err, pgx.ErrNoRows) {
+		existing, getErr := getByIDTx(ctx, tx, id)
+		if getErr != nil {
+			return nil, getErr
+		}
+		if existing.Role == domain.RoleSystemOwner {
+			return nil, domain.ErrCannotOffboardSystemOwner
+		}
+		if existing.OffboardedAt != nil {
+			return nil, domain.ErrUserAlreadyOffboarded
+		}
+		return nil, domain.ErrUserNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err := insertAuditLog(ctx, tx, auditEntry); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return u, nil
+}
