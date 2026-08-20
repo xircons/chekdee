@@ -4,7 +4,13 @@ package config
 import (
 	"fmt"
 	"os"
+	"strings"
 )
+
+// minJWTSecretBytes is the floor for an HS256 signing key. A short secret is
+// brute-forceable offline, so a weak one fails fast at boot rather than
+// silently shipping a forgeable token.
+const minJWTSecretBytes = 32
 
 type Config struct {
 	Port        string
@@ -14,6 +20,10 @@ type Config struct {
 
 	LineChannelID     string
 	LineChannelSecret string
+
+	// AllowedOrigins is the CORS allow-list for browser clients; credentials
+	// (the refresh cookie) are only sent to these exact origins.
+	AllowedOrigins []string
 }
 
 func Load() (*Config, error) {
@@ -24,6 +34,7 @@ func Load() (*Config, error) {
 		JWTSecret:         os.Getenv("JWT_SECRET"),
 		LineChannelID:     os.Getenv("LINE_CHANNEL_ID"),
 		LineChannelSecret: os.Getenv("LINE_CHANNEL_SECRET"),
+		AllowedOrigins:    splitAndTrim(getEnv("CORS_ALLOWED_ORIGINS", "http://localhost:3000")),
 	}
 
 	required := map[string]string{
@@ -38,7 +49,25 @@ func Load() (*Config, error) {
 		}
 	}
 
+	if len(cfg.JWTSecret) < minJWTSecretBytes {
+		return nil, fmt.Errorf("JWT_SECRET must be at least %d bytes, got %d", minJWTSecretBytes, len(cfg.JWTSecret))
+	}
+	if len(cfg.AllowedOrigins) == 0 {
+		return nil, fmt.Errorf("CORS_ALLOWED_ORIGINS must list at least one origin")
+	}
+
 	return cfg, nil
+}
+
+func splitAndTrim(csv string) []string {
+	parts := strings.Split(csv, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if trimmed := strings.TrimSpace(p); trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	return out
 }
 
 func getEnv(key, fallback string) string {

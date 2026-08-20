@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"net/http"
 	"time"
@@ -11,7 +13,14 @@ import (
 	"checkdee-backend/internal/usecase"
 )
 
-const refreshCookieName = "checkdee_refresh_token"
+const (
+	refreshCookieName = "checkdee_refresh_token"
+	// Short-lived cookies that bind a LINE login attempt: state guards
+	// against login CSRF, nonce binds the returned id_token to this attempt.
+	stateCookieName = "checkdee_line_state"
+	nonceCookieName = "checkdee_line_nonce"
+	oauthCookieTTL  = 10 * time.Minute
+)
 
 type AuthHandler struct {
 	auth *usecase.AuthUsecase
@@ -24,6 +33,39 @@ func NewAuthHandler(auth *usecase.AuthUsecase) *AuthHandler {
 type lineLoginRequest struct {
 	Code        string `json:"code"`
 	RedirectURI string `json:"redirect_uri"`
+	State       string `json:"state"`
+}
+
+type lineAuthorizeResponse struct {
+	AuthorizeURL string `json:"authorize_url"`
+}
+
+// LineAuthorize starts a LINE login: it mints a state + nonce, binds them to
+// short-lived httpOnly cookies, and returns the LINE authorization URL the
+// client should redirect to. The state comes back as a query parameter and
+// is checked against the cookie in LineLogin; the nonce is checked inside the
+// id_token.
+func (h *AuthHandler) LineAuthorize(c echo.Context) error {
+	redirectURI := c.QueryParam("redirect_uri")
+	if redirectURI == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "redirect_uri is required")
+	}
+
+	state, err := randomToken()
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to start login")
+	}
+	nonce, err := randomToken()
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to start login")
+	}
+
+	setOAuthCookie(c, stateCookieName, state)
+	setOAuthCookie(c, nonceCookieName, nonce)
+
+	return c.JSON(http.StatusOK, lineAuthorizeResponse{
+		AuthorizeURL: h.auth.AuthorizeURL(redirectURI, state, nonce),
+	})
 }
 
 type authResponse struct {
@@ -63,7 +105,21 @@ func (h *AuthHandler) LineLogin(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "code and redirect_uri are required")
 	}
 
-	user, tokens, err := h.auth.LoginWithLine(c.Request().Context(), req.Code, req.RedirectURI, c.Request().UserAgent(), c.RealIP())
+	// Bind the callback to the attempt started by LineAuthorize: the state in
+	// the body must match the state cookie, and the nonce cookie is what the
+	// id_token is verified against.
+	stateCookie, err := c.Cookie(stateCookieName)
+	if err != nil || stateCookie.Value == "" || req.State == "" || req.State != stateCookie.Value {
+		return echo.NewHTTPError(http.StatusUnauthorized, "invalid login state")
+	}
+	nonceCookie, err := c.Cookie(nonceCookieName)
+	if err != nil || nonceCookie.Value == "" {
+		return echo.NewHTTPError(http.StatusUnauthorized, "invalid login state")
+	}
+	clearOAuthCookie(c, stateCookieName)
+	clearOAuthCookie(c, nonceCookieName)
+
+	user, tokens, err := h.auth.LoginWithLine(c.Request().Context(), req.Code, req.RedirectURI, nonceCookie.Value, c.Request().UserAgent(), c.RealIP())
 	if err != nil {
 		if errors.Is(err, usecase.ErrAccountDeactivated) {
 			return echo.NewHTTPError(http.StatusForbidden, "account deactivated")
@@ -199,4 +255,39 @@ func clearRefreshCookie(c echo.Context) {
 		Expires:  time.Unix(0, 0),
 		MaxAge:   -1,
 	})
+}
+
+func setOAuthCookie(c echo.Context, name, value string) {
+	c.SetCookie(&http.Cookie{
+		Name:     name,
+		Value:    value,
+		Path:     "/auth",
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteLaxMode,
+		Expires:  time.Now().Add(oauthCookieTTL),
+	})
+}
+
+func clearOAuthCookie(c echo.Context, name string) {
+	c.SetCookie(&http.Cookie{
+		Name:     name,
+		Value:    "",
+		Path:     "/auth",
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteLaxMode,
+		Expires:  time.Unix(0, 0),
+		MaxAge:   -1,
+	})
+}
+
+// randomToken returns a URL-safe 256-bit random string for the OAuth state
+// and nonce.
+func randomToken() (string, error) {
+	buf := make([]byte, 32)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(buf), nil
 }
