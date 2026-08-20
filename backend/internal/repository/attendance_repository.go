@@ -215,21 +215,32 @@ func (r *AttendanceRepository) CheckOut(ctx context.Context, employeeID string, 
 // cutoff. A uniform end-of-day fallback, not the employee's scheduled end
 // time — precise worked-hours capping to the schedule is a Reports (PR 7)
 // concern layered on top of this raw check_out_at, not this job's.
-func (r *AttendanceRepository) AutoCloseOpenRecords(ctx context.Context, cutoff time.Time) (int, error) {
-	tag, err := r.pool.Exec(ctx, `
+func (r *AttendanceRepository) AutoCloseOpenRecords(ctx context.Context, cutoff time.Time) ([]*domain.AttendanceRecord, error) {
+	rows, err := r.pool.Query(ctx, `
 		UPDATE attendance_records
 		SET check_out_at = (work_date::timestamp + interval '23:59:59') AT TIME ZONE 'Asia/Bangkok',
 		    auto_closed = true,
 		    updated_at = now()
 		WHERE check_in_at IS NOT NULL
 		  AND check_out_at IS NULL
-		  AND work_date < $1`,
+		  AND work_date < $1
+		RETURNING `+attendanceColumns,
 		cutoff,
 	)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	return int(tag.RowsAffected()), nil
+	defer rows.Close()
+
+	var out []*domain.AttendanceRecord
+	for rows.Next() {
+		a, err := scanAttendance(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
 }
 
 // ListForMonth returns every attendance record (all employees) with

@@ -50,10 +50,10 @@ func provideQRSigner(cfg *config.Config) *qrsign.Signer {
 	return qrsign.NewSigner(cfg.QRSigningSecret)
 }
 
-// provideReportExportRiverClient adapts the concrete river client to the
-// small interface usecase.ReportExportUsecase depends on, so that package
-// doesn't need to know about river's generic Client[TTx] type.
-func provideReportExportRiverClient(riverClient *river.Client[pgx.Tx]) usecase.ReportExportRiverClient {
+// provideRiverInsertClient adapts the concrete river client to the small
+// interface ReportExportUsecase and LeaveUsecase depend on, so those
+// packages don't need to know about river's generic Client[TTx] type.
+func provideRiverInsertClient(riverClient *river.Client[pgx.Tx]) usecase.RiverInsertClient {
 	return riverClient
 }
 
@@ -70,11 +70,13 @@ func provideRiverWorkers(
 	holidaySyncWorker *jobs.HolidaySyncWorker,
 	attendanceAutoCloseWorker *jobs.AttendanceAutoCloseWorker,
 	reportExportWorker *jobs.ReportExportWorker,
+	leaveDecisionNotifyWorker *jobs.LeaveDecisionNotifyWorker,
 ) *river.Workers {
 	workers := jobs.Workers()
 	river.AddWorker(workers, holidaySyncWorker)
 	river.AddWorker(workers, attendanceAutoCloseWorker)
 	river.AddWorker(workers, reportExportWorker)
+	river.AddWorker(workers, leaveDecisionNotifyWorker)
 	return workers
 }
 
@@ -82,9 +84,9 @@ func provideRiverWorkers(
 // UpsertSynced's "manual edits win" guard makes re-runs safe, RunOnStart so
 // a fresh deploy doesn't wait a day) and attendance auto-close (hourly —
 // cheap no-op once a day's stragglers are closed, since the underlying
-// UPDATE only ever touches rows still missing a checkout). Report export has
-// no periodic schedule — it's only ever triggered on demand via
-// ReportExportUsecase.RequestExport.
+// UPDATE only ever touches rows still missing a checkout). Report export and
+// leave-decision notify have no periodic schedule — both are only ever
+// triggered on demand.
 func providePeriodicJobs() []*river.PeriodicJob {
 	return []*river.PeriodicJob{
 		river.NewPeriodicJob(
@@ -112,7 +114,7 @@ func InitializeServer(logger *slog.Logger) (*server.Server, error) {
 		provideJWTIssuer,
 		provideNagerClient,
 		provideQRSigner,
-		provideReportExportRiverClient,
+		provideRiverInsertClient,
 		provideReportExportWorker,
 		provideRiverWorkers,
 		providePeriodicJobs,
@@ -128,6 +130,7 @@ func InitializeServer(logger *slog.Logger) (*server.Server, error) {
 		repository.NewReportExportRepository,
 		repository.NewAuditLogRepository,
 		repository.NewLeaveRequestRepository,
+		repository.NewNotificationRepository,
 		wire.Bind(new(domain.UserRepository), new(*repository.UserRepository)),
 		wire.Bind(new(domain.RefreshTokenRepository), new(*repository.RefreshTokenRepository)),
 		wire.Bind(new(domain.WorkScheduleRepository), new(*repository.WorkScheduleRepository)),
@@ -139,6 +142,7 @@ func InitializeServer(logger *slog.Logger) (*server.Server, error) {
 		wire.Bind(new(domain.ReportExportRepository), new(*repository.ReportExportRepository)),
 		wire.Bind(new(domain.AuditLogRepository), new(*repository.AuditLogRepository)),
 		wire.Bind(new(domain.LeaveRequestRepository), new(*repository.LeaveRequestRepository)),
+		wire.Bind(new(domain.NotificationRepository), new(*repository.NotificationRepository)),
 		wire.Bind(new(usecase.LineClient), new(*lineclient.Client)),
 		wire.Bind(new(jobs.NagerClient), new(*nagerclient.Client)),
 		usecase.NewAuthUsecase,
@@ -150,8 +154,10 @@ func InitializeServer(logger *slog.Logger) (*server.Server, error) {
 		usecase.NewReportExportUsecase,
 		usecase.NewAuditLogUsecase,
 		usecase.NewLeaveUsecase,
+		usecase.NewNotificationUsecase,
 		jobs.NewHolidaySyncWorker,
 		jobs.NewAttendanceAutoCloseWorker,
+		jobs.NewLeaveDecisionNotifyWorker,
 		handler.NewAuthHandler,
 		handler.NewScheduleHandler,
 		handler.NewHolidayHandler,
@@ -159,6 +165,7 @@ func InitializeServer(logger *slog.Logger) (*server.Server, error) {
 		handler.NewAttendanceHandler,
 		handler.NewReportHandler,
 		handler.NewLeaveHandler,
+		handler.NewNotificationHandler,
 		server.New,
 	)
 	return nil, nil

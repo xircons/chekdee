@@ -61,23 +61,27 @@ func InitializeServer(logger *slog.Logger) (*server.Server, error) {
 	reportExportRepository := repository.NewReportExportRepository(pool)
 	nagerclientClient := provideNagerClient()
 	holidaySyncWorker := jobs.NewHolidaySyncWorker(nagerclientClient, holidayRepository)
-	attendanceAutoCloseWorker := jobs.NewAttendanceAutoCloseWorker(attendanceRepository)
+	notificationRepository := repository.NewNotificationRepository(pool)
+	attendanceAutoCloseWorker := jobs.NewAttendanceAutoCloseWorker(attendanceRepository, notificationRepository)
 	reportExportWorker := provideReportExportWorker(reportExportRepository, reportUsecase)
-	workers := provideRiverWorkers(holidaySyncWorker, attendanceAutoCloseWorker, reportExportWorker)
+	leaveRequestRepository := repository.NewLeaveRequestRepository(pool)
+	leaveDecisionNotifyWorker := jobs.NewLeaveDecisionNotifyWorker(leaveRequestRepository, notificationRepository)
+	workers := provideRiverWorkers(holidaySyncWorker, attendanceAutoCloseWorker, reportExportWorker, leaveDecisionNotifyWorker)
 	v := providePeriodicJobs()
 	riverClient, err := jobs.NewClient(pool, workers, v)
 	if err != nil {
 		return nil, err
 	}
-	reportExportRiverClient := provideReportExportRiverClient(riverClient)
-	reportExportUsecase := usecase.NewReportExportUsecase(reportExportRepository, reportExportRiverClient)
+	riverInsertClient := provideRiverInsertClient(riverClient)
+	reportExportUsecase := usecase.NewReportExportUsecase(reportExportRepository, riverInsertClient)
 	reportHandler := handler.NewReportHandler(reportUsecase, reportExportUsecase)
-	leaveRequestRepository := repository.NewLeaveRequestRepository(pool)
 	auditLogRepository := repository.NewAuditLogRepository(pool)
 	auditLogUsecase := usecase.NewAuditLogUsecase(auditLogRepository)
-	leaveUsecase := usecase.NewLeaveUsecase(leaveRequestRepository, auditLogUsecase)
+	leaveUsecase := usecase.NewLeaveUsecase(leaveRequestRepository, auditLogUsecase, riverInsertClient)
 	leaveHandler := handler.NewLeaveHandler(leaveUsecase)
-	serverServer := server.New(configConfig, logger, authHandler, scheduleHandler, holidayHandler, kioskHandler, attendanceHandler, reportHandler, leaveHandler, jwtIssuer, kioskDeviceUsecase, riverClient)
+	notificationUsecase := usecase.NewNotificationUsecase(notificationRepository)
+	notificationHandler := handler.NewNotificationHandler(notificationUsecase)
+	serverServer := server.New(configConfig, logger, authHandler, scheduleHandler, holidayHandler, kioskHandler, attendanceHandler, reportHandler, leaveHandler, notificationHandler, jwtIssuer, kioskDeviceUsecase, riverClient)
 	return serverServer, nil
 }
 
@@ -106,10 +110,10 @@ func provideQRSigner(cfg *config.Config) *qrsign.Signer {
 	return qrsign.NewSigner(cfg.QRSigningSecret)
 }
 
-// provideReportExportRiverClient adapts the concrete river client to the
-// small interface usecase.ReportExportUsecase depends on, so that package
-// doesn't need to know about river's generic Client[TTx] type.
-func provideReportExportRiverClient(riverClient *river.Client[pgx.Tx]) usecase.ReportExportRiverClient {
+// provideRiverInsertClient adapts the concrete river client to the small
+// interface ReportExportUsecase and LeaveUsecase depend on, so those
+// packages don't need to know about river's generic Client[TTx] type.
+func provideRiverInsertClient(riverClient *river.Client[pgx.Tx]) usecase.RiverInsertClient {
 	return riverClient
 }
 
@@ -126,11 +130,13 @@ func provideRiverWorkers(
 	holidaySyncWorker *jobs.HolidaySyncWorker,
 	attendanceAutoCloseWorker *jobs.AttendanceAutoCloseWorker,
 	reportExportWorker *jobs.ReportExportWorker,
+	leaveDecisionNotifyWorker *jobs.LeaveDecisionNotifyWorker,
 ) *river.Workers {
 	workers := jobs.Workers()
 	river.AddWorker(workers, holidaySyncWorker)
 	river.AddWorker(workers, attendanceAutoCloseWorker)
 	river.AddWorker(workers, reportExportWorker)
+	river.AddWorker(workers, leaveDecisionNotifyWorker)
 	return workers
 }
 
@@ -138,9 +144,9 @@ func provideRiverWorkers(
 // UpsertSynced's "manual edits win" guard makes re-runs safe, RunOnStart so
 // a fresh deploy doesn't wait a day) and attendance auto-close (hourly —
 // cheap no-op once a day's stragglers are closed, since the underlying
-// UPDATE only ever touches rows still missing a checkout). Report export has
-// no periodic schedule — it's only ever triggered on demand via
-// ReportExportUsecase.RequestExport.
+// UPDATE only ever touches rows still missing a checkout). Report export and
+// leave-decision notify have no periodic schedule — both are only ever
+// triggered on demand.
 func providePeriodicJobs() []*river.PeriodicJob {
 	return []*river.PeriodicJob{river.NewPeriodicJob(river.PeriodicInterval(24*time.Hour), func() (river.JobArgs, *river.InsertOpts) {
 		return jobs.HolidaySyncArgs{Year: time.Now().Year()}, nil

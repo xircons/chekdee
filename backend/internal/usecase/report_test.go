@@ -56,8 +56,8 @@ func (f *fakeAttendanceRepoForReport) CheckIn(context.Context, string, time.Time
 func (f *fakeAttendanceRepoForReport) CheckOut(context.Context, string, time.Time, time.Time, string) (*domain.AttendanceRecord, error) {
 	return nil, nil
 }
-func (f *fakeAttendanceRepoForReport) AutoCloseOpenRecords(context.Context, time.Time) (int, error) {
-	return 0, nil
+func (f *fakeAttendanceRepoForReport) AutoCloseOpenRecords(context.Context, time.Time) ([]*domain.AttendanceRecord, error) {
+	return nil, nil
 }
 func (f *fakeAttendanceRepoForReport) ListForMonth(context.Context, time.Time, time.Time) ([]*domain.AttendanceRecord, error) {
 	return f.records, nil
