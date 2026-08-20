@@ -107,19 +107,46 @@ page.tsx` (`MockHoliday` type), `admin/leave-requests/page.tsx`
 (`LeaveStatus`/`MockLeaveRequest` types), `(employee)/schedule/page.tsx`
 (`MockHoliday` type).
 
+## Progress this session (PRs open, awaiting merge into `dev`)
+
+`PLAN.md` itself was only tracked partway through the session (see "Why
+this file is now tracked" above) — it only actually reflects on-disk
+reality on the `chore/plan-status` branch (this one) and whatever branch is
+checked out at any given moment gets whatever `dev` state that branch
+forked from; it does not retroactively update every already-opened PR.
+Treat this section, not the per-item backlog markers below, as the source
+of truth for what's actually done vs still open:
+
+- PR #29 `chore/plan-status` — this file, tracked in git for the first time.
+- PR #28 `feature/rename-chekdee` — Checkdee→Chekdee rename (item 11).
+  Was stale (predated the register-page restyle merge); fixed by merging
+  `dev` in, re-verified.
+- PR #30 `feature/admin-dashboard` — item 1, admin dashboard.
+- PR #31 `feature/admin-schedules` — item 2, admin schedules.
+- PR #32 `feature/employee-profile` — item 3, employee profile.
+- (item 10, register page styling, needed no new work — already merged as
+  PR #27 before this session started.)
+
 ## Backlog
 
 ### Group A — endpoints already exist, just needs wiring
 
-1. **`admin/page.tsx`** — wire to `GET /employees`, `GET /leave-requests`,
-   `GET /reports/daily-log?month=YYYY-MM` (org-wide, filter to today
-   client-side). Replace `getActiveEmployees`/`getPendingLeaveRequests`/
-   `getSimulatedRoster`/`mockWorkSchedules`/`mockLeaveRequests`.
-2. **`admin/schedules/page.tsx`** — wire to `lib/api-schedules.ts` (exists)
-   + `lib/api-employees.ts` for the employee picker. Replace
-   `getActiveEmployees`/`mockWorkSchedules`.
-3. **`(employee)/profile/page.tsx`** — replace `mockEmployees` lookup with
-   real `/auth/me` data via the existing session pattern (`lib/session.ts`).
+1. **`admin/page.tsx`** — **done, PR #30.** Wired to `GET /employees`,
+   `GET /leave-requests`, `GET /reports/daily-log?month=YYYY-MM` (org-wide,
+   filtered to today client-side). Real behavior difference from the mock:
+   the backend only creates an `attendance_records` row at check-in time, so
+   "attendance issues today" no longer flags employees who simply haven't
+   checked in yet — only ones who checked in late/very-late. Manual
+   correction still local-only pending item 8.
+2. **`admin/schedules/page.tsx`** — **done, PR #31.** Wired to
+   `lib/api-schedules.ts` + `lib/api-employees.ts`. Caught and fixed a real
+   bug live: the backend requires `start_time`/`end_time` as `HH:MM:SS`,
+   the UI's native time input gives `HH:mm` — every save would have 400'd.
+3. **`(employee)/profile/page.tsx`** — **done, PR #32.** Wired to real
+   `/auth/me` (`student_id`/`phone_number`, added to the `Me` type — the
+   backend already sent them). Dropped `studentGen` display: no
+   self-scoped endpoint returns it (`/auth/me` doesn't, `GET
+   /employees/:id` does but is admin-only) — real minor gap, not faked.
 4. **`admin/employees/page.tsx` detail dialog** — wire the heatmap/
    monthly-stats block to `GET /reports/daily-log?month=X&employee_id=Y`
    instead of `getMonthlyAttendanceStats`. Verify response shape actually
