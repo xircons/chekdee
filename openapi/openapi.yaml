@@ -172,7 +172,199 @@ paths:
         "401":
           description: Missing or invalid access token
 
+  /schedules/me:
+    get:
+      operationId: getMySchedule
+      summary: Get the authenticated employee's own recurring weekly schedule
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The employee's schedule rows
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WorkSchedule"
+        "401":
+          description: Missing or invalid access token
+
+  /schedules/{employeeId}:
+    get:
+      operationId: getEmployeeSchedule
+      summary: Admin view of one employee's schedule
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/EmployeeId"
+      responses:
+        "200":
+          description: The employee's schedule rows
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WorkSchedule"
+        "401":
+          description: Missing or invalid access token
+        "403":
+          description: Caller is not admin/supervisor/system_owner
+    put:
+      operationId: replaceEmployeeSchedule
+      summary: >
+        Replace an employee's whole schedule. Both the single-employee editor
+        and CSV bulk import reduce to this one call — CSV import calls it once
+        per employee found in the file.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/EmployeeId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReplaceScheduleRequest"
+      responses:
+        "200":
+          description: The employee's new schedule rows
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WorkSchedule"
+        "400":
+          description: >
+            Invalid row data, or the new set would overlap (same employee +
+            day of week + effective date range).
+        "401":
+          description: Missing or invalid access token
+        "403":
+          description: Caller is not admin/supervisor/system_owner
+
+  /holidays:
+    get:
+      operationId: listHolidays
+      summary: List holidays in a date range. Readable by any authenticated user.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: Holidays in range, ordered by date
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Holiday"
+        "400":
+          description: Missing or invalid from/to
+        "401":
+          description: Missing or invalid access token
+    post:
+      operationId: createHoliday
+      summary: Add a manually-entered holiday
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateHolidayRequest"
+      responses:
+        "201":
+          description: Holiday created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Holiday"
+        "400":
+          description: Missing required fields or invalid date
+        "401":
+          description: Missing or invalid access token
+        "403":
+          description: Caller is not admin/supervisor/system_owner
+
+  /holidays/{id}:
+    put:
+      operationId: updateHoliday
+      summary: >
+        Edit a holiday's name/local_name. Never changes source — editing a
+        nager_date row does not flip it to manual.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/HolidayId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateHolidayRequest"
+      responses:
+        "200":
+          description: Holiday updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Holiday"
+        "400":
+          description: Missing required fields
+        "401":
+          description: Missing or invalid access token
+        "403":
+          description: Caller is not admin/supervisor/system_owner
+        "404":
+          description: Holiday not found
+    delete:
+      operationId: deleteHoliday
+      summary: >
+        Delete a holiday. A real delete — holidays aren't subject to the
+        soft-delete-only rule that applies to users.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/HolidayId"
+      responses:
+        "204":
+          description: Holiday deleted
+        "401":
+          description: Missing or invalid access token
+        "403":
+          description: Caller is not admin/supervisor/system_owner
+
 components:
+  parameters:
+    EmployeeId:
+      name: employeeId
+      in: path
+      required: true
+      schema:
+        type: string
+    HolidayId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+
   schemas:
     HealthStatus:
       type: object
@@ -258,6 +450,103 @@ components:
           format: date-time
         user:
           $ref: "#/components/schemas/User"
+
+    WorkSchedule:
+      type: object
+      required: [id, employee_id, day_of_week, start_time, end_time, effective_from]
+      properties:
+        id:
+          type: string
+        employee_id:
+          type: string
+        day_of_week:
+          type: integer
+          minimum: 0
+          maximum: 6
+          description: 0 = Sunday
+        start_time:
+          type: string
+          example: "09:00:00"
+        end_time:
+          type: string
+          example: "17:00:00"
+        effective_from:
+          type: string
+          format: date
+        effective_to:
+          type: string
+          format: date
+          nullable: true
+
+    ReplaceScheduleRow:
+      type: object
+      required: [day_of_week, start_time, end_time, effective_from]
+      properties:
+        day_of_week:
+          type: integer
+          minimum: 0
+          maximum: 6
+        start_time:
+          type: string
+          example: "09:00:00"
+        end_time:
+          type: string
+          example: "17:00:00"
+        effective_from:
+          type: string
+          format: date
+        effective_to:
+          type: string
+          format: date
+          nullable: true
+
+    ReplaceScheduleRequest:
+      type: object
+      required: [rows]
+      properties:
+        rows:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReplaceScheduleRow"
+
+    Holiday:
+      type: object
+      required: [id, date, name, source]
+      properties:
+        id:
+          type: string
+        date:
+          type: string
+          format: date
+        name:
+          type: string
+        local_name:
+          type: string
+          nullable: true
+        source:
+          type: string
+          enum: [nager_date, manual]
+
+    CreateHolidayRequest:
+      type: object
+      required: [date, name]
+      properties:
+        date:
+          type: string
+          format: date
+        name:
+          type: string
+        local_name:
+          type: string
+
+    UpdateHolidayRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        local_name:
+          type: string
 
   securitySchemes:
     bearerAuth:

@@ -9,6 +9,7 @@ require (
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/labstack/echo/v4 v4.15.4
 	github.com/oapi-codegen/echo-middleware v1.1.0
+	github.com/oapi-codegen/runtime v1.7.0
 	github.com/riverqueue/river v0.44.0
 	github.com/riverqueue/river/riverdriver/riverpgxv5 v0.44.0
 	github.com/stretchr/testify v1.11.1
