@@ -11,9 +11,10 @@ import (
 )
 
 const (
-	ctxUserIDKey   = "user_id"
-	ctxRoleKey     = "role"
-	ctxDeviceIDKey = "device_id"
+	ctxUserIDKey     = "user_id"
+	ctxRoleKey       = "role"
+	ctxDeviceIDKey   = "device_id"
+	ctxDeviceNameKey = "device_name"
 )
 
 // RequireAuth parses the Authorization: Bearer <token> header and stashes
@@ -79,6 +80,7 @@ func RequireKioskDevice(devices *usecase.KioskDeviceUsecase) echo.MiddlewareFunc
 			}
 
 			c.Set(ctxDeviceIDKey, device.DeviceID)
+			c.Set(ctxDeviceNameKey, device.Name)
 			return next(c)
 		}
 	}
@@ -87,4 +89,9 @@ func RequireKioskDevice(devices *usecase.KioskDeviceUsecase) echo.MiddlewareFunc
 func deviceIDFromContext(c echo.Context) string {
 	id, _ := c.Get(ctxDeviceIDKey).(string)
 	return id
+}
+
+func deviceNameFromContext(c echo.Context) string {
+	name, _ := c.Get(ctxDeviceNameKey).(string)
+	return name
 }

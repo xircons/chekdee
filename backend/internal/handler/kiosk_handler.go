@@ -115,8 +115,9 @@ func (h *KioskHandler) List(c echo.Context) error {
 }
 
 type qrTokenView struct {
-	Token     string `json:"token"`
-	ExpiresAt string `json:"expires_at"`
+	Token      string `json:"token"`
+	ExpiresAt  string `json:"expires_at"`
+	DeviceName string `json:"device_name"`
 }
 
 // QRToken mints the next rotating QR payload for this screen. Mounted
@@ -126,5 +127,9 @@ func (h *KioskHandler) QRToken(c echo.Context) error {
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to mint qr token")
 	}
-	return c.JSON(http.StatusOK, qrTokenView{Token: token, ExpiresAt: expiresAt.Format("2006-01-02T15:04:05Z07:00")})
+	return c.JSON(http.StatusOK, qrTokenView{
+		Token:      token,
+		ExpiresAt:  expiresAt.Format("2006-01-02T15:04:05Z07:00"),
+		DeviceName: deviceNameFromContext(c),
+	})
 }

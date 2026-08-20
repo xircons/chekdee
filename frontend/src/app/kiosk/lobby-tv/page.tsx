@@ -11,19 +11,26 @@ import {
   getActiveEmployees,
   getEmployeesOnLeave,
   getSimulatedRoster,
-  getUpcomingHolidays,
-  mockKioskDevices,
   mockWorkSchedules,
   type MockEmployee,
+  type MockHoliday,
 } from "@/lib/mock-data";
-import {
-  deriveFallbackCode,
-  encodeKioskQrPayload,
-  generateKioskQrPayload,
-  KIOSK_QR_ROTATE_SECONDS,
-  type KioskQrPayload,
-} from "@/lib/kiosk-token";
+import { listHolidays } from "@/lib/api-holidays";
+import { getKioskQrToken, type KioskQrToken } from "@/lib/api-kiosk";
 import { formatThaiDateWithDay } from "@/lib/utils";
+
+const QR_ROTATE_SECONDS = 15; // matches backend usecase.QRTokenTTL
+
+// Cosmetic only — there's no backend endpoint to submit a typed-in fallback
+// code, this is purely a stable-looking stand-in for scanners that fail. It
+// was equally non-functional before this page was wired to the real QR
+// token (nothing ever consumed it), so this just derives it from the real
+// token string instead of the old mock payload.
+function deriveFallbackCode(token: string): string {
+  let h = 0;
+  for (let i = 0; i < token.length; i++) h = (h * 31 + token.charCodeAt(i)) | 0;
+  return String(Math.abs(h) % 1_000_000).padStart(6, "0");
+}
 
 const ON_TIME_RING_SIZE = 80;
 const ON_TIME_RING_RADIUS = 34;
@@ -55,12 +62,7 @@ function relativeTimeTh(from: Date, now: Date): string {
 
 function KioskLobbyTvContent() {
   const searchParams = useSearchParams();
-  const token = searchParams.get("token");
-
-  const device = useMemo(
-    () => mockKioskDevices.find((d) => d.tokenHash === token && d.revokedAt === null) ?? null,
-    [token]
-  );
+  const deviceToken = searchParams.get("token");
 
   const [now, setNow] = useState<Date>(() => new Date());
   useEffect(() => {
@@ -69,15 +71,43 @@ function KioskLobbyTvContent() {
   }, []);
 
   // Rotates every 15s independent of the once-a-second clock tick above, so
-  // the QR/code don't visibly reset on every clock update.
-  const [qrPayload, setQrPayload] = useState<KioskQrPayload | null>(null);
+  // the QR/code don't visibly reset on every clock update. Polls the real
+  // backend (GET /kiosk/qr-token) rather than generating a payload locally
+  // — the token is opaque and HMAC-signed server-side.
+  const [qrToken, setQrToken] = useState<KioskQrToken | null>(null);
+  const [qrError, setQrError] = useState<string | null>(null);
   useEffect(() => {
-    if (!device) return;
-    const rotate = () => setQrPayload(generateKioskQrPayload(device.id));
+    if (!deviceToken) return;
+    let cancelled = false;
+    const rotate = () => {
+      getKioskQrToken(deviceToken)
+        .then((next) => {
+          if (!cancelled) {
+            setQrToken(next);
+            setQrError(null);
+          }
+        })
+        .catch((err: Error) => {
+          if (!cancelled) setQrError(err.message);
+        });
+    };
     rotate();
-    const timer = setInterval(rotate, KIOSK_QR_ROTATE_SECONDS * 1000);
-    return () => clearInterval(timer);
-  }, [device]);
+    const timer = setInterval(rotate, QR_ROTATE_SECONDS * 1000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [deviceToken]);
+
+  const [holidays, setHolidays] = useState<MockHoliday[]>([]);
+  useEffect(() => {
+    const now2 = new Date();
+    const from = toIsoDateLocal(now2);
+    const to = toIsoDateLocal(new Date(now2.getFullYear() + 1, now2.getMonth(), now2.getDate()));
+    listHolidays(from, to)
+      .then((rows) => setHolidays([...rows].sort((a, b) => a.date.localeCompare(b.date))))
+      .catch(() => setHolidays([]));
+  }, []);
 
   const employees = useMemo(() => getActiveEmployees(), []);
   const todayIso = toIsoDateLocal(now);
@@ -89,7 +119,7 @@ function KioskLobbyTvContent() {
 
   const checkedInEntries = roster.filter((r) => r.checkInAt !== null);
   const leaveTodayCount = getEmployeesOnLeave(todayIso).length;
-  const nextHoliday = getUpcomingHolidays(todayIso)[0];
+  const nextHoliday = holidays.find((h) => h.date >= todayIso);
   const daysToHoliday = nextHoliday
     ? Math.round(
       (new Date(`${nextHoliday.date}T00:00:00`).getTime() - new Date(`${todayIso}T00:00:00`).getTime()) /
@@ -114,7 +144,7 @@ function KioskLobbyTvContent() {
   const onTimeCircumference = 2 * Math.PI * ON_TIME_RING_RADIUS;
   const onTimeOffset = onTimeCircumference * (1 - MOCK_MONTHLY_ON_TIME.percent / 100);
 
-  if (!device) {
+  if (!deviceToken || qrError) {
     return (
       <main className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-white">
         <p className="text-lg font-bold">ไม่พบอุปกรณ์นี้ หรือถูกเพิกถอนแล้ว</p>
@@ -123,18 +153,21 @@ function KioskLobbyTvContent() {
     );
   }
 
-  const qrValue = qrPayload
-    ? `${typeof window !== "undefined" ? window.location.origin : ""}/check-in/confirm?payload=${encodeKioskQrPayload(qrPayload)}`
-    : "";
-  const fallbackCode = qrPayload ? deriveFallbackCode(qrPayload) : "------";
+  if (!qrToken) {
+    return (
+      <main className="flex flex-1 items-center justify-center text-white">กำลังโหลด…</main>
+    );
+  }
+
+  const qrValue = `${typeof window !== "undefined" ? window.location.origin : ""}/check-in/confirm?token=${encodeURIComponent(qrToken.token)}`;
+  const fallbackCode = deriveFallbackCode(qrToken.token);
 
   return (
     <main className="flex flex-1 flex-col gap-5 p-6">
       <header className="relative shrink-0 overflow-hidden rounded-b-[20px] bg-brand-600 px-6 py-6 text-white">
         <div className="relative flex items-center justify-between gap-6">
           <div>
-            <h1 className="text-2xl font-bold">{device.name}</h1>
-            <p className="mt-1 text-sm text-white/80">{device.location}</p>
+            <h1 className="text-2xl font-bold">{qrToken.deviceName}</h1>
           </div>
           <div className="shrink-0 text-right">
             <p className="text-5xl font-bold tabular-nums">

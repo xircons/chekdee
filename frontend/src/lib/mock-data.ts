@@ -114,18 +114,6 @@ export type MockLeaveRequest = {
   decidedAt: string | null;
 };
 
-// The TV kiosk display is a device, not a user account — it authenticates
-// via this token, not a login session. tokenHash stands in for a real
-// hashed token (Phase 4); the mock kiosk route just string-compares it.
-export type MockKioskDevice = {
-  id: string;
-  name: string;
-  location: string;
-  tokenHash: string;
-  createdAt: string;
-  revokedAt: string | null;
-};
-
 export const mockTeam = { id: "team-1", name: "CAMT Front Desk" };
 
 // [firstName, lastName] pairs appended to the 5 fixture employees below to
@@ -310,17 +298,6 @@ export const mockLeaveRequests: MockLeaveRequest[] = [
   { id: "leave-2", employeeId: "user-1", leaveType: "ป่วย", startDate: "2026-07-14", endDate: "2026-07-14", reason: "Doctor's appointment", status: "approved", submittedAt: "2026-07-09T04:00:00Z", decidedBy: "user-4", decidedAt: "2026-07-10T03:00:00Z" },
   { id: "leave-3", employeeId: "user-2", leaveType: "กิจส่วนตัว", startDate: "2026-08-15", endDate: "2026-08-16", reason: "Personal", status: "pending", submittedAt: "2026-08-09T07:15:00Z", decidedBy: null, decidedAt: null },
   { id: "leave-4", employeeId: "user-3", leaveType: "ป่วย", startDate: "2026-06-02", endDate: "2026-06-03", reason: "Sick", status: "rejected", submittedAt: "2026-05-30T06:00:00Z", decidedBy: "user-4", decidedAt: "2026-06-01T03:00:00Z" },
-];
-
-export const mockKioskDevices: MockKioskDevice[] = [
-  {
-    id: "kiosk-1",
-    name: "จอ Lobby ชั้น 1",
-    location: "อาคาร CAMT ชั้น 1",
-    tokenHash: "demo-token-lobby-1",
-    createdAt: "2026-08-01T00:00:00Z",
-    revokedAt: null,
-  },
 ];
 
 // "ชั้นปี" isn't stored directly — derive it from studentGen (the
