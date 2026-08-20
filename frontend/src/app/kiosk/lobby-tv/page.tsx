@@ -1,22 +1,13 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
 
-import { AdminBubbleChart, type BubbleEntry } from "@/components/admin-bubble-chart";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  MOCK_MONTHLY_ON_TIME,
-  getActiveEmployees,
-  getEmployeesOnLeave,
-  getSimulatedRoster,
-  mockWorkSchedules,
-  type MockEmployee,
-  type MockHoliday,
-} from "@/lib/mock-data";
+import type { MockHoliday } from "@/lib/mock-data";
 import { listHolidays } from "@/lib/api-holidays";
-import { getKioskQrToken, type KioskQrToken } from "@/lib/api-kiosk";
+import { getKioskQrToken, getKioskRosterStats, type KioskQrToken, type KioskRosterStats } from "@/lib/api-kiosk";
 import { formatThaiDateWithDay } from "@/lib/utils";
 
 const QR_ROTATE_SECONDS = 15; // matches backend usecase.QRTokenTTL
@@ -35,29 +26,12 @@ function deriveFallbackCode(token: string): string {
 const ON_TIME_RING_SIZE = 80;
 const ON_TIME_RING_RADIUS = 34;
 const ON_TIME_RING_STROKE = 8;
-const RECENT_CHECKIN_LIMIT = 6;
 
 function toIsoDateLocal(date: Date): string {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
-}
-
-function initials(employee: MockEmployee): string {
-  return `${employee.firstName[0] ?? ""}${employee.lastName[0] ?? ""}`.toUpperCase();
-}
-
-function employeeName(employee: MockEmployee): string {
-  return `${employee.firstName} ${employee.lastName}`;
-}
-
-function relativeTimeTh(from: Date, now: Date): string {
-  const minutes = Math.max(0, Math.round((now.getTime() - from.getTime()) / 60_000));
-  if (minutes < 1) return "เมื่อสักครู่";
-  if (minutes < 60) return `${minutes} นาทีที่แล้ว`;
-  const hours = Math.round(minutes / 60);
-  return `${hours} ชั่วโมงที่แล้ว`;
 }
 
 function KioskLobbyTvContent() {
@@ -109,16 +83,34 @@ function KioskLobbyTvContent() {
       .catch(() => setHolidays([]));
   }, []);
 
-  const employees = useMemo(() => getActiveEmployees(), []);
+  // GET /kiosk/roster-stats -- aggregate-only counts, no employee identity.
+  // Polled on the same 15s cadence as the QR rotation; a public display
+  // doesn't need sub-15s freshness here.
+  const [stats, setStats] = useState<KioskRosterStats | null>(null);
+  useEffect(() => {
+    if (!deviceToken) return;
+    let cancelled = false;
+    const poll = () => {
+      getKioskRosterStats(deviceToken)
+        .then((next) => {
+          if (!cancelled) setStats(next);
+        })
+        .catch(() => {
+          // Best-effort: stats just stay at their last known value (or
+          // blank) rather than blocking the QR/clock, which are this
+          // page's primary job.
+        });
+    };
+    poll();
+    const timer = setInterval(poll, QR_ROTATE_SECONDS * 1000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [deviceToken]);
+
   const todayIso = toIsoDateLocal(now);
 
-  const roster = useMemo(
-    () => getSimulatedRoster(employees, mockWorkSchedules, now),
-    [employees, now]
-  );
-
-  const checkedInEntries = roster.filter((r) => r.checkInAt !== null);
-  const leaveTodayCount = getEmployeesOnLeave(todayIso).length;
   const nextHoliday = holidays.find((h) => h.date >= todayIso);
   const daysToHoliday = nextHoliday
     ? Math.round(
@@ -127,22 +119,17 @@ function KioskLobbyTvContent() {
     )
     : null;
 
-  const recentCheckins = checkedInEntries
-    .filter((r): r is typeof r & { checkInAt: Date } => r.checkInAt !== null)
-    .sort((a, b) => b.checkInAt.getTime() - a.checkInAt.getTime())
-    .slice(0, RECENT_CHECKIN_LIMIT);
-
-  const bubbleEntries: BubbleEntry[] = roster
-    .filter((r) => r.checkInAt !== null || r.scheduledStart < now)
-    .map((r) => ({
-      id: r.employee.id,
-      initials: initials(r.employee),
-      pictureUrl: r.employee.pictureUrl,
-      status: r.checkInAt !== null && r.status === "present" ? ("checked-in" as const) : ("late" as const),
-    }));
-
+  // "On time today" (present minus late/absent, over everyone checked in)
+  // -- not a monthly figure like the old mock's MOCK_MONTHLY_ON_TIME, since
+  // /kiosk/roster-stats only aggregates today (see its backend doc comment
+  // for why it stays narrowly scoped). Undefined (ring empty) until stats
+  // load or before anyone's checked in yet.
+  const onTimePercent =
+    stats && stats.checkedIn > 0
+      ? Math.round(((stats.checkedIn - stats.late - stats.absent) / stats.checkedIn) * 100)
+      : null;
   const onTimeCircumference = 2 * Math.PI * ON_TIME_RING_RADIUS;
-  const onTimeOffset = onTimeCircumference * (1 - MOCK_MONTHLY_ON_TIME.percent / 100);
+  const onTimeOffset = onTimeCircumference * (1 - (onTimePercent ?? 0) / 100);
 
   if (!deviceToken || qrError) {
     return (
@@ -180,9 +167,43 @@ function KioskLobbyTvContent() {
 
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-3">
         <Card className="flex min-h-0 flex-col rounded-2xl border border-slate-200 ring-0 lg:col-span-2">
-          <CardContent className="flex min-h-0 flex-1 flex-col p-5">
-            <p className="text-sm font-semibold text-foreground">แผนผังการแสดงตน</p>
-            <AdminBubbleChart entries={bubbleEntries} />
+          <CardContent className="flex min-h-0 flex-1 flex-col justify-center gap-6 p-8">
+            <div>
+              <p className="text-sm font-semibold text-foreground">เข้างานวันนี้</p>
+              <p className="mt-2 text-6xl font-bold tabular-nums text-brand-900">
+                {stats ? stats.checkedIn : "–"}
+                <span className="text-2xl font-medium text-muted-foreground"> / {stats ? stats.totalActive : "–"} คน</span>
+              </p>
+              <div className="mt-4 h-3 w-full overflow-hidden rounded-md bg-muted">
+                <div
+                  className="h-full bg-brand-600 transition-all duration-500"
+                  style={{
+                    width: stats && stats.totalActive > 0 ? `${Math.min(100, (stats.checkedIn / stats.totalActive) * 100)}%` : "0%",
+                  }}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-4">
+              <div className="rounded-xl border border-border p-4">
+                <p className="text-xs text-muted-foreground">สาย</p>
+                <p className="mt-1 text-2xl font-bold text-warning-foreground tabular-nums">
+                  {stats ? stats.late : "–"}
+                </p>
+              </div>
+              <div className="rounded-xl border border-border p-4">
+                <p className="text-xs text-muted-foreground">ขาด</p>
+                <p className="mt-1 text-2xl font-bold text-danger-foreground tabular-nums">
+                  {stats ? stats.absent : "–"}
+                </p>
+              </div>
+              <div className="rounded-xl border border-border p-4">
+                <p className="text-xs text-muted-foreground">ลา</p>
+                <p className="mt-1 text-2xl font-bold text-brand-600 tabular-nums">
+                  {stats ? stats.onLeave : "–"}
+                </p>
+              </div>
+            </div>
           </CardContent>
         </Card>
 
@@ -232,60 +253,29 @@ function KioskLobbyTvContent() {
                   />
                 </svg>
                 <div className="absolute inset-0 flex items-center justify-center text-sm font-bold text-brand-900">
-                  {MOCK_MONTHLY_ON_TIME.percent}%
+                  {onTimePercent ?? "–"}%
                 </div>
               </div>
               <div>
-                <p className="text-sm font-semibold text-foreground">ตรงเวลาเดือนนี้</p>
-                <p className="mt-1 text-xs text-muted-foreground">{MOCK_MONTHLY_ON_TIME.totalCheckIns} ครั้ง</p>
+                <p className="text-sm font-semibold text-foreground">ตรงเวลาวันนี้</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {stats ? stats.checkedIn : "–"} เช็คอิน
+                </p>
               </div>
             </CardContent>
           </Card>
 
-          <div className="grid grid-cols-2 gap-4">
-            <Card className="rounded-2xl border border-slate-200 ring-0">
-              <CardContent className="p-4">
-                <p className="text-xs text-muted-foreground">ลาวันนี้</p>
-                <p className="mt-1 text-lg font-bold text-brand-900">{leaveTodayCount} คน</p>
-              </CardContent>
-            </Card>
-            <Card className="rounded-2xl border border-slate-200 ring-0">
-              <CardContent className="p-4">
-                <p className="text-xs text-muted-foreground">วันหยุดถัดไป</p>
-                <p className="mt-1 text-sm font-semibold text-brand-900">
-                  {nextHoliday
-                    ? `${nextHoliday.localName ?? nextHoliday.name} · อีก ${daysToHoliday} วัน`
-                    : "ไม่มีวันหยุดที่จะถึง"}
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-
-          <Card className="flex min-h-0 flex-1 flex-col rounded-2xl border border-slate-200 ring-0">
-            <CardContent className="flex min-h-0 flex-1 flex-col gap-3 p-5">
-              <p className="shrink-0 text-sm font-semibold text-foreground">เช็คอินล่าสุด</p>
-              {recentCheckins.length > 0 ? (
-                <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto">
-                  {recentCheckins.map(({ employee, checkInAt }, index) => (
-                    <div
-                      key={employee.id}
-                      className={`flex items-center gap-3 rounded-xl px-3 py-2 ${index === 0 ? "bg-brand-100" : ""}`}
-                    >
-                      <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-success text-xs font-semibold text-success-foreground">
-                        {initials(employee)}
-                      </div>
-                      <p className="flex-1 truncate text-sm font-medium text-foreground">
-                        {employeeName(employee)}
-                      </p>
-                      <p className="shrink-0 text-xs text-muted-foreground">
-                        {relativeTimeTh(checkInAt, now)}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">ยังไม่มีการเช็คอินวันนี้</p>
-              )}
+          {/* On-leave count already shown in the "ลา" tile of the main
+              stat panel -- this card only adds the holiday countdown,
+              which has no home elsewhere on the page. */}
+          <Card className="rounded-2xl border border-slate-200 ring-0">
+            <CardContent className="p-4">
+              <p className="text-xs text-muted-foreground">วันหยุดถัดไป</p>
+              <p className="mt-1 text-sm font-semibold text-brand-900">
+                {nextHoliday
+                  ? `${nextHoliday.localName ?? nextHoliday.name} · อีก ${daysToHoliday} วัน`
+                  : "ไม่มีวันหยุดที่จะถึง"}
+              </p>
             </CardContent>
           </Card>
         </div>

@@ -20,3 +20,37 @@ export async function getKioskQrToken(deviceToken: string): Promise<KioskQrToken
   const data = (await res.json()) as { token: string; expires_at: string; device_name: string };
   return { token: data.token, expiresAt: data.expires_at, deviceName: data.device_name };
 }
+
+export type KioskRosterStats = {
+  totalActive: number;
+  checkedIn: number;
+  late: number;
+  absent: number;
+  onLeave: number;
+};
+
+// GET /kiosk/roster-stats is device-token authenticated the same way as
+// getKioskQrToken above -- aggregate-only counts, no employee names/ids
+// (see the backend handler's doc comment for why this is a separate,
+// narrower endpoint rather than a loosened /reports/daily-log).
+export async function getKioskRosterStats(deviceToken: string): Promise<KioskRosterStats> {
+  const res = await fetch(`${API_BASE_URL}/kiosk/roster-stats?token=${encodeURIComponent(deviceToken)}`);
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.message ?? `Request failed (${res.status})`);
+  }
+  const data = (await res.json()) as {
+    total_active: number;
+    checked_in: number;
+    late: number;
+    absent: number;
+    on_leave: number;
+  };
+  return {
+    totalActive: data.total_active,
+    checkedIn: data.checked_in,
+    late: data.late,
+    absent: data.absent,
+    onLeave: data.on_leave,
+  };
+}
