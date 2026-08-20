@@ -14,6 +14,8 @@ export type Me = {
   role: Role;
   first_name: string | null;
   last_name: string | null;
+  student_id: string | null;
+  phone_number: string | null;
   display_name: string | null;
   picture_url: string | null;
   is_registered: boolean;

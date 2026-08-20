@@ -23,12 +23,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { createLeaveRequest, listMyLeaveRequests } from "@/lib/api-leave";
 import { buildLeaveRequestEmail } from "@/lib/leave-email";
-import {
-  getYearOfStudy,
-  mockEmployees,
-  type LeaveStatus,
-  type MockLeaveRequest,
-} from "@/lib/mock-data";
+import { type LeaveStatus, type MockLeaveRequest } from "@/lib/mock-data";
 import { useMe } from "@/lib/session";
 import { cn } from "@/lib/utils";
 
@@ -162,11 +157,15 @@ export default function LeavePage() {
   const endDate = watch("end_date");
   const reason = watch("reason");
 
-  const mockProfile = mockEmployees.find((e) => e.id === me.id);
   const employeeName = [me.first_name, me.last_name].filter(Boolean).join(" ") || me.display_name || "-";
-  const yearOfStudy = getYearOfStudy(mockProfile?.studentGen ?? null);
-  const studentId = mockProfile?.studentId ?? "-";
-  const phoneNumber = mockProfile?.phoneNumber ?? "-";
+  const studentId = me.student_id ?? "-";
+  const phoneNumber = me.phone_number ?? "-";
+  // /auth/me doesn't expose student_gen (year of study is derived from it),
+  // and the endpoint that does -- GET /employees/:id -- is admin-only, same
+  // real gap as the profile page (see PLAN.md Group A #3's note). "-" is an
+  // honest placeholder here, not a fake value -- an unknown year of study
+  // beats a wrong one on a real leave letter.
+  const yearOfStudy = "-";
 
   // The subject is fully derived from the name/dates/type below — not a
   // form field — so it can never go stale the way an editable-but-synced
