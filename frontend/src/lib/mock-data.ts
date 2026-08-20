@@ -601,29 +601,41 @@ export type DailyLogRow = {
   notes: string;
 };
 
+function toDailyLogRow(r: MockAttendanceRecord): DailyLogRow {
+  const employee = mockEmployees.find((e) => e.id === r.employeeId);
+  const correction = mockAttendanceCorrections.find(
+    (c) => c.employeeId === r.employeeId && c.date === r.workDate
+  );
+  const notes = [
+    r.autoClosed ? "ปิดงานอัตโนมัติ (ไม่ได้เช็คเอาท์)" : null,
+    correction?.reason ?? null,
+  ]
+    .filter((n): n is string => n !== null)
+    .join(" / ");
+
+  return {
+    date: r.workDate,
+    employeeName: employee ? `${employee.firstName} ${employee.lastName}` : r.employeeId,
+    status: r.status,
+    checkInAt: r.checkInAt,
+    checkOutAt: r.checkOutAt,
+    notes,
+  };
+}
+
 export function getDailyLogForMonth(yearMonth: string): DailyLogRow[] {
   return mockAttendanceRecords
     .filter((r) => r.workDate.startsWith(yearMonth))
-    .map((r): DailyLogRow => {
-      const employee = mockEmployees.find((e) => e.id === r.employeeId);
-      const correction = mockAttendanceCorrections.find(
-        (c) => c.employeeId === r.employeeId && c.date === r.workDate
-      );
-      const notes = [
-        r.autoClosed ? "ปิดงานอัตโนมัติ (ไม่ได้เช็คเอาท์)" : null,
-        correction?.reason ?? null,
-      ]
-        .filter((n): n is string => n !== null)
-        .join(" / ");
-
-      return {
-        date: r.workDate,
-        employeeName: employee ? `${employee.firstName} ${employee.lastName}` : r.employeeId,
-        status: r.status,
-        checkInAt: r.checkInAt,
-        checkOutAt: r.checkOutAt,
-        notes,
-      };
-    })
+    .map(toDailyLogRow)
     .sort((a, b) => a.date.localeCompare(b.date) || a.employeeName.localeCompare(b.employeeName));
+}
+
+// Same as getDailyLogForMonth but scoped to one employee — the export's
+// per-employee sheets need each person's own audit log, not the mixed
+// company-wide list.
+export function getDailyLogForEmployeeMonth(employeeId: string, yearMonth: string): DailyLogRow[] {
+  return mockAttendanceRecords
+    .filter((r) => r.employeeId === employeeId && r.workDate.startsWith(yearMonth))
+    .map(toDailyLogRow)
+    .sort((a, b) => a.date.localeCompare(b.date));
 }
