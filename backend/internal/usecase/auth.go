@@ -170,9 +170,10 @@ func (a *AuthUsecase) Logout(ctx context.Context, refreshTokenRaw string) error 
 }
 
 // CompleteRegistration finishes onboarding. Employees cannot check in
-// until this has been called.
-func (a *AuthUsecase) CompleteRegistration(ctx context.Context, userID, firstName, lastName, studentGen string) (*domain.User, error) {
-	return a.users.CompleteRegistration(ctx, userID, firstName, lastName, studentGen)
+// until this has been called. studentID/phoneNumber are optional (nil if
+// not supplied) — only first_name/last_name/student_gen are required.
+func (a *AuthUsecase) CompleteRegistration(ctx context.Context, userID, firstName, lastName, studentGen string, studentID, phoneNumber *string) (*domain.User, error) {
+	return a.users.CompleteRegistration(ctx, userID, firstName, lastName, studentGen, studentID, phoneNumber)
 }
 
 // Me returns the authenticated user — used by the frontend on page load

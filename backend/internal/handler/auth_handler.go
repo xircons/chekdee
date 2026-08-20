@@ -79,6 +79,8 @@ type userView struct {
 	Role         string  `json:"role"`
 	FirstName    *string `json:"first_name"`
 	LastName     *string `json:"last_name"`
+	StudentID    *string `json:"student_id"`
+	PhoneNumber  *string `json:"phone_number"`
 	DisplayName  *string `json:"display_name"`
 	PictureURL   *string `json:"picture_url"`
 	IsRegistered bool    `json:"is_registered"`
@@ -90,6 +92,8 @@ func toUserView(u *domain.User) userView {
 		Role:         string(u.Role),
 		FirstName:    u.FirstName,
 		LastName:     u.LastName,
+		StudentID:    u.StudentID,
+		PhoneNumber:  u.PhoneNumber,
 		DisplayName:  u.LineDisplayName,
 		PictureURL:   u.LinePictureURL,
 		IsRegistered: u.IsRegistered(),
@@ -202,6 +206,10 @@ type completeRegistrationRequest struct {
 	FirstName  string `json:"first_name"`
 	LastName   string `json:"last_name"`
 	StudentGen string `json:"student_gen"`
+	// StudentID/PhoneNumber are optional — adding them as a required pair
+	// would break registration for anyone already mid-flow.
+	StudentID   string `json:"student_id"`
+	PhoneNumber string `json:"phone_number"`
 }
 
 // CompleteRegistration finishes onboarding for the authenticated user.
@@ -215,7 +223,15 @@ func (h *AuthHandler) CompleteRegistration(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "first_name, last_name, and student_gen are required")
 	}
 
-	user, err := h.auth.CompleteRegistration(c.Request().Context(), userIDFromContext(c), req.FirstName, req.LastName, req.StudentGen)
+	var studentID, phoneNumber *string
+	if req.StudentID != "" {
+		studentID = &req.StudentID
+	}
+	if req.PhoneNumber != "" {
+		phoneNumber = &req.PhoneNumber
+	}
+
+	user, err := h.auth.CompleteRegistration(c.Request().Context(), userIDFromContext(c), req.FirstName, req.LastName, req.StudentGen, studentID, phoneNumber)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to complete registration")
 	}

@@ -24,6 +24,8 @@ UPDATE users
 SET first_name = $2,
     last_name = $3,
     student_gen = $4,
+    student_id = $5,
+    phone_number = $6,
     registration_completed_at = now(),
     updated_at = now()
 WHERE id = $1

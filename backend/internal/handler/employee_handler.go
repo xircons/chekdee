@@ -36,6 +36,8 @@ type employeeView struct {
 	FirstName               *string `json:"first_name"`
 	LastName                *string `json:"last_name"`
 	StudentGen              *string `json:"student_gen"`
+	StudentID               *string `json:"student_id"`
+	PhoneNumber             *string `json:"phone_number"`
 	LineDisplayName         *string `json:"line_display_name"`
 	LinePictureURL          *string `json:"line_picture_url"`
 	RegistrationCompletedAt *string `json:"registration_completed_at"`
@@ -53,6 +55,8 @@ func toEmployeeView(u *domain.User) employeeView {
 		FirstName:        u.FirstName,
 		LastName:         u.LastName,
 		StudentGen:       u.StudentGen,
+		StudentID:        u.StudentID,
+		PhoneNumber:      u.PhoneNumber,
 		LineDisplayName:  u.LineDisplayName,
 		LinePictureURL:   u.LinePictureURL,
 		OffboardedReason: u.OffboardedReason,
@@ -143,9 +147,11 @@ func (h *EmployeeHandler) Get(c echo.Context) error {
 }
 
 type updateEmployeeRequest struct {
-	FirstName string  `json:"first_name"`
-	LastName  string  `json:"last_name"`
-	TeamID    *string `json:"team_id"`
+	FirstName   string  `json:"first_name"`
+	LastName    string  `json:"last_name"`
+	TeamID      *string `json:"team_id"`
+	StudentID   *string `json:"student_id"`
+	PhoneNumber *string `json:"phone_number"`
 }
 
 // Update edits profile fields only. Mounted behind RequireRole.
@@ -158,7 +164,7 @@ func (h *EmployeeHandler) Update(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "first_name and last_name are required")
 	}
 
-	updated, err := h.employees.Update(c.Request().Context(), userIDFromContext(c), c.Param("id"), &req.FirstName, &req.LastName, req.TeamID)
+	updated, err := h.employees.Update(c.Request().Context(), userIDFromContext(c), c.Param("id"), &req.FirstName, &req.LastName, req.TeamID, req.StudentID, req.PhoneNumber)
 	if errors.Is(err, domain.ErrUserNotFound) {
 		return echo.NewHTTPError(http.StatusNotFound, "employee not found")
 	}

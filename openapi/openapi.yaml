@@ -1089,6 +1089,12 @@ components:
           type: string
         student_gen:
           type: string
+        student_id:
+          type: string
+          description: Optional -- adding it as required would break registration for anyone already mid-flow.
+        phone_number:
+          type: string
+          description: Optional, same reasoning as student_id.
 
     User:
       type: object
@@ -1103,6 +1109,12 @@ components:
           type: string
           nullable: true
         last_name:
+          type: string
+          nullable: true
+        student_id:
+          type: string
+          nullable: true
+        phone_number:
           type: string
           nullable: true
         display_name:
@@ -1495,6 +1507,12 @@ components:
         student_gen:
           type: string
           nullable: true
+        student_id:
+          type: string
+          nullable: true
+        phone_number:
+          type: string
+          nullable: true
         line_display_name:
           type: string
           nullable: true
@@ -1537,6 +1555,12 @@ components:
         last_name:
           type: string
         team_id:
+          type: string
+          nullable: true
+        student_id:
+          type: string
+          nullable: true
+        phone_number:
           type: string
           nullable: true
 

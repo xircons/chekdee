@@ -70,7 +70,7 @@ func (f *fakeUserRepo) CreateEmployeeFromLine(context.Context, string, string, s
 	return nil, nil
 }
 func (f *fakeUserRepo) UpdateLineProfile(context.Context, string, string, string) error { return nil }
-func (f *fakeUserRepo) CompleteRegistration(context.Context, string, string, string, string) (*domain.User, error) {
+func (f *fakeUserRepo) CompleteRegistration(context.Context, string, string, string, string, *string, *string) (*domain.User, error) {
 	return nil, nil
 }
 func (f *fakeUserRepo) CreateSystemOwner(context.Context, string, string) (*domain.User, error) {
@@ -82,7 +82,7 @@ func (f *fakeUserRepo) ListActiveEmployees(context.Context) ([]*domain.User, err
 func (f *fakeUserRepo) List(context.Context, domain.EmployeeListFilter) ([]*domain.User, int, error) {
 	return nil, 0, nil
 }
-func (f *fakeUserRepo) Update(context.Context, string, *string, *string, *string) (*domain.User, error) {
+func (f *fakeUserRepo) Update(context.Context, string, *string, *string, *string, *string, *string) (*domain.User, error) {
 	return nil, nil
 }
 func (f *fakeUserRepo) UpdateRole(context.Context, string, domain.Role, *domain.AdminAuditLog) (*domain.User, error) {
