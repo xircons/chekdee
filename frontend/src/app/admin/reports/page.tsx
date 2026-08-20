@@ -28,12 +28,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { ACTION_BUTTON_CLASS } from "@/lib/admin-ui";
 import { getMonthlyReportRows, type MonthlyReportRow } from "@/lib/mock-data";
 import { downloadReportWorkbook } from "@/lib/report-export";
 import { useMe } from "@/lib/session";
 import { cn, THAI_MONTH_LABELS } from "@/lib/utils";
 
-const ACTION_BUTTON_CLASS = "h-9 rounded-lg px-5 text-sm";
 const SELECT_TRIGGER_CLASS =
   "h-9 w-44 rounded-lg border-border bg-muted/40 px-4 text-sm focus-visible:border-brand-600 focus-visible:bg-card focus-visible:ring-brand-600/20 data-[size=default]:h-9";
 

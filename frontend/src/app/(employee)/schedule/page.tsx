@@ -28,7 +28,7 @@ export default function SchedulePage() {
       />
 
       <div className="flex flex-col gap-6 px-6 py-6">
-        <Card className="rounded-2xl">
+        <Card className="rounded-2xl border border-slate-200 ring-0">
           <CardHeader>
             <CardTitle>ตารางเวลาทำงานประจำสัปดาห์</CardTitle>
           </CardHeader>
@@ -37,7 +37,7 @@ export default function SchedulePage() {
           </CardContent>
         </Card>
 
-        <Card className="rounded-2xl">
+        <Card className="rounded-2xl border border-slate-200 ring-0">
           <CardHeader>
             <CardTitle>วันหยุดที่จะถึง</CardTitle>
           </CardHeader>

@@ -26,6 +26,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { ACTION_BUTTON_CLASS, FIELD_CLASS } from "@/lib/admin-ui";
 import {
   getActiveEmployees,
   getEmployeesOnLeave,
@@ -42,9 +43,6 @@ import {
 import { useMe } from "@/lib/session";
 import { cn, formatThaiDateWithDay } from "@/lib/utils";
 
-const ACTION_BUTTON_CLASS = "h-9 rounded-lg px-5 text-sm focus-visible:ring-brand-600/20";
-const FIELD_CLASS =
-  "h-9 rounded-lg border-border bg-muted/40 px-4 text-sm focus-visible:border-brand-600 focus-visible:bg-card focus-visible:ring-brand-600/20";
 const PREVIEW_LIMIT = 4;
 const RECENT_CHECKIN_LIMIT = 6;
 

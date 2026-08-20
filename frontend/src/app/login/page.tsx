@@ -21,13 +21,13 @@ export default function LoginPage() {
   return (
     <main className="flex min-h-full flex-1 items-center justify-center p-6">
       <div className="flex w-full max-w-sm flex-col gap-4">
-        <Card className="rounded-2xl shadow-md">
+        <Card className="rounded-2xl border border-slate-200 shadow-md ring-0">
           <CardHeader>
             <CardTitle className="text-center text-xl">Checkdee</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
             <p className="text-center text-sm text-muted-foreground">
-              Sign in with your LINE account to check in and out.
+              เข้าสู่ระบบด้วยบัญชี LINE ของคุณเพื่อบันทึกเวลาเข้า-ออกงาน
             </p>
             <Button
               className="w-full bg-[#06C755] text-white hover:bg-[#05b34c]"
@@ -35,13 +35,13 @@ export default function LoginPage() {
                 window.location.href = buildLineLoginURL();
               }}
             >
-              Login with LINE
+              เข้าสู่ระบบด้วย LINE
             </Button>
           </CardContent>
         </Card>
 
         {devBypassAvailable && (
-          <Card className="rounded-2xl border-dashed shadow-none">
+          <Card className="rounded-2xl border border-dashed border-slate-200 shadow-none ring-0">
             <CardHeader>
               <CardTitle className="text-sm">Dev bypass</CardTitle>
               <p className="text-xs text-muted-foreground">

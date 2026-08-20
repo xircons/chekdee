@@ -37,7 +37,7 @@ export default function ProfilePage() {
       <EmployeePageHeader title="โปรไฟล์" />
 
       <div className="flex flex-col gap-6 px-6 pb-6">
-        <Card className="-mt-6 rounded-2xl py-0">
+        <Card className="-mt-6 rounded-2xl border border-slate-200 py-0 ring-0">
           <CardContent className="flex items-center gap-4 p-4">
             <div className="flex size-14 shrink-0 items-center justify-center rounded-full bg-brand-100 text-lg font-semibold text-brand-600">
               {initials(me.first_name, me.last_name, me.display_name)}
@@ -57,7 +57,7 @@ export default function ProfilePage() {
         </Card>
 
         {mockProfile && (
-          <Card className="rounded-2xl">
+          <Card className="rounded-2xl border border-slate-200 ring-0">
             <CardHeader>
               <CardTitle>รายละเอียด</CardTitle>
             </CardHeader>

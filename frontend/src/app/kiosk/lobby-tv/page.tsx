@@ -146,7 +146,7 @@ function KioskLobbyTvContent() {
       </header>
 
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-3">
-        <Card className="flex min-h-0 flex-col rounded-2xl border border-slate-200 lg:col-span-2">
+        <Card className="flex min-h-0 flex-col rounded-2xl border border-slate-200 ring-0 lg:col-span-2">
           <CardContent className="flex min-h-0 flex-1 flex-col p-5">
             <p className="text-sm font-semibold text-foreground">แผนผังการแสดงตน</p>
             <AdminBubbleChart entries={bubbleEntries} />
@@ -154,7 +154,7 @@ function KioskLobbyTvContent() {
         </Card>
 
         <div className="flex min-h-0 flex-col gap-4">
-          <Card className="rounded-2xl border border-brand-600/10 bg-brand-100">
+          <Card className="rounded-2xl border border-brand-600/10 bg-brand-100 ring-0">
             <CardContent className="flex items-center gap-4 p-4">
               {/* p-4 is the QR's quiet zone — the white background must stay
                   clear of the tinted card so scanners can lock onto the code. */}
@@ -169,7 +169,7 @@ function KioskLobbyTvContent() {
             </CardContent>
           </Card>
 
-          <Card className="rounded-2xl border border-slate-200">
+          <Card className="rounded-2xl border border-slate-200 ring-0">
             <CardContent className="flex items-center gap-4 p-4">
               <div className="relative shrink-0" style={{ width: ON_TIME_RING_SIZE, height: ON_TIME_RING_SIZE }}>
                 <svg
@@ -210,13 +210,13 @@ function KioskLobbyTvContent() {
           </Card>
 
           <div className="grid grid-cols-2 gap-4">
-            <Card className="rounded-2xl border border-slate-200">
+            <Card className="rounded-2xl border border-slate-200 ring-0">
               <CardContent className="p-4">
                 <p className="text-xs text-muted-foreground">ลาวันนี้</p>
                 <p className="mt-1 text-lg font-bold text-brand-900">{leaveTodayCount} คน</p>
               </CardContent>
             </Card>
-            <Card className="rounded-2xl border border-slate-200">
+            <Card className="rounded-2xl border border-slate-200 ring-0">
               <CardContent className="p-4">
                 <p className="text-xs text-muted-foreground">วันหยุดถัดไป</p>
                 <p className="mt-1 text-sm font-semibold text-brand-900">
@@ -228,7 +228,7 @@ function KioskLobbyTvContent() {
             </Card>
           </div>
 
-          <Card className="flex min-h-0 flex-1 flex-col rounded-2xl border border-slate-200">
+          <Card className="flex min-h-0 flex-1 flex-col rounded-2xl border border-slate-200 ring-0">
             <CardContent className="flex min-h-0 flex-1 flex-col gap-3 p-5">
               <p className="shrink-0 text-sm font-semibold text-foreground">เช็คอินล่าสุด</p>
               {recentCheckins.length > 0 ? (
