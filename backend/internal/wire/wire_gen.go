@@ -72,7 +72,12 @@ func InitializeServer(logger *slog.Logger) (*server.Server, error) {
 	reportExportRiverClient := provideReportExportRiverClient(riverClient)
 	reportExportUsecase := usecase.NewReportExportUsecase(reportExportRepository, reportExportRiverClient)
 	reportHandler := handler.NewReportHandler(reportUsecase, reportExportUsecase)
-	serverServer := server.New(configConfig, logger, authHandler, scheduleHandler, holidayHandler, kioskHandler, attendanceHandler, reportHandler, jwtIssuer, kioskDeviceUsecase, riverClient)
+	leaveRequestRepository := repository.NewLeaveRequestRepository(pool)
+	auditLogRepository := repository.NewAuditLogRepository(pool)
+	auditLogUsecase := usecase.NewAuditLogUsecase(auditLogRepository)
+	leaveUsecase := usecase.NewLeaveUsecase(leaveRequestRepository, auditLogUsecase)
+	leaveHandler := handler.NewLeaveHandler(leaveUsecase)
+	serverServer := server.New(configConfig, logger, authHandler, scheduleHandler, holidayHandler, kioskHandler, attendanceHandler, reportHandler, leaveHandler, jwtIssuer, kioskDeviceUsecase, riverClient)
 	return serverServer, nil
 }
 
