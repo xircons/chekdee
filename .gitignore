@@ -1,0 +1,9 @@
+design.md
+CONTRIBUTING.md
+PLAN.md
+.claude/
+
+.next/
+node_modules/
+.env*
+.DS_Store

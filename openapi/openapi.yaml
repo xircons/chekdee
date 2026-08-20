@@ -1,0 +1,232 @@
+openapi: 3.0.3
+info:
+  title: Checkdee API
+  description: >
+    Employee attendance API for Checkdee (CAMT, Chiang Mai University).
+    This spec is the shared contract between the Go backend and the
+    generated frontend client — see design.md and CONTRIBUTING.md for
+    project-wide conventions.
+  version: 0.1.0
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+
+paths:
+  /healthz:
+    get:
+      operationId: getHealth
+      summary: Liveness check
+      responses:
+        "200":
+          description: Service is up
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /auth/line/login:
+    post:
+      operationId: lineLogin
+      summary: Exchange a LINE Login authorization code for a session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LineLoginRequest"
+      responses:
+        "200":
+          description: >
+            Login succeeded. Sets an httpOnly refresh-token cookie
+            (scoped to /auth) in addition to the response body.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          description: LINE code/profile exchange failed
+        "403":
+          description: Account is deactivated
+
+  /auth/login:
+    post:
+      operationId: passwordLogin
+      summary: >
+        Username/password login for the system_owner role — the only
+        role that doesn't use LINE login. Accounts are bootstrapped
+        out-of-band (see backend/cmd/seedowner), there is no signup
+        endpoint.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasswordLoginRequest"
+      responses:
+        "200":
+          description: >
+            Login succeeded. Sets an httpOnly refresh-token cookie
+            (scoped to /auth) in addition to the response body.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Missing username or password
+        "401":
+          description: Invalid username or password
+        "403":
+          description: Account is deactivated
+
+  /auth/refresh:
+    post:
+      operationId: refreshToken
+      summary: Rotate the refresh-token cookie for a new access token
+      responses:
+        "200":
+          description: New access token issued
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [access_token, expires_at]
+                properties:
+                  access_token:
+                    type: string
+                  expires_at:
+                    type: string
+                    format: date-time
+        "401":
+          description: Missing, invalid, or expired refresh token
+
+  /auth/logout:
+    post:
+      operationId: logout
+      summary: Revoke the current refresh token server-side
+      responses:
+        "204":
+          description: Logged out
+
+  /auth/register:
+    post:
+      operationId: completeRegistration
+      summary: Complete first-time onboarding for the authenticated user
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompleteRegistrationRequest"
+      responses:
+        "200":
+          description: Registration completed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          description: Missing required fields
+        "401":
+          description: Missing or invalid access token
+
+  /auth/me:
+    get:
+      operationId: getMe
+      summary: Get the authenticated user
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          description: Missing or invalid access token
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          example: ok
+
+    LineLoginRequest:
+      type: object
+      required: [code, redirect_uri]
+      properties:
+        code:
+          type: string
+        redirect_uri:
+          type: string
+
+    PasswordLoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+          format: password
+
+    CompleteRegistrationRequest:
+      type: object
+      required: [first_name, last_name, student_gen]
+      properties:
+        first_name:
+          type: string
+        last_name:
+          type: string
+        student_gen:
+          type: string
+
+    User:
+      type: object
+      required: [id, role, is_registered]
+      properties:
+        id:
+          type: string
+        role:
+          type: string
+          enum: [system_owner, admin, supervisor, employee]
+        first_name:
+          type: string
+          nullable: true
+        last_name:
+          type: string
+          nullable: true
+        display_name:
+          type: string
+          nullable: true
+        picture_url:
+          type: string
+          nullable: true
+        is_registered:
+          type: boolean
+
+    AuthResponse:
+      type: object
+      required: [access_token, expires_at, user]
+      properties:
+        access_token:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+        user:
+          $ref: "#/components/schemas/User"
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
