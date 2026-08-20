@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Pencil, Trash2 } from "lucide-react";
@@ -36,7 +36,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ACTION_BUTTON_CLASS, FIELD_CLASS } from "@/lib/admin-ui";
-import { mockHolidays, type MockHoliday } from "@/lib/mock-data";
+import { createHoliday, deleteHoliday, listHolidays, updateHoliday } from "@/lib/api-holidays";
+import type { MockHoliday } from "@/lib/mock-data";
 import { cn, formatThaiDate, parseIsoDateLocal } from "@/lib/utils";
 
 function toIsoDateLocal(date: Date): string {
@@ -44,6 +45,16 @@ function toIsoDateLocal(date: Date): string {
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
+}
+
+// A year back and a year forward from today — this page has no year
+// picker, so a generous fixed window covers the realistic "upcoming and
+// recent past" range the two-table layout below is designed to show.
+function defaultRange(): { from: string; to: string } {
+  const now = new Date();
+  const from = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
+  const to = new Date(now.getFullYear() + 1, now.getMonth(), now.getDate());
+  return { from: toIsoDateLocal(from), to: toIsoDateLocal(to) };
 }
 
 const holidaySchema = z.object({
@@ -56,10 +67,12 @@ type HolidayForm = z.infer<typeof holidaySchema>;
 
 function HolidayFormFields({
   defaultValues,
+  dateEditable,
   onSubmit,
   onCancel,
 }: {
   defaultValues: HolidayForm;
+  dateEditable: boolean;
   onSubmit: (values: HolidayForm) => void;
   onCancel: () => void;
 }) {
@@ -76,8 +89,20 @@ function HolidayFormFields({
     <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="date">วันที่</Label>
-        <Input id="date" type="date" className={FIELD_CLASS} {...register("date")} />
-        {errors.date && <p className="text-xs text-danger-foreground">{errors.date.message}</p>}
+        {dateEditable ? (
+          <>
+            <Input id="date" type="date" className={FIELD_CLASS} {...register("date")} />
+            {errors.date && <p className="text-xs text-danger-foreground">{errors.date.message}</p>}
+          </>
+        ) : (
+          // Editing an existing holiday: the date can't be changed (the
+          // backend only ever updates name/local_name), so it's shown
+          // read-only instead of a form field a user could edit and have
+          // silently ignored.
+          <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-muted-foreground">
+            {formatThaiDate(parseIsoDateLocal(defaultValues.date))}
+          </p>
+        )}
       </div>
 
       <div className="flex flex-col gap-1.5">
@@ -187,10 +212,21 @@ function HolidayTable({
 }
 
 export default function HolidaysPage() {
-  const [holidays, setHolidays] = useState<MockHoliday[]>(mockHolidays);
+  const [holidays, setHolidays] = useState<MockHoliday[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [editingHoliday, setEditingHoliday] = useState<MockHoliday | null>(null);
   const [removeTarget, setRemoveTarget] = useState<MockHoliday | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const { from, to } = defaultRange();
+    listHolidays(from, to)
+      .then((rows) => setHolidays(rows))
+      .catch((err: Error) => setLoadError(err.message))
+      .finally(() => setLoading(false));
+  }, []);
 
   const sortedHolidays = [...holidays].sort((a, b) => a.date.localeCompare(b.date));
   const todayIso = toIsoDateLocal(new Date());
@@ -199,40 +235,48 @@ export default function HolidaysPage() {
 
   const openCreateForm = () => {
     setEditingHoliday(null);
+    setActionError(null);
     setFormOpen(true);
   };
 
   const openEditForm = (holiday: MockHoliday) => {
     setEditingHoliday(holiday);
+    setActionError(null);
     setFormOpen(true);
   };
 
-  const handleSubmit = (values: HolidayForm) => {
-    if (editingHoliday) {
-      setHolidays((prev) =>
-        prev.map((h) =>
-          h.id === editingHoliday.id
-            ? { ...h, date: values.date, name: values.name, localName: values.localName || null }
-            : h
-        )
-      );
-    } else {
-      const newHoliday: MockHoliday = {
-        id: crypto.randomUUID(),
-        date: values.date,
-        name: values.name,
-        localName: values.localName || null,
-        source: "manual",
-      };
-      setHolidays((prev) => [...prev, newHoliday]);
+  const handleSubmit = async (values: HolidayForm) => {
+    try {
+      if (editingHoliday) {
+        const updated = await updateHoliday(editingHoliday.id, {
+          name: values.name,
+          local_name: values.localName || "",
+        });
+        setHolidays((prev) => prev.map((h) => (h.id === updated.id ? updated : h)));
+      } else {
+        const created = await createHoliday({
+          date: values.date,
+          name: values.name,
+          local_name: values.localName || "",
+        });
+        setHolidays((prev) => [...prev, created]);
+      }
+      setFormOpen(false);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "บันทึกไม่สำเร็จ");
     }
-    setFormOpen(false);
   };
 
-  const confirmRemove = () => {
+  const confirmRemove = async () => {
     if (!removeTarget) return;
-    setHolidays((prev) => prev.filter((h) => h.id !== removeTarget.id));
-    setRemoveTarget(null);
+    try {
+      await deleteHoliday(removeTarget.id);
+      setHolidays((prev) => prev.filter((h) => h.id !== removeTarget.id));
+      setRemoveTarget(null);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "ลบไม่สำเร็จ");
+      setRemoveTarget(null);
+    }
   };
 
   return (
@@ -258,28 +302,48 @@ export default function HolidaysPage() {
           </CardAction>
         </CardHeader>
         <CardContent>
-          {upcomingHolidays.length > 0 && (
-            <>
-              <p className="text-xs font-semibold text-muted-foreground">กำลังจะถึง</p>
-              <div className="mt-2">
-                <HolidayTable holidays={upcomingHolidays} onEdit={openEditForm} onRemove={setRemoveTarget} />
-              </div>
-            </>
+          {actionError && (
+            <p className="mb-4 rounded-md border border-danger bg-danger px-3 py-2 text-sm text-danger-foreground">
+              {actionError}
+            </p>
           )}
 
-          {pastHolidays.length > 0 && (
+          {loading && <p className="text-sm text-muted-foreground">กำลังโหลด…</p>}
+
+          {!loading && loadError && (
+            <p className="text-sm text-danger-foreground">โหลดข้อมูลไม่สำเร็จ: {loadError}</p>
+          )}
+
+          {!loading && !loadError && (
             <>
-              <p
-                className={cn(
-                  "text-xs font-semibold text-muted-foreground",
-                  upcomingHolidays.length > 0 && "mt-6"
-                )}
-              >
-                ผ่านมาแล้ว
-              </p>
-              <div className="mt-2">
-                <HolidayTable holidays={pastHolidays} onEdit={openEditForm} onRemove={setRemoveTarget} />
-              </div>
+              {upcomingHolidays.length > 0 && (
+                <>
+                  <p className="text-xs font-semibold text-muted-foreground">กำลังจะถึง</p>
+                  <div className="mt-2">
+                    <HolidayTable holidays={upcomingHolidays} onEdit={openEditForm} onRemove={setRemoveTarget} />
+                  </div>
+                </>
+              )}
+
+              {pastHolidays.length > 0 && (
+                <>
+                  <p
+                    className={cn(
+                      "text-xs font-semibold text-muted-foreground",
+                      upcomingHolidays.length > 0 && "mt-6"
+                    )}
+                  >
+                    ผ่านมาแล้ว
+                  </p>
+                  <div className="mt-2">
+                    <HolidayTable holidays={pastHolidays} onEdit={openEditForm} onRemove={setRemoveTarget} />
+                  </div>
+                </>
+              )}
+
+              {sortedHolidays.length === 0 && (
+                <p className="text-sm text-muted-foreground">ยังไม่มีวันหยุดในปฏิทิน</p>
+              )}
             </>
           )}
         </CardContent>
@@ -297,6 +361,7 @@ export default function HolidaysPage() {
                 name: editingHoliday?.name ?? "",
                 localName: editingHoliday?.localName ?? "",
               }}
+              dateEditable={!editingHoliday}
               onSubmit={handleSubmit}
               onCancel={() => setFormOpen(false)}
             />
