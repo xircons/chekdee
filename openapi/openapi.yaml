@@ -353,12 +353,16 @@ paths:
   /kiosk/devices:
     get:
       operationId: listKioskDevices
-      summary: List active kiosk devices, tokens masked
+      summary: >
+        List every kiosk device, tokens masked — the latest row per
+        device_id, active or revoked (a rotated device has multiple
+        historical rows sharing one device_id; only the newest reflects its
+        current state).
       security:
         - bearerAuth: []
       responses:
         "200":
-          description: Active devices
+          description: Devices, latest row per device_id
           content:
             application/json:
               schema:
@@ -1221,7 +1225,7 @@ components:
 
     KioskDevice:
       type: object
-      required: [id, device_id, name, masked_token]
+      required: [id, device_id, name, masked_token, created_at]
       properties:
         id:
           type: string
@@ -1235,6 +1239,16 @@ components:
         created_by:
           type: string
           nullable: true
+        created_at:
+          type: string
+          format: date-time
+        revoked_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: >
+            null for an active device. GET /kiosk/devices returns the latest
+            row per device (active or revoked) — see ListAll.
 
     KioskDeviceWithToken:
       allOf:
@@ -1255,13 +1269,15 @@ components:
 
     QRTokenResponse:
       type: object
-      required: [token, expires_at]
+      required: [token, expires_at, device_name]
       properties:
         token:
           type: string
         expires_at:
           type: string
           format: date-time
+        device_name:
+          type: string
 
     CheckInRequest:
       type: object

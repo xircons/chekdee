@@ -147,3 +147,31 @@ func (r *KioskDeviceRepository) ListActive(ctx context.Context) ([]*domain.Kiosk
 	}
 	return out, rows.Err()
 }
+
+// ListAll returns the latest row per device_id (DISTINCT ON), whether that
+// row is active or revoked — a rotated device has multiple historical rows
+// sharing one device_id, and only the newest reflects its current state.
+func (r *KioskDeviceRepository) ListAll(ctx context.Context) ([]*domain.KioskDevice, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT `+kioskDeviceColumns+` FROM (
+			SELECT DISTINCT ON (device_id) `+kioskDeviceColumns+`
+			FROM kiosk_devices
+			ORDER BY device_id, created_at DESC
+		) latest
+		ORDER BY created_at DESC`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []*domain.KioskDevice
+	for rows.Next() {
+		d, err := scanKioskDevice(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, d)
+	}
+	return out, rows.Err()
+}

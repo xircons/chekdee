@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/labstack/echo/v4"
 
@@ -24,6 +25,8 @@ type kioskDeviceView struct {
 	Name        string  `json:"name"`
 	MaskedToken string  `json:"masked_token"`
 	CreatedBy   *string `json:"created_by"`
+	CreatedAt   string  `json:"created_at"`
+	RevokedAt   *string `json:"revoked_at"`
 }
 
 // maskToken shows only the last 4 characters — kiosk device tokens are
@@ -36,13 +39,19 @@ func maskToken(hash string) string {
 }
 
 func toKioskDeviceView(d *domain.KioskDevice) kioskDeviceView {
-	return kioskDeviceView{
+	v := kioskDeviceView{
 		ID:          d.ID,
 		DeviceID:    d.DeviceID,
 		Name:        d.Name,
 		MaskedToken: maskToken(d.TokenHash),
 		CreatedBy:   d.CreatedBy,
+		CreatedAt:   d.CreatedAt.Format(time.RFC3339),
 	}
+	if d.RevokedAt != nil {
+		s := d.RevokedAt.Format(time.RFC3339)
+		v.RevokedAt = &s
+	}
+	return v
 }
 
 type kioskDeviceWithTokenView struct {
@@ -91,9 +100,10 @@ func (h *KioskHandler) Revoke(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
-// List returns every active device, tokens masked. Mounted behind RequireRole.
+// List returns the latest row per device (active or revoked), tokens
+// masked. Mounted behind RequireRole.
 func (h *KioskHandler) List(c echo.Context) error {
-	devices, err := h.devices.ListActive(c.Request().Context())
+	devices, err := h.devices.ListAll(c.Request().Context())
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to list devices")
 	}
@@ -105,8 +115,9 @@ func (h *KioskHandler) List(c echo.Context) error {
 }
 
 type qrTokenView struct {
-	Token     string `json:"token"`
-	ExpiresAt string `json:"expires_at"`
+	Token      string `json:"token"`
+	ExpiresAt  string `json:"expires_at"`
+	DeviceName string `json:"device_name"`
 }
 
 // QRToken mints the next rotating QR payload for this screen. Mounted
@@ -116,5 +127,9 @@ func (h *KioskHandler) QRToken(c echo.Context) error {
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to mint qr token")
 	}
-	return c.JSON(http.StatusOK, qrTokenView{Token: token, ExpiresAt: expiresAt.Format("2006-01-02T15:04:05Z07:00")})
+	return c.JSON(http.StatusOK, qrTokenView{
+		Token:      token,
+		ExpiresAt:  expiresAt.Format("2006-01-02T15:04:05Z07:00"),
+		DeviceName: deviceNameFromContext(c),
+	})
 }

@@ -1,11 +1,13 @@
 "use client";
 
+import { useEffect, useState } from "react";
+
 import { EmployeeListRow } from "@/components/employee-list-row";
 import { EmployeePageHeader } from "@/components/employee-page-header";
 import { EmployeeScheduleCalendar } from "@/components/employee-schedule-calendar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getUpcomingHolidays } from "@/lib/mock-data";
-import { useMe } from "@/lib/session";
+import { listHolidays } from "@/lib/api-holidays";
+import type { MockHoliday } from "@/lib/mock-data";
 
 function formatHolidayDate(date: string): string {
   return new Date(`${date}T00:00:00Z`).toLocaleDateString([], {
@@ -14,11 +16,27 @@ function formatHolidayDate(date: string): string {
   });
 }
 
-export default function SchedulePage() {
-  const me = useMe();
+function toIsoDateLocal(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
 
-  const today = new Date();
-  const holidays = getUpcomingHolidays(today.toISOString().slice(0, 10));
+export default function SchedulePage() {
+  const [holidays, setHolidays] = useState<MockHoliday[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const now = new Date();
+    const from = toIsoDateLocal(now);
+    const to = toIsoDateLocal(new Date(now.getFullYear() + 1, now.getMonth(), now.getDate()));
+    listHolidays(from, to)
+      .then((rows) => setHolidays([...rows].sort((a, b) => a.date.localeCompare(b.date))))
+      .catch((err: Error) => setLoadError(err.message))
+      .finally(() => setLoading(false));
+  }, []);
 
   return (
     <div className="flex w-full flex-1 flex-col">
@@ -33,7 +51,7 @@ export default function SchedulePage() {
             <CardTitle>ตารางเวลาทำงานประจำสัปดาห์</CardTitle>
           </CardHeader>
           <CardContent>
-            <EmployeeScheduleCalendar employeeId={me.id} />
+            <EmployeeScheduleCalendar />
           </CardContent>
         </Card>
 
@@ -42,10 +60,14 @@ export default function SchedulePage() {
             <CardTitle>วันหยุดที่จะถึง</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col">
-            {holidays.length === 0 && (
+            {loading && <p className="text-sm text-muted-foreground">กำลังโหลด…</p>}
+            {!loading && loadError && (
+              <p className="text-sm text-danger-foreground">โหลดข้อมูลไม่สำเร็จ: {loadError}</p>
+            )}
+            {!loading && !loadError && holidays.length === 0 && (
               <p className="text-sm text-muted-foreground">ไม่มีวันหยุดที่จะถึง</p>
             )}
-            {holidays.map((holiday) => (
+            {!loading && !loadError && holidays.map((holiday) => (
               <EmployeeListRow
                 key={holiday.id}
                 label={holiday.name}

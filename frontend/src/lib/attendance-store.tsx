@@ -13,17 +13,30 @@ export type TodayAttendance = {
 
 type AttendanceContextValue = {
   today: TodayAttendance;
-  checkIn: () => void;
-  checkOut: () => void;
+  checkIn: (timeOfDay?: string) => void;
+  checkOut: (timeOfDay?: string) => void;
 };
 
 const AttendanceContext = createContext<AttendanceContextValue | null>(null);
 
+// Combines a backend "HH:MM:SS" time-of-day with today's local date, so
+// display code that formats via `new Date(iso).toLocaleTimeString()`
+// doesn't need to change for a real check-in time vs. the mock's
+// new Date().toISOString().
+function timeOfDayToIsoToday(timeOfDay: string): string {
+  const [h, m, s] = timeOfDay.split(":").map(Number);
+  const d = new Date();
+  d.setHours(h, m, s ?? 0, 0);
+  return d.toISOString();
+}
+
 export function AttendanceProvider({ children }: { children: React.ReactNode }) {
   const [today, setToday] = useState<TodayAttendance>({ checkInAt: null, checkOutAt: null });
 
-  const checkIn = () => setToday({ checkInAt: new Date().toISOString(), checkOutAt: null });
-  const checkOut = () => setToday((t) => ({ ...t, checkOutAt: new Date().toISOString() }));
+  const checkIn = (timeOfDay?: string) =>
+    setToday({ checkInAt: timeOfDay ? timeOfDayToIsoToday(timeOfDay) : new Date().toISOString(), checkOutAt: null });
+  const checkOut = (timeOfDay?: string) =>
+    setToday((t) => ({ ...t, checkOutAt: timeOfDay ? timeOfDayToIsoToday(timeOfDay) : new Date().toISOString() }));
 
   return (
     <AttendanceContext.Provider value={{ today, checkIn, checkOut }}>

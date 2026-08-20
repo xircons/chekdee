@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CalendarOff, ChevronLeft, ChevronRight, Clock, PartyPopper } from "lucide-react";
 
 import { DetailModal, DetailModalInfoBlock, type DetailModalBadgeVariant } from "@/components/detail-modal";
@@ -12,7 +12,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { getWorkScheduleForEmployee, mockHolidays } from "@/lib/mock-data";
+import { listHolidays } from "@/lib/api-holidays";
+import { getMySchedule } from "@/lib/api-schedules";
+import type { MockHoliday, MockWorkSchedule } from "@/lib/mock-data";
 import { cn, formatThaiDate, THAI_MONTH_LABELS } from "@/lib/utils";
 
 const WEEKDAY_LABELS_TH = ["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"];
@@ -99,7 +101,7 @@ const STATUS_BADGE_VARIANT: Record<DayStatus, DetailModalBadgeVariant> = {
   holiday: "warning",
 };
 
-export function EmployeeScheduleCalendar({ employeeId }: { employeeId: string }) {
+export function EmployeeScheduleCalendar() {
   const today = new Date();
   const [viewYear, setViewYear] = useState(today.getFullYear());
   const [viewMonth, setViewMonth] = useState(today.getMonth());
@@ -107,15 +109,34 @@ export function EmployeeScheduleCalendar({ employeeId }: { employeeId: string })
   const [selectedDay, setSelectedDay] = useState<CalendarDay | null>(null);
   const [dayModalOpen, setDayModalOpen] = useState(false);
 
-  const schedule = useMemo(() => getWorkScheduleForEmployee(employeeId), [employeeId]);
+  const [schedule, setSchedule] = useState<MockWorkSchedule[]>([]);
+  const [holidays, setHolidays] = useState<MockHoliday[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    // A year back to a year forward from today — the year picker below
+    // only offers those three years, so this always covers what's browsable.
+    const from = `${today.getFullYear() - 1}-01-01`;
+    const to = `${today.getFullYear() + 1}-12-31`;
+    Promise.all([getMySchedule(), listHolidays(from, to)])
+      .then(([scheduleRows, holidayRows]) => {
+        setSchedule(scheduleRows);
+        setHolidays(holidayRows);
+      })
+      .catch((err: Error) => setLoadError(err.message))
+      .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const scheduleByDayOfWeek = useMemo(
     () => new Map(schedule.map((s) => [s.dayOfWeek, s])),
     [schedule]
   );
 
   const holidaysByDate = useMemo(() => {
-    return new Map(mockHolidays.map((h) => [h.date, h]));
-  }, []);
+    return new Map(holidays.map((h) => [h.date, h]));
+  }, [holidays]);
 
   const weeks = useMemo(() => {
     const todayIso = toIsoDate(today);
@@ -161,6 +182,15 @@ export function EmployeeScheduleCalendar({ employeeId }: { employeeId: string })
   }
 
   const yearOptions = [today.getFullYear() - 1, today.getFullYear(), today.getFullYear() + 1];
+
+  if (loading) {
+    return <p className="py-6 text-center text-sm text-muted-foreground">กำลังโหลด…</p>;
+  }
+  if (loadError) {
+    return (
+      <p className="py-6 text-center text-sm text-danger-foreground">โหลดข้อมูลไม่สำเร็จ: {loadError}</p>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-4">

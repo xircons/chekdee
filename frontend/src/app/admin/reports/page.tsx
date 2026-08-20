@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -29,9 +29,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ACTION_BUTTON_CLASS } from "@/lib/admin-ui";
-import { getMonthlyReportRows, type MonthlyReportRow } from "@/lib/mock-data";
-import { downloadReportWorkbook } from "@/lib/report-export";
-import { useMe } from "@/lib/session";
+import {
+  downloadReportExport,
+  getMonthlyReport,
+  getReportExport,
+  requestReportExport,
+  type MonthlyReportRow,
+} from "@/lib/api-reports";
 import { cn, THAI_MONTH_LABELS } from "@/lib/utils";
 
 const SELECT_TRIGGER_CLASS =
@@ -43,11 +47,8 @@ const SELECT_TRIGGER_CLASS =
 // rows exactly fill the space instead of overflowing or leaving a gap.
 const INITIAL_PAGE_SIZE = 10;
 
-// Roughly how long the (nonexistent) backend job queue would take to build
-// and email a report — long enough that the "กำลังประมวลผล..." state reads
-// as real work, short enough not to feel broken.
-const SIMULATED_PROCESSING_MS_MIN = 1500;
-const SIMULATED_PROCESSING_MS_SPAN = 500;
+// How often to poll GET /reports/export/:id while status is "processing".
+const EXPORT_POLL_MS = 1500;
 
 function currentYearMonth(): string {
   const now = new Date();
@@ -67,6 +68,10 @@ function getRecentMonthOptions(count: number): { value: string; label: string }[
 
 function sumBy(rows: MonthlyReportRow[], pick: (row: MonthlyReportRow) => number): number {
   return rows.reduce((sum, row) => sum + pick(row), 0);
+}
+
+function employeeName(row: MonthlyReportRow): string {
+  return [row.firstName, row.lastName].filter(Boolean).join(" ") || row.employeeId;
 }
 
 // ui/table.tsx's shared TableCell/TableHead padding (p-2 / h-10) renders a
@@ -144,25 +149,21 @@ function MonthlySummaryTable({
     <Table className="table-fixed">
       <TableHeader>
         <TableRow>
-          <TableHead className={cn(REPORT_HEADER_PADDING, "w-[22%]")}>ชื่อ</TableHead>
-          <TableHead className={cn(REPORT_HEADER_PADDING, "w-[13%]")}>รหัสนักศึกษา</TableHead>
-          <TableHead className={cn(REPORT_HEADER_PADDING, "w-[8%]")}>รุ่น</TableHead>
-          <TableHead className={cn(REPORT_HEADER_PADDING, "w-[12%] text-right")}>จำนวนวันทำงาน</TableHead>
-          <TableHead className={cn(REPORT_HEADER_PADDING, "w-[11%] text-right")}>สาย (ครั้ง)</TableHead>
-          <TableHead className={cn(REPORT_HEADER_PADDING, "w-[11%] text-right")}>นาทีสายรวม</TableHead>
-          <TableHead className={cn(REPORT_HEADER_PADDING, "w-[8%] text-right")}>ขาด</TableHead>
-          <TableHead className={cn(REPORT_HEADER_PADDING, "w-[7%] text-right")}>ลา</TableHead>
-          <TableHead className={cn(REPORT_HEADER_PADDING, "w-[8%] text-right")}>ชั่วโมงรวม</TableHead>
+          <TableHead className={cn(REPORT_HEADER_PADDING, "w-[30%]")}>ชื่อ</TableHead>
+          <TableHead className={cn(REPORT_HEADER_PADDING, "w-[14%] text-right")}>จำนวนวันทำงาน</TableHead>
+          <TableHead className={cn(REPORT_HEADER_PADDING, "w-[12%] text-right")}>สาย (ครั้ง)</TableHead>
+          <TableHead className={cn(REPORT_HEADER_PADDING, "w-[13%] text-right")}>นาทีสายรวม</TableHead>
+          <TableHead className={cn(REPORT_HEADER_PADDING, "w-[10%] text-right")}>ขาด</TableHead>
+          <TableHead className={cn(REPORT_HEADER_PADDING, "w-[9%] text-right")}>ลา</TableHead>
+          <TableHead className={cn(REPORT_HEADER_PADDING, "w-[12%] text-right")}>ชั่วโมงรวม</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         {pageRows.map((row) => (
-          <TableRow key={row.employee.id}>
+          <TableRow key={row.employeeId}>
             <TableCell className={cn(REPORT_CELL_PADDING, "truncate font-medium text-foreground")}>
-              {row.employee.firstName} {row.employee.lastName}
+              {employeeName(row)}
             </TableCell>
-            <TableCell className={REPORT_CELL_PADDING}>{row.employee.studentId ?? "-"}</TableCell>
-            <TableCell className={REPORT_CELL_PADDING}>{row.employee.studentGen ?? "-"}</TableCell>
             <TableCell className={cn(REPORT_CELL_PADDING, "text-right tabular-nums")}>
               {row.workDays}
             </TableCell>
@@ -186,7 +187,7 @@ function MonthlySummaryTable({
       </TableBody>
       <TableFooter>
         <TableRow className="bg-card font-medium">
-          <TableCell colSpan={3} className={REPORT_CELL_PADDING}>
+          <TableCell className={REPORT_CELL_PADDING}>
             รวมทั้งหมด ({allRows.length} คน)
           </TableCell>
           <TableCell className={cn(REPORT_CELL_PADDING, "text-right tabular-nums")}>
@@ -214,12 +215,29 @@ function MonthlySummaryTable({
 }
 
 export default function ReportsPage() {
-  const me = useMe();
   const monthOptions = useMemo(() => getRecentMonthOptions(12), []);
   const [yearMonth, setYearMonth] = useState<string>(currentYearMonth);
   const [isExporting, setIsExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
 
-  const rows = useMemo(() => getMonthlyReportRows(yearMonth), [yearMonth]);
+  const [rows, setRows] = useState<MonthlyReportRow[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  // Derived rather than a separate setState call at the top of the effect
+  // below (which would be a synchronous setState-in-effect) — loading is
+  // simply "haven't finished loading the currently-selected month yet".
+  const [loadedMonth, setLoadedMonth] = useState<string | null>(null);
+  const loading = loadedMonth !== yearMonth;
+
+  useEffect(() => {
+    getMonthlyReport(yearMonth)
+      .then((r) => {
+        setRows(r);
+        setLoadError(null);
+      })
+      .catch((err: Error) => setLoadError(err.message))
+      .finally(() => setLoadedMonth(yearMonth));
+  }, [yearMonth]);
+
   const selectedMonthLabel = monthOptions.find((m) => m.value === yearMonth)?.label ?? "";
 
   const sortedRows = useMemo(
@@ -243,17 +261,33 @@ export default function ReportsPage() {
     currentSummaryPage * pageSize
   );
 
-  const handleExport = () => {
+  const handleExport = async () => {
     setIsExporting(true);
-    const generatedByName = me.display_name ?? "ผู้ดูแลระบบ";
-    setTimeout(
-      () => {
-        void downloadReportWorkbook(yearMonth, generatedByName).finally(() => {
-          setIsExporting(false);
-        });
-      },
-      SIMULATED_PROCESSING_MS_MIN + Math.random() * SIMULATED_PROCESSING_MS_SPAN
-    );
+    setExportError(null);
+    try {
+      let job = await requestReportExport(yearMonth);
+      while (job.status === "processing") {
+        await new Promise((resolve) => setTimeout(resolve, EXPORT_POLL_MS));
+        job = await getReportExport(job.id);
+      }
+      if (job.status === "failed") {
+        throw new Error(job.error ?? "ส่งออกไม่สำเร็จ");
+      }
+
+      const blob = await downloadReportExport(job.id);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `attendance-report-${yearMonth}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : "ส่งออกไม่สำเร็จ");
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   return (
@@ -286,7 +320,7 @@ export default function ReportsPage() {
               </Select>
               <Button
                 disabled={isExporting}
-                onClick={handleExport}
+                onClick={() => void handleExport()}
                 className={`${ACTION_BUTTON_CLASS} bg-accent-600 text-white hover:bg-accent-700`}
               >
                 {isExporting ? "กำลังประมวลผล..." : "ส่งออกเป็น Excel"}
@@ -295,18 +329,22 @@ export default function ReportsPage() {
           </CardAction>
         </CardHeader>
         <CardContent className="flex flex-col gap-2 text-sm text-muted-foreground">
-          <p>ไฟล์ Excel ที่ส่งออกจะมีชีต &quot;สรุป&quot; หนึ่งชีต และชีตแยกรายบุคคลอีกหนึ่งชีตต่อพนักงานหนึ่งคน:</p>
+          <p>ไฟล์ Excel ที่ส่งออกจะมี 2 ชีต:</p>
           <ul className="list-disc pl-5">
             <li>
               <span className="font-medium text-foreground">สรุป</span>: หนึ่งแถวต่อพนักงานหนึ่งคน
               พร้อมจำนวนวันทำงาน จำนวนครั้งที่สายและนาทีสายรวม จำนวนวันขาด จำนวนวันลา ชั่วโมงทำงานรวม
-              และช่องค้นหารายคนแบบเร็ว
             </li>
             <li>
-              <span className="font-medium text-foreground">ชีตรายบุคคล</span>:
-              ประวัติการเข้างานรายวันของพนักงานแต่ละคนตลอดเดือน สำหรับใช้อ้างอิงหรือกรณีมีข้อโต้แย้ง
+              <span className="font-medium text-foreground">รายละเอียดรายวัน</span>:
+              ประวัติการเข้างานรายวันของทุกคนตลอดเดือน สำหรับใช้อ้างอิงหรือกรณีมีข้อโต้แย้ง
             </li>
           </ul>
+          {exportError && (
+            <p className="rounded-md border border-danger bg-danger px-3 py-2 text-sm text-danger-foreground">
+              {exportError}
+            </p>
+          )}
         </CardContent>
       </Card>
 
@@ -316,7 +354,11 @@ export default function ReportsPage() {
           <CardDescription>ข้อมูลประจำเดือน{selectedMonthLabel}</CardDescription>
         </CardHeader>
         <CardContent className="flex min-h-0 flex-1 flex-col gap-4">
-          {sortedRows.length > 0 ? (
+          {loading && <p className="py-6 text-center text-sm text-muted-foreground">กำลังโหลด…</p>}
+          {!loading && loadError && (
+            <p className="py-6 text-center text-sm text-danger-foreground">โหลดข้อมูลไม่สำเร็จ: {loadError}</p>
+          )}
+          {!loading && !loadError && sortedRows.length > 0 ? (
             <>
               <div ref={summaryScrollRef} className="min-h-0 flex-1 overflow-y-auto">
                 <MonthlySummaryTable pageRows={pagedRows} allRows={sortedRows} />
@@ -366,7 +408,10 @@ export default function ReportsPage() {
               </div>
             </>
           ) : (
-            <p className="py-6 text-center text-sm text-muted-foreground">ไม่มีข้อมูลของเดือนนี้</p>
+            !loading &&
+            !loadError && (
+              <p className="py-6 text-center text-sm text-muted-foreground">ไม่มีข้อมูลของเดือนนี้</p>
+            )
           )}
         </CardContent>
       </Card>

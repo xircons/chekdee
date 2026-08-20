@@ -73,6 +73,9 @@ func (f *fakeKioskDeviceRepo) GetActiveByDeviceID(_ context.Context, deviceID st
 func (f *fakeKioskDeviceRepo) ListActive(context.Context) ([]*domain.KioskDevice, error) {
 	return nil, nil
 }
+func (f *fakeKioskDeviceRepo) ListAll(context.Context) ([]*domain.KioskDevice, error) {
+	return nil, nil
+}
 
 type fakeQRNonceRepo struct {
 	consumed     map[string]bool
