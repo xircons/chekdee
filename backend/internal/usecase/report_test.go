@@ -39,6 +39,18 @@ func (f *fakeUserRepoForReport) CreateSystemOwner(context.Context, string, strin
 func (f *fakeUserRepoForReport) ListActiveEmployees(context.Context) ([]*domain.User, error) {
 	return f.employees, nil
 }
+func (f *fakeUserRepoForReport) List(context.Context, domain.EmployeeListFilter) ([]*domain.User, int, error) {
+	return nil, 0, nil
+}
+func (f *fakeUserRepoForReport) Update(context.Context, string, *string, *string, *string) (*domain.User, error) {
+	return nil, nil
+}
+func (f *fakeUserRepoForReport) UpdateRole(context.Context, string, domain.Role) (*domain.User, error) {
+	return nil, nil
+}
+func (f *fakeUserRepoForReport) Offboard(context.Context, string, string, *string) (*domain.User, error) {
+	return nil, nil
+}
 
 type fakeAttendanceRepoForReport struct {
 	records []*domain.AttendanceRecord

@@ -144,3 +144,117 @@ func (r *UserRepository) CreateSystemOwner(ctx context.Context, username, passwo
 	)
 	return scanUser(row)
 }
+
+// employeeListWhere is shared between List's row query and its count query
+// so the two can never drift out of sync with each other.
+const employeeListWhere = `
+	($1::uuid IS NULL OR team_id = $1)
+	AND ($2::text IS NULL OR role::text = $2)
+	AND (
+		$3::text IS NULL
+		OR ($3 = 'active' AND offboarded_at IS NULL)
+		OR ($3 = 'offboarded' AND offboarded_at IS NOT NULL)
+	)
+	AND (
+		$4::text IS NULL
+		OR first_name ILIKE '%' || $4 || '%'
+		OR last_name ILIKE '%' || $4 || '%'
+		OR line_display_name ILIKE '%' || $4 || '%'
+	)`
+
+// List is the employee-directory listing behind GET /employees.
+func (r *UserRepository) List(ctx context.Context, filter domain.EmployeeListFilter) ([]*domain.User, int, error) {
+	var role *string
+	if filter.Role != nil {
+		s := string(*filter.Role)
+		role = &s
+	}
+	var search *string
+	if filter.Search != "" {
+		search = &filter.Search
+	}
+
+	var total int
+	if err := r.pool.QueryRow(ctx, `
+		SELECT count(*) FROM users WHERE `+employeeListWhere,
+		filter.TeamID, role, filter.OffboardStatus, search,
+	).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	rows, err := r.pool.Query(ctx, `
+		SELECT `+userColumns+`
+		FROM users
+		WHERE `+employeeListWhere+`
+		ORDER BY first_name, last_name
+		LIMIT $5 OFFSET $6`,
+		filter.TeamID, role, filter.OffboardStatus, search, filter.Limit, filter.Offset,
+	)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var out []*domain.User
+	for rows.Next() {
+		u, err := scanUser(rows)
+		if err != nil {
+			return nil, 0, err
+		}
+		out = append(out, u)
+	}
+	return out, total, rows.Err()
+}
+
+// Update edits profile fields only — see the interface doc comment for why
+// role/offboarding are separate methods.
+func (r *UserRepository) Update(ctx context.Context, id string, firstName, lastName, teamID *string) (*domain.User, error) {
+	row := r.pool.QueryRow(ctx, `
+		UPDATE users
+		SET first_name = $2, last_name = $3, team_id = $4::uuid, updated_at = now()
+		WHERE id = $1
+		RETURNING `+userColumns,
+		id, firstName, lastName, teamID,
+	)
+	u, err := scanUser(row)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, domain.ErrUserNotFound
+	}
+	return u, err
+}
+
+func (r *UserRepository) UpdateRole(ctx context.Context, id string, role domain.Role) (*domain.User, error) {
+	row := r.pool.QueryRow(ctx, `
+		UPDATE users SET role = $2, updated_at = now()
+		WHERE id = $1
+		RETURNING `+userColumns,
+		id, string(role),
+	)
+	u, err := scanUser(row)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, domain.ErrUserNotFound
+	}
+	return u, err
+}
+
+// Offboard soft-deletes a user — rejects (via ErrUserAlreadyOffboarded) a
+// user who is already offboarded, distinguished from not-found the same
+// way LeaveRequestRepository.Decide distinguishes "not pending anymore"
+// from "doesn't exist".
+func (r *UserRepository) Offboard(ctx context.Context, id, offboardedBy string, reason *string) (*domain.User, error) {
+	row := r.pool.QueryRow(ctx, `
+		UPDATE users
+		SET offboarded_at = now(), offboarded_by = $2, offboarded_reason = $3, updated_at = now()
+		WHERE id = $1 AND offboarded_at IS NULL
+		RETURNING `+userColumns,
+		id, offboardedBy, reason,
+	)
+	u, err := scanUser(row)
+	if errors.Is(err, pgx.ErrNoRows) {
+		if _, getErr := r.GetByID(ctx, id); errors.Is(getErr, domain.ErrUserNotFound) {
+			return nil, domain.ErrUserNotFound
+		}
+		return nil, domain.ErrUserAlreadyOffboarded
+	}
+	return u, err
+}

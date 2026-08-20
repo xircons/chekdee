@@ -79,6 +79,18 @@ func (f *fakeUserRepo) CreateSystemOwner(context.Context, string, string) (*doma
 func (f *fakeUserRepo) ListActiveEmployees(context.Context) ([]*domain.User, error) {
 	return nil, nil
 }
+func (f *fakeUserRepo) List(context.Context, domain.EmployeeListFilter) ([]*domain.User, int, error) {
+	return nil, 0, nil
+}
+func (f *fakeUserRepo) Update(context.Context, string, *string, *string, *string) (*domain.User, error) {
+	return nil, nil
+}
+func (f *fakeUserRepo) UpdateRole(context.Context, string, domain.Role) (*domain.User, error) {
+	return nil, nil
+}
+func (f *fakeUserRepo) Offboard(context.Context, string, string, *string) (*domain.User, error) {
+	return nil, nil
+}
 
 // fakeLineClient is unused by Refresh but required by the constructor.
 type fakeLineClient struct{}

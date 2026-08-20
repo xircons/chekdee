@@ -21,7 +21,17 @@ const (
 	UserStatusInactive UserStatus = "inactive"
 )
 
-var ErrUserNotFound = errors.New("user not found")
+var (
+	ErrUserNotFound          = errors.New("user not found")
+	ErrUserAlreadyOffboarded = errors.New("user already offboarded")
+	// ErrCannotModifySystemOwnerRole guards both directions: a system_owner's
+	// role can't be changed away from system_owner, and no other role can be
+	// promoted to it — system_owner is bootstrapped out-of-band via
+	// cmd/seedowner only (see auth.go's password-login path), never through
+	// the employee-directory API.
+	ErrCannotModifySystemOwnerRole = errors.New("cannot change role to or from system_owner")
+	ErrCannotOffboardSystemOwner   = errors.New("cannot offboard system_owner")
+)
 
 type User struct {
 	ID     string

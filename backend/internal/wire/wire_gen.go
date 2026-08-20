@@ -81,7 +81,9 @@ func InitializeServer(logger *slog.Logger) (*server.Server, error) {
 	leaveHandler := handler.NewLeaveHandler(leaveUsecase)
 	notificationUsecase := usecase.NewNotificationUsecase(notificationRepository)
 	notificationHandler := handler.NewNotificationHandler(notificationUsecase)
-	serverServer := server.New(configConfig, logger, authHandler, scheduleHandler, holidayHandler, kioskHandler, attendanceHandler, reportHandler, leaveHandler, notificationHandler, jwtIssuer, kioskDeviceUsecase, riverClient)
+	employeeUsecase := usecase.NewEmployeeUsecase(userRepository, auditLogUsecase)
+	employeeHandler := handler.NewEmployeeHandler(employeeUsecase)
+	serverServer := server.New(configConfig, logger, authHandler, scheduleHandler, holidayHandler, kioskHandler, attendanceHandler, reportHandler, leaveHandler, notificationHandler, employeeHandler, jwtIssuer, kioskDeviceUsecase, riverClient)
 	return serverServer, nil
 }
 
