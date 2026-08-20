@@ -1,6 +1,6 @@
-# Checkdee
+# Chekdee
 
-Checkdee (from the Thai "เช็คดี") is a LINE OA-based employee attendance app for
+Chekdee (from the Thai "เช็คดี") is a LINE OA-based employee attendance app for
 CAMT, Chiang Mai University, with an admin panel for reporting.
 
 Styling conventions live in `design.md` and contribution/branching rules live in

@@ -14,7 +14,7 @@ const ibmPlexSansThai = IBM_Plex_Sans_Thai({
 });
 
 export const metadata: Metadata = {
-  title: "Checkdee",
+  title: "Chekdee",
   description: "Employee attendance for CAMT, Chiang Mai University",
 };
 
