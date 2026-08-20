@@ -24,15 +24,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { listMyLeaveRequests } from "@/lib/api-leave";
+import { type DailyLogRow, getMyDailyLog } from "@/lib/api-reports";
+import { getMySchedule } from "@/lib/api-schedules";
 import { useTodayAttendance, type TodayAttendance } from "@/lib/attendance-store";
 import { buildLeaveRequestEmail } from "@/lib/leave-email";
-import {
-  getAttendanceForEmployee,
-  getWorkScheduleForEmployee,
-  ROLE_LABEL_TH,
-  type MockAttendanceRecord,
-  type MockLeaveRequest,
-} from "@/lib/mock-data";
+import { ROLE_LABEL_TH, type MockLeaveRequest, type MockWorkSchedule } from "@/lib/mock-data";
 import { useMe } from "@/lib/session";
 import { cn, formatThaiDate, formatThaiDateRange } from "@/lib/utils";
 
@@ -107,6 +103,16 @@ function toIsoDateLocal(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
+// DailyLogRow.checkInAt/checkOutAt are "HH:MM:SS" time-of-day only (no
+// date) -- combines with the specific historical day it belongs to so
+// formatTime's `new Date(iso)` has something valid to parse.
+function timeOfDayToIso(date: Date, timeOfDay: string): string {
+  const [h, m, s] = timeOfDay.split(":").map(Number);
+  const d = new Date(date);
+  d.setHours(h, m, s ?? 0, 0);
+  return d.toISOString();
+}
+
 // Sunday-first dates for the week containing `reference`.
 function getWeekDates(reference: Date): Date[] {
   const sunday = new Date(reference);
@@ -122,7 +128,7 @@ function classifyDay(
   date: Date,
   todayIso: string,
   workingDays: Set<number>,
-  attendanceByDate: Map<string, MockAttendanceRecord>,
+  attendanceByDate: Map<string, DailyLogRow>,
   todayAttendance: TodayAttendance
 ): DayIconStatus {
   const iso = toIsoDateLocal(date);
@@ -135,8 +141,8 @@ function classifyDay(
 
   const record = attendanceByDate.get(iso);
   if (record?.status === "present") return "present";
-  if (record?.status === "สาย") return "late";
-  if (record?.status === "ขาด") return "absent";
+  if (record?.status === "late") return "late";
+  if (record?.status === "absent") return "absent";
   return "future";
 }
 
@@ -164,6 +170,8 @@ export default function EmployeeHome() {
   const [dayModalOpen, setDayModalOpen] = useState(false);
   const [requestModalOpen, setRequestModalOpen] = useState(false);
   const [myLeaveRequests, setMyLeaveRequests] = useState<MockLeaveRequest[]>([]);
+  const [mySchedule, setMySchedule] = useState<MockWorkSchedule[]>([]);
+  const [myDailyLog, setMyDailyLog] = useState<DailyLogRow[]>([]);
 
   useEffect(() => {
     listMyLeaveRequests()
@@ -172,6 +180,21 @@ export default function EmployeeHome() {
         // Best-effort: the pending-leave-request preview card just doesn't
         // show anything if this fails, rather than blocking the rest of
         // the home page on a non-critical background fetch.
+      });
+
+    // The displayed week can span two months (e.g. Aug 31 in the same
+    // Sun-Sat row as Sep 1) -- /reports/daily-log/me is month-scoped, so
+    // fetch once per distinct month the week touches (usually just one).
+    const weekDates = getWeekDates(new Date());
+    const months = [...new Set(weekDates.map((d) => toIsoDateLocal(d).slice(0, 7)))];
+    Promise.all([getMySchedule(), Promise.all(months.map((m) => getMyDailyLog(m)))])
+      .then(([schedule, logsByMonth]) => {
+        setMySchedule(schedule);
+        setMyDailyLog(logsByMonth.flat());
+      })
+      .catch(() => {
+        // Best-effort: the weekly icons fall back to "future" for days
+        // with no loaded data rather than blocking the rest of the page.
       });
   }, []);
 
@@ -182,11 +205,8 @@ export default function EmployeeHome() {
 
   const statusLabel = !today.checkInAt ? "ยังไม่เข้างาน" : !today.checkOutAt ? "เข้างานแล้ว" : "ออกงานแล้ว";
 
-  // Weekly summary still reads mock schedule/attendance history -- there's
-  // no self-scoped attendance-history endpoint yet (/reports/monthly and
-  // /reports/daily-log are admin-only); tracked as PLAN.md Group C #9.
-  const workingDays = new Set(getWorkScheduleForEmployee(me.id).map((s) => s.dayOfWeek));
-  const attendanceByDate = new Map(getAttendanceForEmployee(me.id).map((r) => [r.workDate, r]));
+  const workingDays = new Set(mySchedule.map((s) => s.dayOfWeek));
+  const attendanceByDate = new Map(myDailyLog.map((r) => [r.date, r]));
   const weekDays: WeekDay[] = getWeekDates(now).map((date, i) => {
     const isoDate = toIsoDateLocal(date);
     const status = classifyDay(date, todayIso, workingDays, attendanceByDate, today);
@@ -197,8 +217,18 @@ export default function EmployeeHome() {
       label: WEEKDAY_LABELS_TH[i],
       status,
       isToday: isoDate === todayIso,
-      checkInAt: isoDate === todayIso ? today.checkInAt : (record?.checkInAt ?? null),
-      checkOutAt: isoDate === todayIso ? today.checkOutAt : (record?.checkOutAt ?? null),
+      checkInAt:
+        isoDate === todayIso
+          ? today.checkInAt
+          : record?.checkInAt
+            ? timeOfDayToIso(date, record.checkInAt)
+            : null,
+      checkOutAt:
+        isoDate === todayIso
+          ? today.checkOutAt
+          : record?.checkOutAt
+            ? timeOfDayToIso(date, record.checkOutAt)
+            : null,
     };
   });
 

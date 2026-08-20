@@ -40,6 +40,46 @@ function toMonthlyReportRow(r: MonthlyReportRowResponse): MonthlyReportRow {
   };
 }
 
+// Wire-format shape from GET /reports/daily-log/me (snake_case, per
+// openapi/openapi.yaml's DailyLogRow schema). status is the backend's
+// English enum -- present/late/absent (pending is a DB-default sentinel
+// never actually returned) -- distinct from the frontend's Thai-literal
+// AttendanceStatus ("present" | "สาย" | "ขาด"), so callers map it themselves.
+type DailyLogRowResponse = {
+  date: string;
+  employee_id: string;
+  first_name: string | null;
+  last_name: string | null;
+  status: "pending" | "present" | "late" | "absent";
+  check_in_at: string | null;
+  check_out_at: string | null;
+  auto_closed: boolean;
+};
+
+export type DailyLogRow = {
+  date: string;
+  employeeId: string;
+  firstName: string | null;
+  lastName: string | null;
+  status: "pending" | "present" | "late" | "absent";
+  checkInAt: string | null;
+  checkOutAt: string | null;
+  autoClosed: boolean;
+};
+
+function toDailyLogRow(r: DailyLogRowResponse): DailyLogRow {
+  return {
+    date: r.date,
+    employeeId: r.employee_id,
+    firstName: r.first_name,
+    lastName: r.last_name,
+    status: r.status,
+    checkInAt: r.check_in_at,
+    checkOutAt: r.check_out_at,
+    autoClosed: r.auto_closed,
+  };
+}
+
 type ReportExportResponse = {
   id: string;
   month: string;
@@ -67,6 +107,16 @@ export async function getMonthlyReport(month: string): Promise<MonthlyReportRow[
   const res = await apiFetch(`/reports/monthly?month=${month}`);
   const rows = await parseOrThrow<MonthlyReportRowResponse[]>(res);
   return rows.map(toMonthlyReportRow);
+}
+
+// month is "YYYY-MM". Always scoped to the caller's own records -- the
+// backend forces employeeID to the JWT's own subject regardless of any
+// query param, so there's no employeeId argument here to accidentally
+// misuse.
+export async function getMyDailyLog(month: string): Promise<DailyLogRow[]> {
+  const res = await apiFetch(`/reports/daily-log/me?month=${month}`);
+  const rows = await parseOrThrow<DailyLogRowResponse[]>(res);
+  return rows.map(toDailyLogRow);
 }
 
 // Enqueues an async Excel export (river job, built server-side by
