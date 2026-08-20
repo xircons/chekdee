@@ -3,26 +3,16 @@ package usecase
 import (
 	"context"
 
-	"github.com/riverqueue/river"
-	"github.com/riverqueue/river/rivertype"
-
 	"checkdee-backend/internal/domain"
 	"checkdee-backend/internal/jobs"
 )
 
-// ReportExportRiverClient is the subset of *river.Client this usecase needs
-// — an interface so it doesn't have to depend on the concrete client type
-// wire.go constructs.
-type ReportExportRiverClient interface {
-	Insert(ctx context.Context, args river.JobArgs, opts *river.InsertOpts) (*rivertype.JobInsertResult, error)
-}
-
 type ReportExportUsecase struct {
 	exports domain.ReportExportRepository
-	river   ReportExportRiverClient
+	river   RiverInsertClient
 }
 
-func NewReportExportUsecase(exports domain.ReportExportRepository, riverClient ReportExportRiverClient) *ReportExportUsecase {
+func NewReportExportUsecase(exports domain.ReportExportRepository, riverClient RiverInsertClient) *ReportExportUsecase {
 	return &ReportExportUsecase{exports: exports, river: riverClient}
 }
 

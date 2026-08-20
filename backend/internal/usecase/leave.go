@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"checkdee-backend/internal/domain"
+	"checkdee-backend/internal/jobs"
 )
 
 var ErrLeaveDateOrder = domain.ErrLeaveRequestDateOrder
@@ -12,10 +13,11 @@ var ErrLeaveDateOrder = domain.ErrLeaveRequestDateOrder
 type LeaveUsecase struct {
 	leaves domain.LeaveRequestRepository
 	audit  *AuditLogUsecase
+	river  RiverInsertClient
 }
 
-func NewLeaveUsecase(leaves domain.LeaveRequestRepository, audit *AuditLogUsecase) *LeaveUsecase {
-	return &LeaveUsecase{leaves: leaves, audit: audit}
+func NewLeaveUsecase(leaves domain.LeaveRequestRepository, audit *AuditLogUsecase, riverClient RiverInsertClient) *LeaveUsecase {
+	return &LeaveUsecase{leaves: leaves, audit: audit, river: riverClient}
 }
 
 func (l *LeaveUsecase) Create(ctx context.Context, employeeID string, leaveType, reason *string, startDate, endDate time.Time) (*domain.LeaveRequest, error) {
@@ -47,10 +49,13 @@ func (l *LeaveUsecase) Decide(ctx context.Context, id string, status domain.Leav
 		"status":      string(status),
 		"employee_id": decided.EmployeeID,
 	})
-	// Audit-log failure is intentionally non-fatal to the decision itself —
-	// the decision already committed; losing the audit trail entry is a
+	// Audit-log and notification-enqueue failures are intentionally
+	// non-fatal to the decision itself — the decision already committed;
+	// losing the audit trail entry or the employee's notification is a
 	// lesser failure than silently reverting an approve/reject a supervisor
 	// already acted on. Matches PR 4's own "best-effort" framing for
 	// failure-path logging (see jobs.ReportExportWorker.fail).
+	_, _ = l.river.Insert(ctx, jobs.LeaveDecisionNotifyArgs{LeaveRequestID: id}, nil)
+
 	return decided, nil
 }

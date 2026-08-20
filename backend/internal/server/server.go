@@ -34,6 +34,7 @@ func New(
 	attendanceHandler *handler.AttendanceHandler,
 	reportHandler *handler.ReportHandler,
 	leaveHandler *handler.LeaveHandler,
+	notificationHandler *handler.NotificationHandler,
 	jwtIssuer *usecase.JWTIssuer,
 	kioskDeviceUsecase *usecase.KioskDeviceUsecase,
 	riverClient *river.Client[pgx.Tx],
@@ -53,7 +54,7 @@ func New(
 		AllowCredentials: true,
 	}))
 
-	handler.RegisterRoutes(e, authHandler, scheduleHandler, holidayHandler, kioskHandler, attendanceHandler, reportHandler, leaveHandler, jwtIssuer, kioskDeviceUsecase)
+	handler.RegisterRoutes(e, authHandler, scheduleHandler, holidayHandler, kioskHandler, attendanceHandler, reportHandler, leaveHandler, notificationHandler, jwtIssuer, kioskDeviceUsecase)
 
 	return &Server{echo: e, cfg: cfg, logger: logger, riverClient: riverClient}
 }

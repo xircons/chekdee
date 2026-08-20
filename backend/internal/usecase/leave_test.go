@@ -5,11 +5,23 @@ import (
 	"testing"
 	"time"
 
+	"github.com/riverqueue/river"
+	"github.com/riverqueue/river/rivertype"
 	"github.com/stretchr/testify/require"
 
 	"checkdee-backend/internal/domain"
+	"checkdee-backend/internal/jobs"
 	"checkdee-backend/internal/usecase"
 )
+
+type fakeRiverInsertClient struct {
+	insertedArgs []river.JobArgs
+}
+
+func (f *fakeRiverInsertClient) Insert(_ context.Context, args river.JobArgs, _ *river.InsertOpts) (*rivertype.JobInsertResult, error) {
+	f.insertedArgs = append(f.insertedArgs, args)
+	return &rivertype.JobInsertResult{}, nil
+}
 
 type fakeLeaveRepo struct {
 	created      *domain.LeaveRequest
@@ -55,7 +67,7 @@ func (f *fakeAuditLogRepo) ListForTarget(context.Context, string, string) ([]*do
 func TestLeaveUsecase_Create_RejectsBadDateOrder(t *testing.T) {
 	leaves := &fakeLeaveRepo{}
 	audit := usecase.NewAuditLogUsecase(&fakeAuditLogRepo{})
-	uc := usecase.NewLeaveUsecase(leaves, audit)
+	uc := usecase.NewLeaveUsecase(leaves, audit, &fakeRiverInsertClient{})
 
 	start := time.Date(2026, 6, 10, 0, 0, 0, 0, time.UTC)
 	end := time.Date(2026, 6, 5, 0, 0, 0, 0, time.UTC) // before start
@@ -68,7 +80,7 @@ func TestLeaveUsecase_Create_RejectsBadDateOrder(t *testing.T) {
 func TestLeaveUsecase_Create_Success(t *testing.T) {
 	leaves := &fakeLeaveRepo{}
 	audit := usecase.NewAuditLogUsecase(&fakeAuditLogRepo{})
-	uc := usecase.NewLeaveUsecase(leaves, audit)
+	uc := usecase.NewLeaveUsecase(leaves, audit, &fakeRiverInsertClient{})
 
 	start := time.Date(2026, 6, 5, 0, 0, 0, 0, time.UTC)
 	end := time.Date(2026, 6, 10, 0, 0, 0, 0, time.UTC)
@@ -82,7 +94,8 @@ func TestLeaveUsecase_Decide_LogsAuditEntry(t *testing.T) {
 	leaves := &fakeLeaveRepo{}
 	auditRepo := &fakeAuditLogRepo{}
 	audit := usecase.NewAuditLogUsecase(auditRepo)
-	uc := usecase.NewLeaveUsecase(leaves, audit)
+	riverClient := &fakeRiverInsertClient{}
+	uc := usecase.NewLeaveUsecase(leaves, audit, riverClient)
 
 	decided, err := uc.Decide(context.Background(), "leave-1", domain.LeaveStatusApproved, "admin-1", "127.0.0.1")
 	require.NoError(t, err)
@@ -94,10 +107,23 @@ func TestLeaveUsecase_Decide_LogsAuditEntry(t *testing.T) {
 	require.Equal(t, "leave.decide", auditRepo.action)
 }
 
+func TestLeaveUsecase_Decide_EnqueuesNotificationJob(t *testing.T) {
+	leaves := &fakeLeaveRepo{}
+	audit := usecase.NewAuditLogUsecase(&fakeAuditLogRepo{})
+	riverClient := &fakeRiverInsertClient{}
+	uc := usecase.NewLeaveUsecase(leaves, audit, riverClient)
+
+	_, err := uc.Decide(context.Background(), "leave-1", domain.LeaveStatusApproved, "admin-1", "127.0.0.1")
+	require.NoError(t, err)
+
+	require.Len(t, riverClient.insertedArgs, 1, "a decision must enqueue a leave-decision notify job")
+	require.Equal(t, jobs.LeaveDecisionNotifyArgs{LeaveRequestID: "leave-1"}, riverClient.insertedArgs[0])
+}
+
 func TestLeaveUsecase_Decide_PropagatesRepoError(t *testing.T) {
 	leaves := &fakeLeaveRepo{decideErr: domain.ErrLeaveRequestAlreadyDecided}
 	audit := usecase.NewAuditLogUsecase(&fakeAuditLogRepo{})
-	uc := usecase.NewLeaveUsecase(leaves, audit)
+	uc := usecase.NewLeaveUsecase(leaves, audit, &fakeRiverInsertClient{})
 
 	_, err := uc.Decide(context.Background(), "leave-1", domain.LeaveStatusRejected, "admin-1", "127.0.0.1")
 	require.ErrorIs(t, err, domain.ErrLeaveRequestAlreadyDecided)

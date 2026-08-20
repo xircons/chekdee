@@ -211,7 +211,8 @@ func TestAttendanceRepository_AutoCloseOpenRecords(t *testing.T) {
 	cutoff := mustTime(t, "2006-01-02", "2026-05-11")
 	closed, err := attendance.AutoCloseOpenRecords(ctx, cutoff)
 	require.NoError(t, err)
-	require.GreaterOrEqual(t, closed, 1)
+	require.GreaterOrEqual(t, len(closed), 1)
+	require.Equal(t, employee.ID, closed[0].EmployeeID, "the closed rows must be returned, not just a count")
 
 	rec, err := attendance.GetForEmployeeDate(ctx, employee.ID, workDate)
 	require.NoError(t, err)
@@ -222,5 +223,5 @@ func TestAttendanceRepository_AutoCloseOpenRecords(t *testing.T) {
 	// error or double-counted).
 	closedAgain, err := attendance.AutoCloseOpenRecords(ctx, cutoff)
 	require.NoError(t, err)
-	require.Equal(t, 0, closedAgain)
+	require.Empty(t, closedAgain)
 }

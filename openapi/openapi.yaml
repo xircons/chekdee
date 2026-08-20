@@ -758,6 +758,51 @@ paths:
         "409":
           description: Leave request already decided
 
+  /notifications/me:
+    get:
+      operationId: getMyNotifications
+      summary: >
+        The authenticated user's own notifications, most recent first.
+        In-app feed only — there is no email/SMS/LINE-push channel yet (the
+        original spec's "leave-link expiry/escalation" scope assumed the
+        email-approval flow PR 8 decided against).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: unread
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: ["true", "false"]
+      responses:
+        "200":
+          description: Notifications
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Notification"
+        "401":
+          description: Missing or invalid access token
+
+  /notifications/{id}/read:
+    post:
+      operationId: markNotificationRead
+      summary: Mark one of the authenticated user's own notifications read
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/NotificationId"
+      responses:
+        "204":
+          description: Marked read
+        "401":
+          description: Missing or invalid access token
+        "404":
+          description: Notification not found (or belongs to another user)
+
 components:
   parameters:
     EmployeeId:
@@ -793,6 +838,12 @@ components:
       schema:
         type: string
     LeaveRequestId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    NotificationId:
       name: id
       in: path
       required: true
@@ -1189,6 +1240,28 @@ components:
           type: string
           nullable: true
         decided_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    Notification:
+      type: object
+      required: [id, type, title, created_at]
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          example: leave.decided
+        title:
+          type: string
+        body:
+          type: string
+          nullable: true
+        read_at:
           type: string
           format: date-time
           nullable: true

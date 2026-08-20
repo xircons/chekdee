@@ -56,9 +56,10 @@ type AttendanceRepository interface {
 	// AutoCloseOpenRecords closes every record with a check-in but no
 	// check-out whose work_date is before cutoff, setting check_out_at to
 	// the end of that work_date (Asia/Bangkok) and auto_closed = true.
-	// Returns the number of rows closed. Precise worked-hours capping to the
-	// scheduled window is a Reports (PR 7) concern, not this job's.
-	AutoCloseOpenRecords(ctx context.Context, cutoff time.Time) (int, error)
+	// Returns the closed records (PR 9's auto-close worker notifies each
+	// affected employee). Precise worked-hours capping to the scheduled
+	// window is a Reports (PR 7) concern, not this job's.
+	AutoCloseOpenRecords(ctx context.Context, cutoff time.Time) ([]*AttendanceRecord, error)
 	// ListForMonth returns every attendance record (all employees) with
 	// work_date in [from, to) — the report queries' data source.
 	ListForMonth(ctx context.Context, from, to time.Time) ([]*AttendanceRecord, error)
