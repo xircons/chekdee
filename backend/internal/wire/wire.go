@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/wire"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/riverqueue/river"
 
@@ -49,11 +50,31 @@ func provideQRSigner(cfg *config.Config) *qrsign.Signer {
 	return qrsign.NewSigner(cfg.QRSigningSecret)
 }
 
+// provideReportExportRiverClient adapts the concrete river client to the
+// small interface usecase.ReportExportUsecase depends on, so that package
+// doesn't need to know about river's generic Client[TTx] type.
+func provideReportExportRiverClient(riverClient *river.Client[pgx.Tx]) usecase.ReportExportRiverClient {
+	return riverClient
+}
+
+// provideReportExportWorker wraps the report usecase's query methods as
+// closures rather than the worker depending on *usecase.ReportUsecase
+// directly — see ReportExportWorker's doc comment for why (avoids an
+// import cycle between usecase and jobs).
+func provideReportExportWorker(exports domain.ReportExportRepository, reports *usecase.ReportUsecase) *jobs.ReportExportWorker {
+	return jobs.NewReportExportWorker(exports, reports.MonthlyReport, reports.DailyLog)
+}
+
 // provideRiverWorkers registers every worker this process runs.
-func provideRiverWorkers(holidaySyncWorker *jobs.HolidaySyncWorker, attendanceAutoCloseWorker *jobs.AttendanceAutoCloseWorker) *river.Workers {
+func provideRiverWorkers(
+	holidaySyncWorker *jobs.HolidaySyncWorker,
+	attendanceAutoCloseWorker *jobs.AttendanceAutoCloseWorker,
+	reportExportWorker *jobs.ReportExportWorker,
+) *river.Workers {
 	workers := jobs.Workers()
 	river.AddWorker(workers, holidaySyncWorker)
 	river.AddWorker(workers, attendanceAutoCloseWorker)
+	river.AddWorker(workers, reportExportWorker)
 	return workers
 }
 
@@ -61,7 +82,9 @@ func provideRiverWorkers(holidaySyncWorker *jobs.HolidaySyncWorker, attendanceAu
 // UpsertSynced's "manual edits win" guard makes re-runs safe, RunOnStart so
 // a fresh deploy doesn't wait a day) and attendance auto-close (hourly —
 // cheap no-op once a day's stragglers are closed, since the underlying
-// UPDATE only ever touches rows still missing a checkout).
+// UPDATE only ever touches rows still missing a checkout). Report export has
+// no periodic schedule — it's only ever triggered on demand via
+// ReportExportUsecase.RequestExport.
 func providePeriodicJobs() []*river.PeriodicJob {
 	return []*river.PeriodicJob{
 		river.NewPeriodicJob(
@@ -89,6 +112,8 @@ func InitializeServer(logger *slog.Logger) (*server.Server, error) {
 		provideJWTIssuer,
 		provideNagerClient,
 		provideQRSigner,
+		provideReportExportRiverClient,
+		provideReportExportWorker,
 		provideRiverWorkers,
 		providePeriodicJobs,
 		jobs.NewClient,
@@ -99,6 +124,8 @@ func InitializeServer(logger *slog.Logger) (*server.Server, error) {
 		repository.NewKioskDeviceRepository,
 		repository.NewAttendanceRepository,
 		repository.NewQRNonceRepository,
+		repository.NewReportRepository,
+		repository.NewReportExportRepository,
 		wire.Bind(new(domain.UserRepository), new(*repository.UserRepository)),
 		wire.Bind(new(domain.RefreshTokenRepository), new(*repository.RefreshTokenRepository)),
 		wire.Bind(new(domain.WorkScheduleRepository), new(*repository.WorkScheduleRepository)),
@@ -106,6 +133,8 @@ func InitializeServer(logger *slog.Logger) (*server.Server, error) {
 		wire.Bind(new(domain.KioskDeviceRepository), new(*repository.KioskDeviceRepository)),
 		wire.Bind(new(domain.AttendanceRepository), new(*repository.AttendanceRepository)),
 		wire.Bind(new(domain.QRNonceRepository), new(*repository.QRNonceRepository)),
+		wire.Bind(new(domain.ReportRepository), new(*repository.ReportRepository)),
+		wire.Bind(new(domain.ReportExportRepository), new(*repository.ReportExportRepository)),
 		wire.Bind(new(usecase.LineClient), new(*lineclient.Client)),
 		wire.Bind(new(jobs.NagerClient), new(*nagerclient.Client)),
 		usecase.NewAuthUsecase,
@@ -113,6 +142,8 @@ func InitializeServer(logger *slog.Logger) (*server.Server, error) {
 		usecase.NewHolidayUsecase,
 		usecase.NewKioskDeviceUsecase,
 		usecase.NewAttendanceUsecase,
+		usecase.NewReportUsecase,
+		usecase.NewReportExportUsecase,
 		jobs.NewHolidaySyncWorker,
 		jobs.NewAttendanceAutoCloseWorker,
 		handler.NewAuthHandler,
@@ -120,6 +151,7 @@ func InitializeServer(logger *slog.Logger) (*server.Server, error) {
 		handler.NewHolidayHandler,
 		handler.NewKioskHandler,
 		handler.NewAttendanceHandler,
+		handler.NewReportHandler,
 		server.New,
 	)
 	return nil, nil

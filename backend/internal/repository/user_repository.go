@@ -112,6 +112,29 @@ func (r *UserRepository) CompleteRegistration(ctx context.Context, id, firstName
 	return scanUser(row)
 }
 
+func (r *UserRepository) ListActiveEmployees(ctx context.Context) ([]*domain.User, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT `+userColumns+`
+		FROM users
+		WHERE role = 'employee' AND offboarded_at IS NULL
+		ORDER BY first_name, last_name`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []*domain.User
+	for rows.Next() {
+		u, err := scanUser(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, u)
+	}
+	return out, rows.Err()
+}
+
 func (r *UserRepository) CreateSystemOwner(ctx context.Context, username, passwordHash string) (*domain.User, error) {
 	row := r.pool.QueryRow(ctx, `
 		INSERT INTO users (role, username, password_hash)
