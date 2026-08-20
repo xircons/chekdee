@@ -12,6 +12,10 @@ import (
 // silently shipping a forgeable token.
 const minJWTSecretBytes = 32
 
+// minQRSigningSecretBytes: same reasoning as the JWT secret — this signs
+// the QR payload presence-proof, so a weak key defeats it offline.
+const minQRSigningSecretBytes = 32
+
 type Config struct {
 	Port        string
 	Env         string
@@ -23,6 +27,10 @@ type Config struct {
 	// none of those should run as the restricted app role.
 	AppDatabaseURL string
 	JWTSecret      string
+	// QRSigningSecret signs the kiosk's rotating QR payload — a distinct
+	// secret from JWTSecret and from a kiosk device's own long-lived link
+	// token (kiosk_devices), per the QR/kiosk model note in PLAN.md.
+	QRSigningSecret string
 
 	LineChannelID     string
 	LineChannelSecret string
@@ -39,6 +47,7 @@ func Load() (*Config, error) {
 		DatabaseURL:       os.Getenv("DATABASE_URL"),
 		AppDatabaseURL:    os.Getenv("APP_DATABASE_URL"),
 		JWTSecret:         os.Getenv("JWT_SECRET"),
+		QRSigningSecret:   os.Getenv("QR_SIGNING_SECRET"),
 		LineChannelID:     os.Getenv("LINE_CHANNEL_ID"),
 		LineChannelSecret: os.Getenv("LINE_CHANNEL_SECRET"),
 		AllowedOrigins:    splitAndTrim(getEnv("CORS_ALLOWED_ORIGINS", "http://localhost:3000")),
@@ -48,6 +57,7 @@ func Load() (*Config, error) {
 		"DATABASE_URL":        cfg.DatabaseURL,
 		"APP_DATABASE_URL":    cfg.AppDatabaseURL,
 		"JWT_SECRET":          cfg.JWTSecret,
+		"QR_SIGNING_SECRET":   cfg.QRSigningSecret,
 		"LINE_CHANNEL_ID":     cfg.LineChannelID,
 		"LINE_CHANNEL_SECRET": cfg.LineChannelSecret,
 	}
@@ -59,6 +69,9 @@ func Load() (*Config, error) {
 
 	if len(cfg.JWTSecret) < minJWTSecretBytes {
 		return nil, fmt.Errorf("JWT_SECRET must be at least %d bytes, got %d", minJWTSecretBytes, len(cfg.JWTSecret))
+	}
+	if len(cfg.QRSigningSecret) < minQRSigningSecretBytes {
+		return nil, fmt.Errorf("QR_SIGNING_SECRET must be at least %d bytes, got %d", minQRSigningSecretBytes, len(cfg.QRSigningSecret))
 	}
 	if len(cfg.AllowedOrigins) == 0 {
 		return nil, fmt.Errorf("CORS_ALLOWED_ORIGINS must list at least one origin")
