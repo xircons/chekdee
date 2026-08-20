@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { CalendarRange, ChevronDown, ChevronUp, FileText, Image as ImageIcon, Mail, Upload, X } from "lucide-react";
@@ -21,9 +21,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { createLeaveRequest, listMyLeaveRequests } from "@/lib/api-leave";
 import { buildLeaveRequestEmail } from "@/lib/leave-email";
 import {
-  getLeaveRequestsForEmployee,
   getYearOfStudy,
   mockEmployees,
   type LeaveStatus,
@@ -112,7 +112,10 @@ function AttachmentRow({
 
 export default function LeavePage() {
   const me = useMe();
-  const [requests, setRequests] = useState<MockLeaveRequest[]>(() => getLeaveRequestsForEmployee(me.id));
+  const [requests, setRequests] = useState<MockLeaveRequest[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [requestListExpanded, setRequestListExpanded] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<MockLeaveRequest | null>(null);
@@ -120,6 +123,13 @@ export default function LeavePage() {
   const [attachments, setAttachments] = useState<LeaveAttachment[]>([]);
   const [attachmentsByRequestId, setAttachmentsByRequestId] = useState<Record<string, LeaveAttachment[]>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    listMyLeaveRequests()
+      .then((rows) => setRequests(rows))
+      .catch((err: Error) => setLoadError(err.message))
+      .finally(() => setLoading(false));
+  }, []);
 
   const handleAttachmentSelect = (fileList: FileList | null) => {
     if (!fileList || fileList.length === 0) return;
@@ -174,26 +184,28 @@ export default function LeavePage() {
     attachmentCount: attachments.length,
   });
 
-  const onSubmit = (values: LeaveRequestForm) => {
-    const newRequest: MockLeaveRequest = {
-      id: `leave-local-${crypto.randomUUID()}`,
-      employeeId: me.id,
-      leaveType: values.leave_type,
-      startDate: values.start_date,
-      endDate: values.end_date,
-      reason: values.reason,
-      status: "pending",
-      submittedAt: new Date().toISOString(),
-      decidedBy: null,
-      decidedAt: null,
-    };
-    setRequests((prev) => [newRequest, ...prev]);
-    if (attachments.length > 0) {
-      setAttachmentsByRequestId((prev) => ({ ...prev, [newRequest.id]: attachments }));
+  const onSubmit = async (values: LeaveRequestForm) => {
+    setSubmitError(null);
+    try {
+      const created = await createLeaveRequest({
+        leave_type: values.leave_type,
+        start_date: values.start_date,
+        end_date: values.end_date,
+        reason: values.reason,
+      });
+      setRequests((prev) => [created, ...prev]);
+      if (attachments.length > 0) {
+        // Attachments have no backend endpoint yet (no file-upload API
+        // exists) — kept as session-only local state, same as before
+        // wiring, just now keyed by the real submitted request's id.
+        setAttachmentsByRequestId((prev) => ({ ...prev, [created.id]: attachments }));
+      }
+      reset();
+      setAttachments([]);
+      setShowPreview(false);
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : "ส่งคำขอไม่สำเร็จ");
     }
-    reset();
-    setAttachments([]);
-    setShowPreview(false);
   };
 
   const visibleRequests = requestListExpanded
@@ -353,6 +365,12 @@ export default function LeavePage() {
                 )}
               </div>
 
+              {submitError && (
+                <p className="rounded-xl bg-danger px-3 py-2 text-xs text-danger-foreground">
+                  {submitError}
+                </p>
+              )}
+
               <Button
                 type="submit"
                 disabled={isSubmitting}
@@ -369,10 +387,14 @@ export default function LeavePage() {
             <CardTitle>คำขอของคุณ</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col">
-            {requests.length === 0 && (
+            {loading && <p className="text-sm text-muted-foreground">กำลังโหลด…</p>}
+            {!loading && loadError && (
+              <p className="text-sm text-danger-foreground">โหลดข้อมูลไม่สำเร็จ: {loadError}</p>
+            )}
+            {!loading && !loadError && requests.length === 0 && (
               <p className="text-sm text-muted-foreground">ยังไม่มีคำขอลา</p>
             )}
-            {visibleRequests.map((request, index) => {
+            {!loading && !loadError && visibleRequests.map((request, index) => {
               const { subject: requestSubject } = buildLeaveRequestEmail({
                 employeeName,
                 yearOfStudy,

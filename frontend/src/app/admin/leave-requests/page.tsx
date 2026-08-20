@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CalendarRange, Check, Eye, X } from "lucide-react";
 
 import { AdminDetailDialog, AdminDetailInfoBlock } from "@/components/admin-detail-dialog";
@@ -15,9 +15,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { approveLeaveRequest, listAllLeaveRequests, rejectLeaveRequest } from "@/lib/api-leave";
 import { buildLeaveRequestEmail } from "@/lib/leave-email";
-import { mockEmployees, mockLeaveRequests, type LeaveStatus, type MockLeaveRequest } from "@/lib/mock-data";
-import { useMe } from "@/lib/session";
+import { mockEmployees, type LeaveStatus, type MockLeaveRequest } from "@/lib/mock-data";
 import { cn, formatThaiDate, formatThaiDateRange } from "@/lib/utils";
 
 const statusBadgeVariant: Record<LeaveStatus, "warning" | "success" | "danger"> = {
@@ -134,20 +134,32 @@ function LeaveRequestTable({
 }
 
 export default function LeaveRequestsPage() {
-  const me = useMe();
-  const [requests, setRequests] = useState<MockLeaveRequest[]>(mockLeaveRequests);
+  const [requests, setRequests] = useState<MockLeaveRequest[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [selectedRequest, setSelectedRequest] = useState<MockLeaveRequest | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
 
-  const decide = (id: string, status: "approved" | "rejected") => {
-    setRequests((prev) =>
-      prev.map((r) =>
-        r.id === id
-          ? { ...r, status, decidedBy: me.id, decidedAt: new Date().toISOString() }
-          : r
-      )
-    );
-    setDetailOpen(false);
+  useEffect(() => {
+    listAllLeaveRequests()
+      .then((rows) => setRequests(rows))
+      .catch((err: Error) => setLoadError(err.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const decide = async (id: string, status: "approved" | "rejected") => {
+    setActionError(null);
+    try {
+      const decided = status === "approved" ? await approveLeaveRequest(id) : await rejectLeaveRequest(id);
+      setRequests((prev) => prev.map((r) => (r.id === id ? decided : r)));
+      setDetailOpen(false);
+    } catch (err) {
+      // A 409 here means someone else already decided it between page load
+      // and this click — the decision is final either way, so surface the
+      // message rather than silently retrying.
+      setActionError(err instanceof Error ? err.message : "ดำเนินการไม่สำเร็จ");
+    }
   };
 
   const openDetail = (request: MockLeaveRequest) => {
@@ -196,7 +208,18 @@ export default function LeaveRequestsPage() {
           </p>
         </CardHeader>
         <CardContent>
-          {pendingRequests.length > 0 && (
+          {actionError && (
+            <p className="mb-4 rounded-md border border-danger bg-danger px-3 py-2 text-sm text-danger-foreground">
+              {actionError}
+            </p>
+          )}
+
+          {loading && <p className="text-sm text-muted-foreground">กำลังโหลด…</p>}
+          {!loading && loadError && (
+            <p className="text-sm text-danger-foreground">โหลดข้อมูลไม่สำเร็จ: {loadError}</p>
+          )}
+
+          {!loading && !loadError && pendingRequests.length > 0 && (
             <>
               <p className="text-xs font-semibold text-muted-foreground">รอดำเนินการ</p>
               <div className="mt-2">
@@ -210,7 +233,7 @@ export default function LeaveRequestsPage() {
             </>
           )}
 
-          {handledRequests.length > 0 && (
+          {!loading && !loadError && handledRequests.length > 0 && (
             <>
               <p
                 className={cn(
