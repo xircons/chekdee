@@ -870,6 +870,105 @@ paths:
         "409":
           description: Leave request already decided
 
+  /leave-requests/{id}/attachments:
+    post:
+      operationId: uploadLeaveAttachment
+      summary: >
+        Attach a supporting PNG/JPEG/PDF document to a leave request.
+        Only the leave request's own employee may upload -- not even an
+        admin can attach on someone else's behalf. multipart/form-data
+        with a single `file` field, capped at 10 MiB.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/LeaveRequestId"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "201":
+          description: Attachment stored
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeaveAttachment"
+        "400":
+          description: Missing file, or the file could not be read
+        "401":
+          description: Missing or invalid access token
+        "403":
+          description: Caller does not own this leave request
+        "404":
+          description: Leave request not found
+        "413":
+          description: File exceeds the 10 MiB limit
+        "415":
+          description: Content type is not PNG, JPEG, or PDF
+    get:
+      operationId: listLeaveAttachments
+      summary: >
+        Metadata for every attachment on a leave request (no file bytes --
+        see /leave-requests/{id}/attachments/{attachmentId} for the
+        actual file). Caller must be the leave request's own employee, or
+        admin/supervisor/system_owner.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/LeaveRequestId"
+      responses:
+        "200":
+          description: Attachment metadata
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LeaveAttachment"
+        "401":
+          description: Missing or invalid access token
+        "403":
+          description: Caller is neither the owning employee nor admin/supervisor/system_owner
+        "404":
+          description: Leave request not found
+
+  /leave-requests/{id}/attachments/{attachmentId}:
+    get:
+      operationId: downloadLeaveAttachment
+      summary: >
+        Stream one attachment's raw bytes, Content-Disposition: inline
+        (meant to be previewed, not force-downloaded). Same access rule as
+        listLeaveAttachments.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/LeaveRequestId"
+        - name: attachmentId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The attachment file
+          content:
+            image/png: {}
+            image/jpeg: {}
+            application/pdf: {}
+        "401":
+          description: Missing or invalid access token
+        "403":
+          description: Caller is neither the owning employee nor admin/supervisor/system_owner
+        "404":
+          description: Leave request or attachment not found
+
   /notifications/me:
     get:
       operationId: getMyNotifications
@@ -1595,6 +1694,24 @@ components:
           type: string
           format: date-time
           nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    LeaveAttachment:
+      type: object
+      required: [id, filename, content_type, size_bytes, created_at]
+      properties:
+        id:
+          type: string
+        filename:
+          type: string
+        content_type:
+          type: string
+          enum: [image/png, image/jpeg, application/pdf]
+        size_bytes:
+          type: integer
+          format: int64
         created_at:
           type: string
           format: date-time

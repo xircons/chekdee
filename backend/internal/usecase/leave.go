@@ -11,13 +11,14 @@ import (
 var ErrLeaveDateOrder = domain.ErrLeaveRequestDateOrder
 
 type LeaveUsecase struct {
-	leaves domain.LeaveRequestRepository
-	audit  *AuditLogUsecase
-	river  RiverInsertClient
+	leaves      domain.LeaveRequestRepository
+	attachments domain.LeaveAttachmentRepository
+	audit       *AuditLogUsecase
+	river       RiverInsertClient
 }
 
-func NewLeaveUsecase(leaves domain.LeaveRequestRepository, audit *AuditLogUsecase, riverClient RiverInsertClient) *LeaveUsecase {
-	return &LeaveUsecase{leaves: leaves, audit: audit, river: riverClient}
+func NewLeaveUsecase(leaves domain.LeaveRequestRepository, attachments domain.LeaveAttachmentRepository, audit *AuditLogUsecase, riverClient RiverInsertClient) *LeaveUsecase {
+	return &LeaveUsecase{leaves: leaves, attachments: attachments, audit: audit, river: riverClient}
 }
 
 func (l *LeaveUsecase) Create(ctx context.Context, employeeID string, leaveType, reason *string, startDate, endDate time.Time) (*domain.LeaveRequest, error) {
@@ -58,4 +59,81 @@ func (l *LeaveUsecase) Decide(ctx context.Context, id string, status domain.Leav
 	_, _ = l.river.Insert(ctx, jobs.LeaveDecisionNotifyArgs{LeaveRequestID: id}, nil)
 
 	return decided, nil
+}
+
+// isLeaveAttachmentAdmin mirrors handler.adminRoles -- the same trio that
+// gates the admin leave-requests view is who else (besides the request's
+// own employee) may read a leave request's attachments.
+func isLeaveAttachmentAdmin(role domain.Role) bool {
+	switch role {
+	case domain.RoleAdmin, domain.RoleSupervisor, domain.RoleSystemOwner:
+		return true
+	}
+	return false
+}
+
+// checkAttachmentAccess is shared by ListAttachments/GetAttachment: the
+// caller must either be one of the admin roles, or the employee the leave
+// request actually belongs to.
+func (l *LeaveUsecase) checkAttachmentAccess(ctx context.Context, leaveRequestID, callerID string, callerRole domain.Role) error {
+	if isLeaveAttachmentAdmin(callerRole) {
+		return nil
+	}
+	leave, err := l.leaves.Get(ctx, leaveRequestID)
+	if err != nil {
+		return err
+	}
+	if leave.EmployeeID != callerID {
+		return domain.ErrLeaveAttachmentForbidden
+	}
+	return nil
+}
+
+// UploadAttachment rejects an oversized or wrong-content-type file before
+// ever touching the repository, and only lets the leave request's own
+// employee attach to it — not even an admin can upload on someone else's
+// behalf, since this is supporting evidence for that person's own request.
+func (l *LeaveUsecase) UploadAttachment(ctx context.Context, leaveRequestID, uploaderID, filename, contentType string, sizeBytes int64, file []byte) (*domain.LeaveAttachment, error) {
+	if sizeBytes > domain.MaxLeaveAttachmentBytes {
+		return nil, domain.ErrLeaveAttachmentTooLarge
+	}
+	if !domain.AllowedLeaveAttachmentContentTypes[contentType] {
+		return nil, domain.ErrLeaveAttachmentUnsupportedType
+	}
+
+	leave, err := l.leaves.Get(ctx, leaveRequestID)
+	if err != nil {
+		return nil, err
+	}
+	if leave.EmployeeID != uploaderID {
+		return nil, domain.ErrLeaveAttachmentForbidden
+	}
+
+	return l.attachments.Create(ctx, leaveRequestID, uploaderID, filename, contentType, sizeBytes, file)
+}
+
+func (l *LeaveUsecase) ListAttachments(ctx context.Context, leaveRequestID, callerID string, callerRole domain.Role) ([]*domain.LeaveAttachment, error) {
+	if err := l.checkAttachmentAccess(ctx, leaveRequestID, callerID, callerRole); err != nil {
+		return nil, err
+	}
+	return l.attachments.ListForLeaveRequest(ctx, leaveRequestID)
+}
+
+// GetAttachment also confirms attachmentID actually belongs to
+// leaveRequestID -- both ids come from the URL path (see leave_handler.go),
+// so without this check a caller who can read one of their own leave
+// request's attachment lists could fetch an attachment id from a different
+// leave request they can't otherwise see.
+func (l *LeaveUsecase) GetAttachment(ctx context.Context, leaveRequestID, attachmentID, callerID string, callerRole domain.Role) (*domain.LeaveAttachment, error) {
+	if err := l.checkAttachmentAccess(ctx, leaveRequestID, callerID, callerRole); err != nil {
+		return nil, err
+	}
+	attachment, err := l.attachments.Get(ctx, attachmentID)
+	if err != nil {
+		return nil, err
+	}
+	if attachment.LeaveRequestID != leaveRequestID {
+		return nil, domain.ErrLeaveAttachmentNotFound
+	}
+	return attachment, nil
 }

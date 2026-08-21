@@ -125,6 +125,27 @@ func (e HolidaySource) Valid() bool {
 	}
 }
 
+// Defines values for LeaveAttachmentContentType.
+const (
+	LeaveAttachmentContentTypeApplicationPdf LeaveAttachmentContentType = "application/pdf"
+	LeaveAttachmentContentTypeImageJpeg      LeaveAttachmentContentType = "image/jpeg"
+	LeaveAttachmentContentTypeImagePng       LeaveAttachmentContentType = "image/png"
+)
+
+// Valid indicates whether the value is a known member of the LeaveAttachmentContentType enum.
+func (e LeaveAttachmentContentType) Valid() bool {
+	switch e {
+	case LeaveAttachmentContentTypeApplicationPdf:
+		return true
+	case LeaveAttachmentContentTypeImageJpeg:
+		return true
+	case LeaveAttachmentContentTypeImagePng:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for LeaveRequestStatus.
 const (
 	LeaveRequestStatusApproved LeaveRequestStatus = "approved"
@@ -441,6 +462,17 @@ type KioskDeviceWithToken struct {
 }
 
 // LeaveRequest defines model for LeaveRequest.
+type LeaveAttachment struct {
+	ContentType LeaveAttachmentContentType `json:"content_type"`
+	CreatedAt   time.Time                  `json:"created_at"`
+	Filename    string                     `json:"filename"`
+	Id          string                     `json:"id"`
+	SizeBytes   int64                      `json:"size_bytes"`
+}
+
+// LeaveAttachmentContentType defines model for LeaveAttachment.ContentType.
+type LeaveAttachmentContentType string
+
 type LeaveRequest struct {
 	CreatedAt  time.Time          `json:"created_at"`
 	DecidedAt  *time.Time         `json:"decided_at,omitempty"`
