@@ -1,19 +1,15 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { GraduationCap, IdCard, LogOut, Phone } from "lucide-react";
+import { IdCard, LogOut, Phone } from "lucide-react";
 
 import { EmployeeListRow } from "@/components/employee-list-row";
 import { EmployeePageHeader } from "@/components/employee-page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { mockEmployees, ROLE_LABEL_TH } from "@/lib/mock-data";
+import { ROLE_LABEL_TH } from "@/lib/mock-data";
 import { useMe, logout } from "@/lib/session";
-
-function studentGenLabel(gen: string): string {
-  return `Gen (${gen})`;
-}
 
 function initials(first: string | null, last: string | null, fallback: string | null): string {
   if (first || last) {
@@ -26,11 +22,8 @@ export default function ProfilePage() {
   const me = useMe();
   const router = useRouter();
 
-  // Enriches the real /auth/me fields with mock team/student-gen data
-  // where the id happens to match a fixture — /auth/me doesn't return
-  // those yet, so there's nothing to show for a non-mock session.
-  const mockProfile = mockEmployees.find((e) => e.id === me.id);
   const fullName = [me.first_name, me.last_name].filter(Boolean).join(" ") || me.display_name || "—";
+  const hasDetails = Boolean(me.student_id || me.phone_number);
 
   return (
     <div className="flex w-full flex-1 flex-col">
@@ -43,12 +36,7 @@ export default function ProfilePage() {
               {initials(me.first_name, me.last_name, me.display_name)}
             </div>
             <div>
-              <p className="text-lg font-semibold text-foreground">
-                {fullName}
-                {mockProfile?.nickname && (
-                  <span className="font-normal text-muted-foreground"> ({mockProfile.nickname})</span>
-                )}
-              </p>
+              <p className="text-lg font-semibold text-foreground">{fullName}</p>
               <Badge variant="secondary" className="mt-1">
                 {ROLE_LABEL_TH[me.role]}
               </Badge>
@@ -56,24 +44,17 @@ export default function ProfilePage() {
           </CardContent>
         </Card>
 
-        {mockProfile && (
+        {hasDetails && (
           <Card className="rounded-2xl border border-slate-200 ring-0">
             <CardHeader>
               <CardTitle>รายละเอียด</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col">
-              {mockProfile.studentId && (
-                <EmployeeListRow icon={IdCard} label="รหัสนักศึกษา" value={mockProfile.studentId} />
+              {me.student_id && (
+                <EmployeeListRow icon={IdCard} label="รหัสนักศึกษา" value={me.student_id} />
               )}
-              {mockProfile.phoneNumber && (
-                <EmployeeListRow icon={Phone} label="เบอร์โทรศัพท์" value={mockProfile.phoneNumber} />
-              )}
-              {mockProfile.studentGen && (
-                <EmployeeListRow
-                  icon={GraduationCap}
-                  label="รุ่นนักศึกษา"
-                  value={studentGenLabel(mockProfile.studentGen)}
-                />
+              {me.phone_number && (
+                <EmployeeListRow icon={Phone} label="เบอร์โทรศัพท์" value={me.phone_number} />
               )}
             </CardContent>
           </Card>
