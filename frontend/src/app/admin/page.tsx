@@ -302,9 +302,16 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     Promise.all([
-      // 200 is the backend's max page size (see EmployeeUsecase.List) --
-      // fine for this dashboard's summary stats at the org's current size;
-      // a real "more than 200 employees" org would need this to paginate.
+      // Not role-filtered server-side: this list is also used below to
+      // resolve a pending leave request's employee name (line ~435), and
+      // supervisors/admins can legitimately submit leave requests too --
+      // narrowing the fetch to role=employee would silently break that
+      // lookup for their own requests (falls back to a raw UUID). The
+      // headcount stat filters to role=employee client-side instead (see
+      // activeEmployeeCount below). 200 is the backend's max page size (see
+      // EmployeeUsecase.List) -- fine for this dashboard's summary stats at
+      // the org's current size; a real "more than 200 employees" org would
+      // need this to paginate.
       listEmployees({ status: "active", limit: 200 }),
       getDailyLog(monthIso),
       listAllLeaveRequests(),
@@ -321,6 +328,14 @@ export default function AdminDashboard() {
   }, [monthIso, todayIso]);
 
   const employeesById = useMemo(() => new Map(employees.map((e) => [e.id, e])), [employees]);
+
+  // Matches GET /kiosk/roster-stats' own headcount (ListActiveEmployees,
+  // role='employee' only) -- admin/supervisor/system_owner accounts don't
+  // clock in and shouldn't count toward an attendance-relevant headcount.
+  // Found via integration testing: kiosk showed 4, this dashboard showed
+  // 10 for the same instant, because this list (unlike kiosk's) isn't
+  // role-filtered -- see the fetch effect above for why it can't be.
+  const activeEmployeeCount = employees.filter((e) => e.role === "employee").length;
 
   const roster: RosterEntry[] = useMemo(
     () =>
@@ -380,7 +395,7 @@ export default function AdminDashboard() {
   };
 
   const quickStats = [
-    { label: "เข้างานวันนี้", value: `${roster.length}/${employees.length}` },
+    { label: "เข้างานวันนี้", value: `${roster.length}/${activeEmployeeCount}` },
     { label: "คำขอลารออนุมัติ", value: String(pendingRequests.length) },
     { label: "ขาดวันนี้", value: String(absentToday.length) },
   ];
