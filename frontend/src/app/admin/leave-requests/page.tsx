@@ -119,33 +119,32 @@ function LeaveRequestTable({
                 </Badge>
               </TableCell>
               <TableCell>
-                {/* Two grid slots instead of one centered flex group: the 1fr
-                    slot for อนุมัติ/ปฏิเสธ keeps the same width whether it's
-                    populated or empty (already-handled rows), and the auto
-                    slot pins the eye icon to the same x on every row — a
-                    centered flex group would shift the eye left/right per row
-                    depending on whether the other buttons render. */}
+                {/* Two grid slots instead of one centered flex group: the
+                    auto slot pins the eye icon to the same x on every row
+                    regardless of the อนุมัติ/ปฏิเสธ buttons' width. */}
                 <div className="grid grid-cols-[1fr_auto] items-center gap-1.5">
                   <div className="flex items-center justify-end gap-1.5">
-                    {showActions && (
-                      <>
-                        <Button
-                          size="sm"
-                          className="cursor-pointer bg-success-foreground text-white hover:bg-success-foreground/90"
-                          onClick={() => onDecide(request.id, "approved")}
-                        >
-                          อนุมัติ
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="cursor-pointer"
-                          onClick={() => onDecide(request.id, "rejected")}
-                        >
-                          ปฏิเสธ
-                        </Button>
-                      </>
-                    )}
+                    {/* Rendered for every row, not just showActions ones —
+                        an already-decided row keeps both buttons visible
+                        but disabled instead of removing them, so the row
+                        still reads as "this is where you'd act" even after
+                        the decision. */}
+                    <Button
+                      size="sm"
+                      disabled={!showActions}
+                      className="bg-success-foreground text-white hover:bg-success-foreground/90"
+                      onClick={() => onDecide(request.id, "approved")}
+                    >
+                      อนุมัติ
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={!showActions}
+                      onClick={() => onDecide(request.id, "rejected")}
+                    >
+                      ปฏิเสธ
+                    </Button>
                   </div>
                   <Button
                     size="icon-sm"
