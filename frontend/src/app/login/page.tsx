@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
@@ -17,6 +18,8 @@ const devRoles: { role: Role; label: string }[] = [
 
 export default function LoginPage() {
   const router = useRouter();
+  const [pendingRole, setPendingRole] = useState<Role | null>(null);
+  const [devError, setDevError] = useState<string | null>(null);
 
   return (
     <main className="flex min-h-full flex-1 items-center justify-center p-6">
@@ -45,24 +48,36 @@ export default function LoginPage() {
             <CardHeader>
               <CardTitle className="text-sm">Dev bypass</CardTitle>
               <p className="text-xs text-muted-foreground">
-                Skips LINE/backend auth — mock session only, not shown in production
-                builds.
+                Skips LINE login only — signs in as a real seeded backend user, not
+                shown in production builds.
               </p>
             </CardHeader>
-            <CardContent className="grid grid-cols-2 gap-2">
-              {devRoles.map(({ role, label }) => (
-                <Button
-                  key={role}
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    startDevSession(role);
-                    router.push("/");
-                  }}
-                >
-                  {label}
-                </Button>
-              ))}
+            <CardContent className="flex flex-col gap-2">
+              <div className="grid grid-cols-2 gap-2">
+                {devRoles.map(({ role, label }) => (
+                  <Button
+                    key={role}
+                    variant="outline"
+                    size="sm"
+                    disabled={pendingRole !== null}
+                    onClick={() => {
+                      setDevError(null);
+                      setPendingRole(role);
+                      startDevSession(role)
+                        .then(() => router.push("/"))
+                        .catch((err: Error) => {
+                          setDevError(err.message);
+                          setPendingRole(null);
+                        });
+                    }}
+                  >
+                    {label}
+                  </Button>
+                ))}
+              </div>
+              {devError && (
+                <p className="text-xs text-danger-foreground">{devError}</p>
+              )}
             </CardContent>
           </Card>
         )}

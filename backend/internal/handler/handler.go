@@ -29,6 +29,7 @@ func RegisterRoutes(
 	employees *EmployeeHandler,
 	jwtIssuer *usecase.JWTIssuer,
 	deviceAuth *usecase.KioskDeviceUsecase,
+	devMode bool,
 ) {
 	e.GET("/healthz", HealthCheck)
 
@@ -45,6 +46,14 @@ func RegisterRoutes(
 	e.POST("/auth/login", auth.PasswordLogin, loginLimiter)
 	e.POST("/auth/refresh", auth.Refresh, lineLimiter)
 	e.POST("/auth/logout", auth.Logout)
+
+	// Dev-only login bypass backing frontend/src/lib/dev-auth.ts's Dev
+	// bypass buttons -- never registered outside development, so it can't
+	// exist as an attack surface in production regardless of the frontend's
+	// own NODE_ENV gating.
+	if devMode {
+		e.POST("/auth/dev-login", auth.DevLogin, loginLimiter)
+	}
 
 	// Attached directly (not via an empty-prefix e.Group) — an empty
 	// group prefix was found to leak RequireAuth onto unrelated/unmatched
