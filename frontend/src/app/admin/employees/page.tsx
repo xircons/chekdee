@@ -79,8 +79,11 @@ const employeeSchema = z.object({
   firstName: z.string().trim().min(1, "กรุณากรอกชื่อ"),
   lastName: z.string().trim().min(1, "กรุณากรอกนามสกุล"),
   role: z.enum(["employee", "supervisor", "admin"] as const),
-  // Optional, matching the backend keeping them optional.
-  studentGen: z.enum(STUDENT_GENERATIONS).optional(),
+  // Optional, matching the backend keeping them optional. The Select is
+  // kept controlled from the first render (never undefined), so an unset
+  // selection is "" rather than undefined — allowed here alongside the
+  // real enum values.
+  studentGen: z.union([z.enum(STUDENT_GENERATIONS), z.literal("")]).optional(),
   studentId: z.string().trim().optional(),
   phoneNumber: z.string().trim().optional(),
 });
@@ -218,10 +221,10 @@ function EmployeeFormFields({
           name="studentGen"
           control={control}
           render={({ field }) => (
-            <Select value={field.value} onValueChange={field.onChange} modal={false}>
+            <Select value={field.value ?? ""} onValueChange={field.onChange} modal={false}>
               <SelectTrigger id="studentGen" className={`w-full ${SELECT_TRIGGER_CLASS}`}>
                 <SelectValue placeholder="เลือกรุ่นนักศึกษา">
-                  {(value: string | null) => value ?? "เลือกรุ่นนักศึกษา"}
+                  {(value: string | null) => value || "เลือกรุ่นนักศึกษา"}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent alignItemWithTrigger={false} sideOffset={4}>
@@ -391,7 +394,7 @@ export default function EmployeesPage() {
         firstName: values.firstName,
         lastName: values.lastName,
         teamId: editingEmployee.teamId,
-        studentGen: values.studentGen ?? null,
+        studentGen: values.studentGen || null,
         studentId: values.studentId || null,
         phoneNumber: values.phoneNumber || null,
       });
@@ -642,7 +645,7 @@ export default function EmployeesPage() {
                   editingEmployee.studentGen as (typeof STUDENT_GENERATIONS)[number]
                 )
                   ? (editingEmployee.studentGen as (typeof STUDENT_GENERATIONS)[number])
-                  : undefined,
+                  : "",
                 studentId: editingEmployee.studentId ?? "",
                 phoneNumber: editingEmployee.phoneNumber ?? "",
               }}
