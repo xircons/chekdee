@@ -463,6 +463,31 @@ paths:
         "401":
           description: Missing, invalid, or revoked device token
 
+  /kiosk/roster-stats:
+    get:
+      operationId: getKioskRosterStats
+      summary: >
+        Today's org-wide attendance counts, aggregate only -- no employee
+        names, ids, or per-person status. Device-token authenticated (query
+        param), same as /kiosk/qr-token -- deliberately narrower than the
+        admin-only GET /reports/daily-log, since this backs the public
+        lobby display.
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Today's aggregate roster counts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KioskRosterStats"
+        "401":
+          description: Missing, invalid, or revoked device token
+
   /attendance/check-in:
     post:
       operationId: checkIn
@@ -1311,6 +1336,21 @@ components:
           format: date-time
         device_name:
           type: string
+
+    KioskRosterStats:
+      type: object
+      required: [total_active, checked_in, late, absent, on_leave]
+      properties:
+        total_active:
+          type: integer
+        checked_in:
+          type: integer
+        late:
+          type: integer
+        absent:
+          type: integer
+        on_leave:
+          type: integer
 
     CheckInRequest:
       type: object
