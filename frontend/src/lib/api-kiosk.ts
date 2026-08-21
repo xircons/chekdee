@@ -15,7 +15,7 @@ export async function getKioskQrToken(deviceToken: string): Promise<KioskQrToken
   const res = await fetch(`${API_BASE_URL}/kiosk/qr-token?token=${encodeURIComponent(deviceToken)}`);
   if (!res.ok) {
     const body = await res.json().catch(() => null);
-    throw new Error(body?.message ?? `Request failed (${res.status})`);
+    throw new Error(body?.message ?? `คำขอไม่สำเร็จ (${res.status})`);
   }
   const data = (await res.json()) as { token: string; expires_at: string; device_name: string };
   return { token: data.token, expiresAt: data.expires_at, deviceName: data.device_name };
@@ -37,7 +37,7 @@ export async function getKioskRosterStats(deviceToken: string): Promise<KioskRos
   const res = await fetch(`${API_BASE_URL}/kiosk/roster-stats?token=${encodeURIComponent(deviceToken)}`);
   if (!res.ok) {
     const body = await res.json().catch(() => null);
-    throw new Error(body?.message ?? `Request failed (${res.status})`);
+    throw new Error(body?.message ?? `คำขอไม่สำเร็จ (${res.status})`);
   }
   const data = (await res.json()) as {
     total_active: number;

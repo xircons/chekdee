@@ -69,15 +69,15 @@ type createKioskDeviceRequest struct {
 func (h *KioskHandler) Create(c echo.Context) error {
 	var req createKioskDeviceRequest
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+		return echo.NewHTTPError(http.StatusBadRequest, "ข้อมูลคำขอไม่ถูกต้อง")
 	}
 	if req.Name == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "name is required")
+		return echo.NewHTTPError(http.StatusBadRequest, "ต้องระบุชื่อ")
 	}
 
 	device, rawToken, err := h.devices.Create(c.Request().Context(), req.Name, userIDFromContext(c))
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to create device")
+		return echo.NewHTTPError(http.StatusInternalServerError, "สร้างอุปกรณ์ไม่สำเร็จ")
 	}
 	return c.JSON(http.StatusCreated, kioskDeviceWithTokenView{toKioskDeviceView(device), rawToken})
 }
@@ -87,7 +87,7 @@ func (h *KioskHandler) Create(c echo.Context) error {
 func (h *KioskHandler) Rotate(c echo.Context) error {
 	device, rawToken, err := h.devices.Rotate(c.Request().Context(), c.Param("deviceId"))
 	if err != nil {
-		return echo.NewHTTPError(http.StatusNotFound, "device not found")
+		return echo.NewHTTPError(http.StatusNotFound, "ไม่พบอุปกรณ์")
 	}
 	return c.JSON(http.StatusOK, kioskDeviceWithTokenView{toKioskDeviceView(device), rawToken})
 }
@@ -96,7 +96,7 @@ func (h *KioskHandler) Rotate(c echo.Context) error {
 // behind RequireRole.
 func (h *KioskHandler) Revoke(c echo.Context) error {
 	if err := h.devices.Revoke(c.Request().Context(), c.Param("deviceId")); err != nil {
-		return echo.NewHTTPError(http.StatusNotFound, "device not found")
+		return echo.NewHTTPError(http.StatusNotFound, "ไม่พบอุปกรณ์")
 	}
 	return c.NoContent(http.StatusNoContent)
 }
@@ -106,7 +106,7 @@ func (h *KioskHandler) Revoke(c echo.Context) error {
 func (h *KioskHandler) List(c echo.Context) error {
 	devices, err := h.devices.ListAll(c.Request().Context())
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to list devices")
+		return echo.NewHTTPError(http.StatusInternalServerError, "โหลดรายการอุปกรณ์ไม่สำเร็จ")
 	}
 	out := make([]kioskDeviceView, 0, len(devices))
 	for _, d := range devices {
@@ -126,7 +126,7 @@ type qrTokenView struct {
 func (h *KioskHandler) QRToken(c echo.Context) error {
 	token, expiresAt, err := h.attendance.MintQRToken(c.Request().Context(), deviceIDFromContext(c))
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to mint qr token")
+		return echo.NewHTTPError(http.StatusInternalServerError, "สร้าง QR code ไม่สำเร็จ")
 	}
 	return c.JSON(http.StatusOK, qrTokenView{
 		Token:      token,
@@ -151,7 +151,7 @@ type kioskRosterStatsView struct {
 func (h *KioskHandler) RosterStats(c echo.Context) error {
 	stats, err := h.roster.Stats(c.Request().Context())
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load roster stats")
+		return echo.NewHTTPError(http.StatusInternalServerError, "โหลดข้อมูลสรุปไม่สำเร็จ")
 	}
 	return c.JSON(http.StatusOK, kioskRosterStatsView{
 		TotalActive: stats.TotalActive,

@@ -64,8 +64,8 @@ func (e *EmployeeUsecase) GetByID(ctx context.Context, id string) (*domain.User,
 
 // Update edits profile fields only. Logs "employee.update" — see Update on
 // UserRepository for why role/offboarding go through separate methods.
-func (e *EmployeeUsecase) Update(ctx context.Context, actorID, id string, firstName, lastName, teamID, studentID, phoneNumber *string) (*domain.User, error) {
-	updated, err := e.users.Update(ctx, id, firstName, lastName, teamID, studentID, phoneNumber)
+func (e *EmployeeUsecase) Update(ctx context.Context, actorID, id string, firstName, lastName, teamID, studentGen, studentID, phoneNumber *string) (*domain.User, error) {
+	updated, err := e.users.Update(ctx, id, firstName, lastName, teamID, studentGen, studentID, phoneNumber)
 	if err != nil {
 		return nil, err
 	}

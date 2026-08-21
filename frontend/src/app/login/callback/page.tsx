@@ -23,12 +23,12 @@ function CallbackHandler() {
     const lineError = searchParams.get("error");
 
     if (lineError) {
-      setError("LINE login was cancelled or denied.");
+      setError("การเข้าสู่ระบบด้วย LINE ถูกยกเลิกหรือถูกปฏิเสธ");
       return;
     }
 
     if (!code || !state || state !== consumeStoredState()) {
-      setError("Invalid login session. Please try again.");
+      setError("เซสชันการเข้าสู่ระบบไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง");
       return;
     }
 
@@ -40,7 +40,7 @@ function CallbackHandler() {
       });
 
       if (!res.ok) {
-        setError("Login failed. Please try again.");
+        setError("เข้าสู่ระบบไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
         return;
       }
 
@@ -56,13 +56,13 @@ function CallbackHandler() {
     );
   }
 
-  return <p className="text-center text-sm text-muted-foreground">Signing in…</p>;
+  return <p className="text-center text-sm text-muted-foreground">กำลังเข้าสู่ระบบ...</p>;
 }
 
 export default function LoginCallbackPage() {
   return (
     <main className="flex min-h-full flex-1 items-center justify-center p-6">
-      <Suspense fallback={<p className="text-sm text-muted-foreground">Signing in…</p>}>
+      <Suspense fallback={<p className="text-sm text-muted-foreground">กำลังเข้าสู่ระบบ...</p>}>
         <CallbackHandler />
       </Suspense>
     </main>

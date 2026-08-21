@@ -587,6 +587,7 @@ type UpdateEmployeeRequest struct {
 	FirstName   string  `json:"first_name"`
 	LastName    string  `json:"last_name"`
 	PhoneNumber *string `json:"phone_number,omitempty"`
+	StudentGen  *string `json:"student_gen,omitempty"`
 	StudentId   *string `json:"student_id,omitempty"`
 	TeamId      *string `json:"team_id,omitempty"`
 }

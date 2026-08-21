@@ -24,12 +24,12 @@ func RequireAuth(jwt *usecase.JWTIssuer) echo.MiddlewareFunc {
 		return func(c echo.Context) error {
 			header := c.Request().Header.Get("Authorization")
 			if !strings.HasPrefix(header, "Bearer ") {
-				return echo.NewHTTPError(http.StatusUnauthorized, "missing bearer token")
+				return echo.NewHTTPError(http.StatusUnauthorized, "ไม่พบ bearer token")
 			}
 
 			userID, role, err := jwt.ParseAccessToken(strings.TrimPrefix(header, "Bearer "))
 			if err != nil {
-				return echo.NewHTTPError(http.StatusUnauthorized, "invalid token")
+				return echo.NewHTTPError(http.StatusUnauthorized, "token ไม่ถูกต้อง")
 			}
 
 			c.Set(ctxUserIDKey, userID)
@@ -50,7 +50,7 @@ func RequireRole(roles ...domain.Role) echo.MiddlewareFunc {
 		return func(c echo.Context) error {
 			role, _ := c.Get(ctxRoleKey).(domain.Role)
 			if _, ok := allowed[role]; !ok {
-				return echo.NewHTTPError(http.StatusForbidden, "insufficient role")
+				return echo.NewHTTPError(http.StatusForbidden, "สิทธิ์ไม่เพียงพอ")
 			}
 			return next(c)
 		}
@@ -76,12 +76,12 @@ func RequireKioskDevice(devices *usecase.KioskDeviceUsecase) echo.MiddlewareFunc
 		return func(c echo.Context) error {
 			token := c.QueryParam("token")
 			if token == "" {
-				return echo.NewHTTPError(http.StatusUnauthorized, "missing device token")
+				return echo.NewHTTPError(http.StatusUnauthorized, "ไม่พบ device token")
 			}
 
 			device, err := devices.VerifyToken(c.Request().Context(), token)
 			if err != nil {
-				return echo.NewHTTPError(http.StatusUnauthorized, "invalid or revoked device token")
+				return echo.NewHTTPError(http.StatusUnauthorized, "device token ไม่ถูกต้องหรือถูกเพิกถอนแล้ว")
 			}
 
 			c.Set(ctxDeviceIDKey, device.DeviceID)

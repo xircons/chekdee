@@ -44,12 +44,12 @@ func toMonthlyReportRowView(r domain.MonthlyReportRow) monthlyReportRowView {
 func (h *ReportHandler) Monthly(c echo.Context) error {
 	month := c.QueryParam("month")
 	if month == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "month is required, expected YYYY-MM")
+		return echo.NewHTTPError(http.StatusBadRequest, "ต้องระบุ month รูปแบบที่ถูกต้องคือ YYYY-MM")
 	}
 
 	rows, err := h.reports.MonthlyReport(c.Request().Context(), month)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid month or failed to load report")
+		return echo.NewHTTPError(http.StatusBadRequest, "month ไม่ถูกต้องหรือโหลดรายงานไม่สำเร็จ")
 	}
 
 	out := make([]monthlyReportRowView, 0, len(rows))
@@ -93,7 +93,7 @@ func toDailyLogRowView(r domain.DailyLogRow) dailyLogRowView {
 func (h *ReportHandler) DailyLog(c echo.Context) error {
 	month := c.QueryParam("month")
 	if month == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "month is required, expected YYYY-MM")
+		return echo.NewHTTPError(http.StatusBadRequest, "ต้องระบุ month รูปแบบที่ถูกต้องคือ YYYY-MM")
 	}
 	var employeeID *string
 	if v := c.QueryParam("employee_id"); v != "" {
@@ -102,7 +102,7 @@ func (h *ReportHandler) DailyLog(c echo.Context) error {
 
 	rows, err := h.reports.DailyLog(c.Request().Context(), month, employeeID)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid month or failed to load daily log")
+		return echo.NewHTTPError(http.StatusBadRequest, "month ไม่ถูกต้องหรือโหลดบันทึกรายวันไม่สำเร็จ")
 	}
 
 	out := make([]dailyLogRowView, 0, len(rows))
@@ -120,13 +120,13 @@ func (h *ReportHandler) DailyLog(c echo.Context) error {
 func (h *ReportHandler) MyDailyLog(c echo.Context) error {
 	month := c.QueryParam("month")
 	if month == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "month is required, expected YYYY-MM")
+		return echo.NewHTTPError(http.StatusBadRequest, "ต้องระบุ month รูปแบบที่ถูกต้องคือ YYYY-MM")
 	}
 	employeeID := userIDFromContext(c)
 
 	rows, err := h.reports.DailyLog(c.Request().Context(), month, &employeeID)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid month or failed to load daily log")
+		return echo.NewHTTPError(http.StatusBadRequest, "month ไม่ถูกต้องหรือโหลดบันทึกรายวันไม่สำเร็จ")
 	}
 
 	out := make([]dailyLogRowView, 0, len(rows))
@@ -156,15 +156,15 @@ type requestExportRequest struct {
 func (h *ReportHandler) RequestExport(c echo.Context) error {
 	var req requestExportRequest
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+		return echo.NewHTTPError(http.StatusBadRequest, "ข้อมูลคำขอไม่ถูกต้อง")
 	}
 	if req.Month == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "month is required, expected YYYY-MM")
+		return echo.NewHTTPError(http.StatusBadRequest, "ต้องระบุ month รูปแบบที่ถูกต้องคือ YYYY-MM")
 	}
 
 	export, err := h.exports.RequestExport(c.Request().Context(), userIDFromContext(c), req.Month)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to start export")
+		return echo.NewHTTPError(http.StatusInternalServerError, "เริ่มการส่งออกไม่สำเร็จ")
 	}
 	return c.JSON(http.StatusAccepted, toReportExportView(export))
 }
@@ -173,10 +173,10 @@ func (h *ReportHandler) RequestExport(c echo.Context) error {
 func (h *ReportHandler) GetExport(c echo.Context) error {
 	export, err := h.exports.GetExport(c.Request().Context(), c.Param("id"))
 	if errors.Is(err, domain.ErrReportExportNotFound) {
-		return echo.NewHTTPError(http.StatusNotFound, "export not found")
+		return echo.NewHTTPError(http.StatusNotFound, "ไม่พบไฟล์ส่งออก")
 	}
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load export")
+		return echo.NewHTTPError(http.StatusInternalServerError, "โหลดไฟล์ส่งออกไม่สำเร็จ")
 	}
 	return c.JSON(http.StatusOK, toReportExportView(export))
 }
@@ -185,13 +185,13 @@ func (h *ReportHandler) GetExport(c echo.Context) error {
 func (h *ReportHandler) DownloadExport(c echo.Context) error {
 	export, err := h.exports.GetExport(c.Request().Context(), c.Param("id"))
 	if errors.Is(err, domain.ErrReportExportNotFound) {
-		return echo.NewHTTPError(http.StatusNotFound, "export not found")
+		return echo.NewHTTPError(http.StatusNotFound, "ไม่พบไฟล์ส่งออก")
 	}
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load export")
+		return echo.NewHTTPError(http.StatusInternalServerError, "โหลดไฟล์ส่งออกไม่สำเร็จ")
 	}
 	if export.Status != domain.ReportExportStatusReady {
-		return echo.NewHTTPError(http.StatusConflict, "export is not ready")
+		return echo.NewHTTPError(http.StatusConflict, "ไฟล์ส่งออกยังไม่พร้อม")
 	}
 
 	filename := "attendance-report-" + export.Month + ".xlsx"

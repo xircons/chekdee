@@ -54,7 +54,7 @@ func toAttendanceRecordView(a *domain.AttendanceRecord) attendanceRecordView {
 func (h *AttendanceHandler) Today(c echo.Context) error {
 	record, err := h.attendance.Today(c.Request().Context(), userIDFromContext(c))
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load today's attendance")
+		return echo.NewHTTPError(http.StatusInternalServerError, "โหลดข้อมูลเข้างานวันนี้ไม่สำเร็จ")
 	}
 	if record == nil {
 		return c.JSON(http.StatusOK, nil)
@@ -72,24 +72,24 @@ type checkInRequest struct {
 func (h *AttendanceHandler) CheckIn(c echo.Context) error {
 	var req checkInRequest
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+		return echo.NewHTTPError(http.StatusBadRequest, "ข้อมูลคำขอไม่ถูกต้อง")
 	}
 	if req.QRToken == "" || req.IdempotencyKey == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "qr_token and idempotency_key are required")
+		return echo.NewHTTPError(http.StatusBadRequest, "ต้องระบุ qr_token และ idempotency_key")
 	}
 
 	record, err := h.attendance.CheckIn(c.Request().Context(), userIDFromContext(c), req.QRToken, req.IdempotencyKey)
 	switch {
 	case errors.Is(err, qrsign.ErrInvalidToken):
-		return echo.NewHTTPError(http.StatusUnauthorized, "invalid or expired qr code")
+		return echo.NewHTTPError(http.StatusUnauthorized, "QR หมดอายุแล้ว กรุณาสแกนใหม่อีกครั้ง")
 	case errors.Is(err, domain.ErrNonceAlreadyConsumed):
-		return echo.NewHTTPError(http.StatusConflict, "qr code already used — scan the current one")
+		return echo.NewHTTPError(http.StatusConflict, "QR นี้ถูกใช้ไปแล้ว กรุณาสแกนรหัสปัจจุบันอีกครั้ง")
 	case errors.Is(err, domain.ErrKioskDeviceNotFound):
-		return echo.NewHTTPError(http.StatusUnauthorized, "kiosk device is not active")
+		return echo.NewHTTPError(http.StatusUnauthorized, "อุปกรณ์นี้ถูกเพิกถอนแล้ว")
 	case errors.Is(err, domain.ErrAlreadyCheckedIn):
-		return echo.NewHTTPError(http.StatusConflict, "already checked in today")
+		return echo.NewHTTPError(http.StatusConflict, "เช็คอินไปแล้ววันนี้")
 	case err != nil:
-		return echo.NewHTTPError(http.StatusInternalServerError, "check-in failed")
+		return echo.NewHTTPError(http.StatusInternalServerError, "เช็คอินไม่สำเร็จ")
 	}
 	return c.JSON(http.StatusOK, toAttendanceRecordView(record))
 }
@@ -103,20 +103,20 @@ type checkOutRequest struct {
 func (h *AttendanceHandler) CheckOut(c echo.Context) error {
 	var req checkOutRequest
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+		return echo.NewHTTPError(http.StatusBadRequest, "ข้อมูลคำขอไม่ถูกต้อง")
 	}
 	if req.IdempotencyKey == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "idempotency_key is required")
+		return echo.NewHTTPError(http.StatusBadRequest, "ต้องระบุ idempotency_key")
 	}
 
 	record, err := h.attendance.CheckOut(c.Request().Context(), userIDFromContext(c), req.IdempotencyKey)
 	switch {
 	case errors.Is(err, domain.ErrNotCheckedIn):
-		return echo.NewHTTPError(http.StatusConflict, "not checked in today")
+		return echo.NewHTTPError(http.StatusConflict, "ยังไม่ได้เช็คอินวันนี้")
 	case errors.Is(err, domain.ErrAlreadyCheckedOut):
-		return echo.NewHTTPError(http.StatusConflict, "already checked out today")
+		return echo.NewHTTPError(http.StatusConflict, "เช็คเอาต์ไปแล้ววันนี้")
 	case err != nil:
-		return echo.NewHTTPError(http.StatusInternalServerError, "check-out failed")
+		return echo.NewHTTPError(http.StatusInternalServerError, "เช็คเอาต์ไม่สำเร็จ")
 	}
 	return c.JSON(http.StatusOK, toAttendanceRecordView(record))
 }
@@ -140,22 +140,22 @@ type correctAttendanceStatusRequest struct {
 func (h *AttendanceHandler) CorrectStatus(c echo.Context) error {
 	var req correctAttendanceStatusRequest
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+		return echo.NewHTTPError(http.StatusBadRequest, "ข้อมูลคำขอไม่ถูกต้อง")
 	}
 	status, ok := correctableStatuses[req.Status]
 	if !ok {
-		return echo.NewHTTPError(http.StatusBadRequest, "status must be one of present, late, absent")
+		return echo.NewHTTPError(http.StatusBadRequest, "สถานะต้องเป็น present, late หรือ absent")
 	}
 	if req.Reason == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "reason is required")
+		return echo.NewHTTPError(http.StatusBadRequest, "ต้องระบุเหตุผล")
 	}
 
 	record, err := h.attendance.CorrectStatus(c.Request().Context(), c.Param("id"), userIDFromContext(c), status, req.Reason)
 	switch {
 	case errors.Is(err, domain.ErrAttendanceRecordNotFound):
-		return echo.NewHTTPError(http.StatusNotFound, "attendance record not found")
+		return echo.NewHTTPError(http.StatusNotFound, "ไม่พบบันทึกการเข้างาน")
 	case err != nil:
-		return echo.NewHTTPError(http.StatusInternalServerError, "correction failed")
+		return echo.NewHTTPError(http.StatusInternalServerError, "แก้ไขข้อมูลไม่สำเร็จ")
 	}
 	return c.JSON(http.StatusOK, toAttendanceRecordView(record))
 }

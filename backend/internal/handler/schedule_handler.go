@@ -54,7 +54,7 @@ func toWorkScheduleView(ws *domain.WorkSchedule) workScheduleView {
 func (h *ScheduleHandler) Me(c echo.Context) error {
 	rows, err := h.schedules.ListForEmployee(c.Request().Context(), userIDFromContext(c))
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load schedule")
+		return echo.NewHTTPError(http.StatusInternalServerError, "โหลดตารางเวลาไม่สำเร็จ")
 	}
 	return c.JSON(http.StatusOK, toWorkScheduleViews(rows))
 }
@@ -64,7 +64,7 @@ func (h *ScheduleHandler) Me(c echo.Context) error {
 func (h *ScheduleHandler) ListForEmployee(c echo.Context) error {
 	rows, err := h.schedules.ListForEmployee(c.Request().Context(), c.Param("employeeId"))
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load schedule")
+		return echo.NewHTTPError(http.StatusInternalServerError, "โหลดตารางเวลาไม่สำเร็จ")
 	}
 	return c.JSON(http.StatusOK, toWorkScheduleViews(rows))
 }
@@ -97,28 +97,28 @@ func (h *ScheduleHandler) Replace(c echo.Context) error {
 
 	var req replaceScheduleRequest
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+		return echo.NewHTTPError(http.StatusBadRequest, "ข้อมูลคำขอไม่ถูกต้อง")
 	}
 
 	rows := make([]*domain.WorkSchedule, 0, len(req.Rows))
 	for _, r := range req.Rows {
 		startTime, err := time.Parse(timeOfDayLayout, r.StartTime)
 		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "invalid start_time, expected HH:MM:SS")
+			return echo.NewHTTPError(http.StatusBadRequest, "start_time ไม่ถูกต้อง รูปแบบที่ถูกต้องคือ HH:MM:SS")
 		}
 		endTime, err := time.Parse(timeOfDayLayout, r.EndTime)
 		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "invalid end_time, expected HH:MM:SS")
+			return echo.NewHTTPError(http.StatusBadRequest, "end_time ไม่ถูกต้อง รูปแบบที่ถูกต้องคือ HH:MM:SS")
 		}
 		effectiveFrom, err := time.Parse(dateLayout, r.EffectiveFrom)
 		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "invalid effective_from, expected YYYY-MM-DD")
+			return echo.NewHTTPError(http.StatusBadRequest, "effective_from ไม่ถูกต้อง รูปแบบที่ถูกต้องคือ YYYY-MM-DD")
 		}
 		var effectiveTo *time.Time
 		if r.EffectiveTo != nil {
 			t, err := time.Parse(dateLayout, *r.EffectiveTo)
 			if err != nil {
-				return echo.NewHTTPError(http.StatusBadRequest, "invalid effective_to, expected YYYY-MM-DD")
+				return echo.NewHTTPError(http.StatusBadRequest, "effective_to ไม่ถูกต้อง รูปแบบที่ถูกต้องคือ YYYY-MM-DD")
 			}
 			effectiveTo = &t
 		}
@@ -138,7 +138,7 @@ func (h *ScheduleHandler) Replace(c echo.Context) error {
 		// violation (e.g. the overlap EXCLUDE constraint) and shouldn't leak
 		// to the client, matching the rest of this handler package's
 		// convention of not echoing internal error text.
-		return echo.NewHTTPError(http.StatusBadRequest, "failed to save schedule: check for overlapping day/date ranges")
+		return echo.NewHTTPError(http.StatusBadRequest, "บันทึกตารางเวลาไม่สำเร็จ กรุณาตรวจสอบว่าช่วงวัน/วันที่ซ้อนทับกันหรือไม่")
 	}
 	return c.JSON(http.StatusOK, toWorkScheduleViews(result))
 }

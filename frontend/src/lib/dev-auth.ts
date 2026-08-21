@@ -31,7 +31,7 @@ export async function startDevSession(role: Role): Promise<void> {
   });
   if (!res.ok) {
     const body = await res.json().catch(() => null);
-    throw new Error(body?.message ?? `Dev login failed (${res.status})`);
+    throw new Error(body?.message ?? `เข้าสู่ระบบทดสอบไม่สำเร็จ (${res.status})`);
   }
 
   const data = (await res.json()) as DevLoginResponse;

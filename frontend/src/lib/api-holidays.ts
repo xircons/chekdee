@@ -19,7 +19,7 @@ function toHoliday(r: HolidayResponse): MockHoliday {
 async function parseOrThrow<T>(res: Response): Promise<T> {
   if (!res.ok) {
     const body = await res.json().catch(() => null);
-    throw new Error(body?.message ?? `Request failed (${res.status})`);
+    throw new Error(body?.message ?? `คำขอไม่สำเร็จ (${res.status})`);
   }
   return res.json() as Promise<T>;
 }
@@ -63,6 +63,6 @@ export async function deleteHoliday(id: string): Promise<void> {
   const res = await apiFetch(`/holidays/${id}`, { method: "DELETE" });
   if (!res.ok) {
     const body = await res.json().catch(() => null);
-    throw new Error(body?.message ?? `Request failed (${res.status})`);
+    throw new Error(body?.message ?? `คำขอไม่สำเร็จ (${res.status})`);
   }
 }
