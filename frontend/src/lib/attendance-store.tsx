@@ -1,11 +1,15 @@
 "use client";
 
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 
-// In-memory stand-in for today's attendance_records row — resets on
-// reload. Geofence/WiFi verification is backend work (PLAN.md Phase 4);
-// this only stubs the interaction so the dashboard's check-in/out CTA has
-// something to react to.
+import { getTodayAttendance } from "@/lib/api-attendance";
+import { isDevSessionActive } from "@/lib/dev-auth";
+
+// In-memory cache of today's attendance_records row, hydrated from
+// GET /attendance/me/today on mount (see the effect below) and updated
+// optimistically by checkIn()/checkOut() right after those actions
+// succeed, so the UI doesn't wait on a second round-trip just to reflect
+// what the check-in/out call itself already confirmed.
 export type TodayAttendance = {
   checkInAt: string | null;
   checkOutAt: string | null;
@@ -32,6 +36,26 @@ function timeOfDayToIsoToday(timeOfDay: string): string {
 
 export function AttendanceProvider({ children }: { children: React.ReactNode }) {
   const [today, setToday] = useState<TodayAttendance>({ checkInAt: null, checkOutAt: null });
+
+  useEffect(() => {
+    // The dev-bypass session has no real backend behind it -- stays blank,
+    // same as before, rather than a failed fetch on every page load.
+    if (isDevSessionActive()) return;
+    getTodayAttendance()
+      .then((record) => {
+        if (!record) return;
+        setToday({
+          checkInAt: record.check_in_at ? timeOfDayToIsoToday(record.check_in_at) : null,
+          checkOutAt: record.check_out_at ? timeOfDayToIsoToday(record.check_out_at) : null,
+        });
+      })
+      .catch(() => {
+        // Best-effort hydration: a failed fetch just leaves the status
+        // blank (same as before this endpoint existed) rather than
+        // blocking the page or surfacing an error banner for a
+        // non-critical background refresh.
+      });
+  }, []);
 
   const checkIn = (timeOfDay?: string) =>
     setToday({ checkInAt: timeOfDay ? timeOfDayToIsoToday(timeOfDay) : new Date().toISOString(), checkOutAt: null });

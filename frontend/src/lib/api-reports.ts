@@ -40,13 +40,13 @@ function toMonthlyReportRow(r: MonthlyReportRowResponse): MonthlyReportRow {
   };
 }
 
-// Wire-format shape from GET /reports/daily-log (snake_case, per
-// openapi/openapi.yaml's DailyLogRow schema). status is the backend's
-// English enum -- present/late/absent (pending is a DB-default sentinel
-// never actually returned: CheckIn always computes one of the other three
-// immediately) -- distinct from the frontend's Thai-literal AttendanceStatus
-// ("present" | "สาย" | "ขาด"), so callers map it themselves rather than this
-// module assuming which convention they want.
+// Wire-format shape from GET /reports/daily-log and /reports/daily-log/me
+// (snake_case, per openapi/openapi.yaml's DailyLogRow schema). status is
+// the backend's English enum -- present/late/absent (pending is a
+// DB-default sentinel never actually returned: CheckIn always computes one
+// of the other three immediately) -- distinct from the frontend's
+// Thai-literal AttendanceStatus ("present" | "สาย" | "ขาด"), so callers map
+// it themselves rather than this module assuming which convention they want.
 type DailyLogRowResponse = {
   id: string;
   date: string;
@@ -121,6 +121,16 @@ export async function getDailyLog(month: string, employeeId?: string): Promise<D
   const params = new URLSearchParams({ month });
   if (employeeId) params.set("employee_id", employeeId);
   const res = await apiFetch(`/reports/daily-log?${params.toString()}`);
+  const rows = await parseOrThrow<DailyLogRowResponse[]>(res);
+  return rows.map(toDailyLogRow);
+}
+
+// month is "YYYY-MM". Always scoped to the caller's own records -- the
+// backend forces employeeID to the JWT's own subject regardless of any
+// query param, so there's no employeeId argument here to accidentally
+// misuse.
+export async function getMyDailyLog(month: string): Promise<DailyLogRow[]> {
+  const res = await apiFetch(`/reports/daily-log/me?month=${month}`);
   const rows = await parseOrThrow<DailyLogRowResponse[]>(res);
   return rows.map(toDailyLogRow);
 }

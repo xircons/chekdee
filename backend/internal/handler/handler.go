@@ -78,6 +78,7 @@ func RegisterRoutes(
 
 	e.POST("/attendance/check-in", attendance.CheckIn, RequireAuth(jwtIssuer))
 	e.POST("/attendance/check-out", attendance.CheckOut, RequireAuth(jwtIssuer))
+	e.GET("/attendance/me/today", attendance.Today, RequireAuth(jwtIssuer))
 
 	e.GET("/reports/monthly", reports.Monthly, RequireAuth(jwtIssuer), RequireRole(adminRoles...))
 	e.GET("/reports/daily-log", reports.DailyLog, RequireAuth(jwtIssuer), RequireRole(adminRoles...))
