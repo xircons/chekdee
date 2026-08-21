@@ -184,19 +184,19 @@ type devLoginRequest struct {
 func (h *AuthHandler) DevLogin(c echo.Context) error {
 	var req devLoginRequest
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+		return echo.NewHTTPError(http.StatusBadRequest, "ข้อมูลคำขอไม่ถูกต้อง")
 	}
 
 	role := domain.Role(req.Role)
 	switch role {
 	case domain.RoleEmployee, domain.RoleSupervisor, domain.RoleAdmin, domain.RoleSystemOwner:
 	default:
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid role")
+		return echo.NewHTTPError(http.StatusBadRequest, "ตำแหน่งไม่ถูกต้อง")
 	}
 
 	user, tokens, err := h.auth.DevLogin(c.Request().Context(), role, c.Request().UserAgent(), c.RealIP())
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "dev login failed")
+		return echo.NewHTTPError(http.StatusInternalServerError, "เข้าสู่ระบบทดสอบไม่สำเร็จ")
 	}
 
 	setRefreshCookie(c, tokens.RefreshToken)
