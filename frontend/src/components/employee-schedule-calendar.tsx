@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CalendarOff, ChevronLeft, ChevronRight, Clock, PartyPopper } from "lucide-react";
+import { CalendarOff, ChevronLeft, ChevronRight, Clock, PartyPopper, Plane } from "lucide-react";
 
 import { DetailModal, DetailModalInfoBlock, type DetailModalBadgeVariant } from "@/components/detail-modal";
 import { Button } from "@/components/ui/button";
@@ -13,13 +13,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { listHolidays } from "@/lib/api-holidays";
+import { listMyLeaveRequests } from "@/lib/api-leave";
 import { getMySchedule } from "@/lib/api-schedules";
-import type { MockHoliday, MockWorkSchedule } from "@/lib/mock-data";
+import type { MockHoliday, MockLeaveRequest, MockWorkSchedule } from "@/lib/mock-data";
 import { cn, formatThaiDate, THAI_MONTH_LABELS } from "@/lib/utils";
 
 const WEEKDAY_LABELS_TH = ["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"];
 
-type DayStatus = "workday" | "dayoff" | "holiday";
+type DayStatus = "workday" | "dayoff" | "holiday" | "leave";
 
 type CalendarDay = {
   date: Date;
@@ -28,6 +29,7 @@ type CalendarDay = {
   isToday: boolean;
   status: DayStatus;
   holidayName: string | null;
+  leaveReason: string | null;
   hours: { start: string; end: string } | null;
 };
 
@@ -75,30 +77,35 @@ const STATUS_PILL: Record<DayStatus, string> = {
   workday: "",
   dayoff: "bg-muted",
   holiday: "bg-warning",
+  leave: "bg-success",
 };
 
 const STATUS_TEXT: Record<DayStatus, string> = {
   workday: "text-foreground",
   dayoff: "text-muted-foreground",
   holiday: "text-warning-foreground",
+  leave: "text-success-foreground",
 };
 
 const STATUS_LABEL_TH: Record<DayStatus, string> = {
   workday: "วันทำงาน",
   dayoff: "วันหยุดประจำสัปดาห์",
   holiday: "วันหยุดนักขัตฤกษ์",
+  leave: "วันลา",
 };
 
 const STATUS_ICON: Record<DayStatus, typeof Clock> = {
   workday: Clock,
   dayoff: CalendarOff,
   holiday: PartyPopper,
+  leave: Plane,
 };
 
 const STATUS_BADGE_VARIANT: Record<DayStatus, DetailModalBadgeVariant> = {
   workday: "default",
   dayoff: "secondary",
   holiday: "warning",
+  leave: "success",
 };
 
 export function EmployeeScheduleCalendar() {
@@ -111,6 +118,7 @@ export function EmployeeScheduleCalendar() {
 
   const [schedule, setSchedule] = useState<MockWorkSchedule[]>([]);
   const [holidays, setHolidays] = useState<MockHoliday[]>([]);
+  const [leaveRequests, setLeaveRequests] = useState<MockLeaveRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -119,10 +127,11 @@ export function EmployeeScheduleCalendar() {
     // only offers those three years, so this always covers what's browsable.
     const from = `${today.getFullYear() - 1}-01-01`;
     const to = `${today.getFullYear() + 1}-12-31`;
-    Promise.all([getMySchedule(), listHolidays(from, to)])
-      .then(([scheduleRows, holidayRows]) => {
+    Promise.all([getMySchedule(), listHolidays(from, to), listMyLeaveRequests()])
+      .then(([scheduleRows, holidayRows, leaveRows]) => {
         setSchedule(scheduleRows);
         setHolidays(holidayRows);
+        setLeaveRequests(leaveRows);
       })
       .catch((err: Error) => setLoadError(err.message))
       .finally(() => setLoading(false));
@@ -138,14 +147,40 @@ export function EmployeeScheduleCalendar() {
     return new Map(holidays.map((h) => [h.date, h]));
   }, [holidays]);
 
+  // Only approved leave marks a day as "leave" — pending/rejected requests
+  // have no bearing on whether the employee actually has that day off.
+  // Walks start_date..end_date via local-Date arithmetic (matching
+  // buildMonthGrid/toIsoDate elsewhere in this file) rather than
+  // `new Date(isoString)`, which parses as UTC and can drift a day off
+  // from the local calendar grid depending on the browser's timezone.
+  const leaveByDate = useMemo(() => {
+    const map = new Map<string, MockLeaveRequest>();
+    for (const request of leaveRequests) {
+      if (request.status !== "approved") continue;
+      const [sy, sm, sd] = request.startDate.split("-").map(Number);
+      const [ey, em, ed] = request.endDate.split("-").map(Number);
+      const cursor = new Date(sy, sm - 1, sd);
+      const end = new Date(ey, em - 1, ed);
+      while (cursor <= end) {
+        map.set(toIsoDate(cursor), request);
+        cursor.setDate(cursor.getDate() + 1);
+      }
+    }
+    return map;
+  }, [leaveRequests]);
+
   const weeks = useMemo(() => {
     const todayIso = toIsoDate(today);
     return buildMonthGrid(viewYear, viewMonth).map((week) =>
       week.map((date): CalendarDay => {
         const isoDate = toIsoDate(date);
         const holiday = holidaysByDate.get(isoDate);
+        const leave = leaveByDate.get(isoDate);
         const entry = scheduleByDayOfWeek.get(date.getDay());
-        const status: DayStatus = holiday ? "holiday" : entry ? "workday" : "dayoff";
+        // holiday still wins over leave — an org-wide holiday isn't
+        // "spent" as the employee's own leave even if it happens to fall
+        // inside an approved range.
+        const status: DayStatus = holiday ? "holiday" : leave ? "leave" : entry ? "workday" : "dayoff";
         return {
           date,
           isoDate,
@@ -153,12 +188,13 @@ export function EmployeeScheduleCalendar() {
           isToday: isoDate === todayIso,
           status,
           holidayName: holiday?.localName ?? holiday?.name ?? null,
+          leaveReason: leave?.reason ?? null,
           hours: entry ? { start: entry.startTime, end: entry.endTime } : null,
         };
       })
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [viewYear, viewMonth, scheduleByDayOfWeek, holidaysByDate]);
+  }, [viewYear, viewMonth, scheduleByDayOfWeek, holidaysByDate, leaveByDate]);
 
   const monthHolidays = weeks
     .flat()
@@ -324,6 +360,9 @@ export function EmployeeScheduleCalendar() {
           <span className="size-2.5 rounded-full bg-warning" /> วันหยุดนักขัตฤกษ์
         </span>
         <span className="flex items-center gap-1.5">
+          <span className="size-2.5 rounded-full bg-success" /> วันลา
+        </span>
+        <span className="flex items-center gap-1.5">
           <span className="size-2.5 rounded-full ring-2 ring-brand-600" /> วันนี้
         </span>
       </div>
@@ -368,14 +407,18 @@ export function EmployeeScheduleCalendar() {
               ? "เวลาทำงาน"
               : selectedDay?.status === "holiday"
                 ? "ชื่อวันหยุด"
-                : "สถานะ"
+                : selectedDay?.status === "leave"
+                  ? "เหตุผลการลา"
+                  : "สถานะ"
           }
           value={
             selectedDay?.status === "workday" && selectedDay.hours
               ? `${selectedDay.hours.start} – ${selectedDay.hours.end}`
               : selectedDay?.status === "holiday" && selectedDay.holidayName
                 ? selectedDay.holidayName
-                : "ไม่มีตารางทำงานในวันนี้"
+                : selectedDay?.status === "leave"
+                  ? (selectedDay.leaveReason ?? "ลาที่ได้รับอนุมัติ")
+                  : "ไม่มีตารางทำงานในวันนี้"
           }
           valueSize={selectedDay?.status === "workday" ? "lg" : "sm"}
         />
