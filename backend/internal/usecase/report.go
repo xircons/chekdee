@@ -150,6 +150,7 @@ func (r *ReportUsecase) DailyLog(ctx context.Context, month string, employeeID *
 			continue
 		}
 		row := domain.DailyLogRow{
+			ID:         rec.ID,
 			Date:       rec.WorkDate,
 			EmployeeID: rec.EmployeeID,
 			Status:     rec.Status,

@@ -82,6 +82,7 @@ func RegisterRoutes(
 
 	e.POST("/attendance/check-in", attendance.CheckIn, RequireAuth(jwtIssuer))
 	e.POST("/attendance/check-out", attendance.CheckOut, RequireAuth(jwtIssuer))
+	e.PATCH("/attendance-records/:id/status", attendance.CorrectStatus, RequireAuth(jwtIssuer), RequireRole(adminRoles...))
 	e.GET("/attendance/me/today", attendance.Today, RequireAuth(jwtIssuer))
 
 	e.GET("/reports/monthly", reports.Monthly, RequireAuth(jwtIssuer), RequireRole(adminRoles...))

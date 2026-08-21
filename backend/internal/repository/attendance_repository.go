@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"checkdee-backend/internal/domain"
@@ -118,6 +119,12 @@ func (r *AttendanceRepository) CheckIn(ctx context.Context, employeeID string, w
 	var result *domain.AttendanceRecord
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
+		// SELECT ... FOR UPDATE takes no lock when zero rows match, so two
+		// concurrent check-ins for the same employee/day can both reach
+		// this branch and race on the INSERT. The unique constraint on
+		// (employee_id, work_date) is the actual serialization point —
+		// the loser's insert fails with 23505, which is exactly the
+		// "someone already checked in" case, not an unexpected error.
 		insertRow := tx.QueryRow(ctx, `
 			INSERT INTO attendance_records (employee_id, work_date, check_in_at, status)
 			VALUES ($1, $2, $3, $4)
@@ -126,6 +133,10 @@ func (r *AttendanceRepository) CheckIn(ctx context.Context, employeeID string, w
 		)
 		result, err = scanAttendance(insertRow)
 		if err != nil {
+			var pgErr *pgconn.PgError
+			if errors.As(err, &pgErr) && pgErr.Code == pgUniqueViolation {
+				return nil, domain.ErrAlreadyCheckedIn
+			}
 			return nil, err
 		}
 	case err != nil:
@@ -241,6 +252,61 @@ func (r *AttendanceRepository) AutoCloseOpenRecords(ctx context.Context, cutoff 
 		out = append(out, a)
 	}
 	return out, rows.Err()
+}
+
+func (r *AttendanceRepository) GetByID(ctx context.Context, id string) (*domain.AttendanceRecord, error) {
+	row := r.pool.QueryRow(ctx, `SELECT `+attendanceColumns+` FROM attendance_records WHERE id = $1`, id)
+	a, err := scanAttendance(row)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, domain.ErrAttendanceRecordNotFound
+	}
+	return a, err
+}
+
+// CorrectStatus locks the target row, updates its status, and inserts the
+// attendance_corrections audit row in one transaction -- the update and its
+// audit trail must never happen independently of each other.
+func (r *AttendanceRepository) CorrectStatus(ctx context.Context, attendanceRecordID, correctedBy string, newStatus domain.AttendanceStatus, reason string) (*domain.AttendanceRecord, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	row := tx.QueryRow(ctx, `SELECT `+attendanceColumns+` FROM attendance_records WHERE id = $1 FOR UPDATE`, attendanceRecordID)
+	existing, err := scanAttendance(row)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, domain.ErrAttendanceRecordNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	oldStatus := string(existing.Status)
+
+	updateRow := tx.QueryRow(ctx, `
+		UPDATE attendance_records SET status = $1, updated_at = now()
+		WHERE id = $2
+		RETURNING `+attendanceColumns,
+		newStatus, attendanceRecordID,
+	)
+	updated, err := scanAttendance(updateRow)
+	if err != nil {
+		return nil, err
+	}
+
+	newStatusStr := string(newStatus)
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO attendance_corrections (attendance_record_id, corrected_by, field_name, old_value, new_value, reason)
+		VALUES ($1, $2, 'status', $3, $4, $5)`,
+		attendanceRecordID, correctedBy, oldStatus, newStatusStr, reason,
+	); err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return updated, nil
 }
 
 // ListForMonth returns every attendance record (all employees) with

@@ -13,10 +13,15 @@ import (
 )
 
 type fakeAttendanceRepo struct {
-	checkInCalls int
-	lastStatus   domain.AttendanceStatus
-	cachedByKey  map[string]*domain.AttendanceRecord
-	todayRecord  *domain.AttendanceRecord
+	checkInCalls        int
+	lastStatus          domain.AttendanceStatus
+	cachedByKey         map[string]*domain.AttendanceRecord
+	todayRecord         *domain.AttendanceRecord
+	correctStatusResult *domain.AttendanceRecord
+	lastCorrectRecordID string
+	lastCorrectBy       string
+	lastCorrectStatus   domain.AttendanceStatus
+	lastCorrectReason   string
 }
 
 func (f *fakeAttendanceRepo) GetForEmployeeDate(context.Context, string, time.Time) (*domain.AttendanceRecord, error) {
@@ -38,6 +43,16 @@ func (f *fakeAttendanceRepo) AutoCloseOpenRecords(context.Context, time.Time) ([
 }
 func (f *fakeAttendanceRepo) ListForMonth(context.Context, time.Time, time.Time) ([]*domain.AttendanceRecord, error) {
 	return nil, nil
+}
+func (f *fakeAttendanceRepo) GetByID(context.Context, string) (*domain.AttendanceRecord, error) {
+	return nil, nil
+}
+func (f *fakeAttendanceRepo) CorrectStatus(_ context.Context, attendanceRecordID, correctedBy string, newStatus domain.AttendanceStatus, reason string) (*domain.AttendanceRecord, error) {
+	f.lastCorrectRecordID = attendanceRecordID
+	f.lastCorrectBy = correctedBy
+	f.lastCorrectStatus = newStatus
+	f.lastCorrectReason = reason
+	return f.correctStatusResult, nil
 }
 
 type fakeScheduleRepo struct {
@@ -236,6 +251,20 @@ func TestAttendanceUsecase_CheckIn_RetryWithSameKeyNeverTouchesNonce(t *testing.
 	require.Equal(t, cached, rec)
 	require.Zero(t, nonces.consumeCalls, "a cached-key retry must never attempt to consume the nonce")
 	require.Zero(t, attendance.checkInCalls, "a cached-key retry must never re-run the attendance write")
+}
+
+func TestAttendanceUsecase_CorrectStatus_DelegatesToRepository(t *testing.T) {
+	corrected := &domain.AttendanceRecord{ID: "rec-1", Status: domain.AttendanceStatusAbsent}
+	attendance := &fakeAttendanceRepo{correctStatusResult: corrected}
+	uc, _ := newAttendanceUsecase(t, attendance, &fakeScheduleRepo{}, &fakeKioskDeviceRepo{}, &fakeQRNonceRepo{})
+
+	rec, err := uc.CorrectStatus(context.Background(), "rec-1", "admin-1", domain.AttendanceStatusAbsent, "no-show")
+	require.NoError(t, err)
+	require.Equal(t, corrected, rec)
+	require.Equal(t, "rec-1", attendance.lastCorrectRecordID)
+	require.Equal(t, "admin-1", attendance.lastCorrectBy)
+	require.Equal(t, domain.AttendanceStatusAbsent, attendance.lastCorrectStatus)
+	require.Equal(t, "no-show", attendance.lastCorrectReason)
 }
 
 func TestAttendanceUsecase_Today_NoRecord(t *testing.T) {

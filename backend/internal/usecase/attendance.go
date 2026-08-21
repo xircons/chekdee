@@ -117,6 +117,14 @@ func (a *AttendanceUsecase) CheckOut(ctx context.Context, employeeID, idempotenc
 	return a.attendance.CheckOut(ctx, employeeID, workDate, now, idempotencyKey)
 }
 
+// CorrectStatus is the admin manual-correction action — thin pass-through
+// to the repository, which handles the update + audit-row atomicity.
+// Authorization (admin/supervisor/system_owner only) is the handler's
+// RequireRole middleware, not this usecase's job.
+func (a *AttendanceUsecase) CorrectStatus(ctx context.Context, attendanceRecordID, correctedBy string, newStatus domain.AttendanceStatus, reason string) (*domain.AttendanceRecord, error) {
+	return a.attendance.CorrectStatus(ctx, attendanceRecordID, correctedBy, newStatus, reason)
+}
+
 // Today returns the caller's own attendance_records row for today (Asia/
 // Bangkok), or nil if they haven't checked in yet. Backs the employee home
 // page's "already checked in?" status on page load — the client-side
