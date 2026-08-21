@@ -15,13 +15,20 @@ import {
   EmployeeSheetHeader,
   EmployeeSheetTitle,
 } from "@/components/employee-sheet";
+import { LeaveAttachmentList } from "@/components/leave-attachment-list";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { createLeaveRequest, listMyLeaveRequests } from "@/lib/api-leave";
+import {
+  createLeaveRequest,
+  listLeaveAttachments,
+  listMyLeaveRequests,
+  uploadLeaveAttachment,
+  type LeaveAttachment,
+} from "@/lib/api-leave";
 import { buildLeaveRequestEmail } from "@/lib/leave-email";
 import { type LeaveStatus, type MockLeaveRequest } from "@/lib/mock-data";
 import { useMe } from "@/lib/session";
@@ -70,7 +77,11 @@ function EmailContentBlock({ subject, body }: { subject: string; body: string })
   );
 }
 
-type LeaveAttachment = { id: string; name: string; isImage: boolean; size: number };
+// A file picked in the form but not uploaded yet -- holds the real File so
+// submitLeaveRequest can actually upload it once the leave request itself
+// exists. Distinct from api-leave.ts's LeaveAttachment, which describes an
+// already-uploaded one.
+type StagedAttachment = { id: string; name: string; isImage: boolean; size: number; file: File };
 
 function formatFileSize(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
@@ -80,7 +91,7 @@ function AttachmentRow({
   attachment,
   onRemove,
 }: {
-  attachment: LeaveAttachment;
+  attachment: StagedAttachment;
   onRemove?: () => void;
 }) {
   const AttachmentIcon = attachment.isImage ? ImageIcon : FileText;
@@ -115,8 +126,10 @@ export default function LeavePage() {
   const [requestListExpanded, setRequestListExpanded] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<MockLeaveRequest | null>(null);
   const [requestModalOpen, setRequestModalOpen] = useState(false);
-  const [attachments, setAttachments] = useState<LeaveAttachment[]>([]);
-  const [attachmentsByRequestId, setAttachmentsByRequestId] = useState<Record<string, LeaveAttachment[]>>({});
+  const [attachments, setAttachments] = useState<StagedAttachment[]>([]);
+  const [selectedRequestAttachments, setSelectedRequestAttachments] = useState<LeaveAttachment[]>([]);
+  const [attachmentsLoading, setAttachmentsLoading] = useState(false);
+  const [attachmentsError, setAttachmentsError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -126,6 +139,23 @@ export default function LeavePage() {
       .finally(() => setLoading(false));
   }, []);
 
+  // Fetched fresh each time the detail modal opens for a (possibly
+  // different) request, rather than kept as local-only state keyed by
+  // request id — this is now real server data, not a session-only stand-in.
+  useEffect(() => {
+    if (!requestModalOpen || !selectedRequest) {
+      setSelectedRequestAttachments([]);
+      setAttachmentsError(null);
+      return;
+    }
+    setAttachmentsLoading(true);
+    setAttachmentsError(null);
+    listLeaveAttachments(selectedRequest.id)
+      .then((rows) => setSelectedRequestAttachments(rows))
+      .catch((err: Error) => setAttachmentsError(err.message))
+      .finally(() => setAttachmentsLoading(false));
+  }, [requestModalOpen, selectedRequest]);
+
   const handleAttachmentSelect = (fileList: FileList | null) => {
     if (!fileList || fileList.length === 0) return;
     const newAttachments = Array.from(fileList).map((file) => ({
@@ -133,6 +163,7 @@ export default function LeavePage() {
       name: file.name,
       isImage: file.type.startsWith("image/"),
       size: file.size,
+      file,
     }));
     setAttachments((prev) => [...prev, ...newAttachments]);
     if (fileInputRef.current) fileInputRef.current.value = "";
@@ -193,12 +224,24 @@ export default function LeavePage() {
         reason: values.reason,
       });
       setRequests((prev) => [created, ...prev]);
+
+      // Uploaded one at a time, after the leave request already exists —
+      // there's no combined create+attach endpoint. A failed upload here
+      // doesn't roll back the request itself (it already committed and is
+      // in `requests` above); it's surfaced as a warning instead so the
+      // employee can retry the attachment from the request's detail view.
       if (attachments.length > 0) {
-        // Attachments have no backend endpoint yet (no file-upload API
-        // exists) — kept as session-only local state, same as before
-        // wiring, just now keyed by the real submitted request's id.
-        setAttachmentsByRequestId((prev) => ({ ...prev, [created.id]: attachments }));
+        const results = await Promise.allSettled(
+          attachments.map((a) => uploadLeaveAttachment(created.id, a.file))
+        );
+        const failedCount = results.filter((r) => r.status === "rejected").length;
+        if (failedCount > 0) {
+          setSubmitError(
+            `ส่งคำขอลาสำเร็จ แต่แนบไฟล์ไม่สำเร็จ ${failedCount} จาก ${attachments.length} ไฟล์ — ลองแนบใหม่จากรายการคำขอลา`
+          );
+        }
       }
+
       reset();
       setAttachments([]);
       setShowPreview(false);
@@ -211,10 +254,6 @@ export default function LeavePage() {
     ? requests
     : requests.slice(0, VISIBLE_LEAVE_REQUESTS);
   const hiddenRequestCount = requests.length - VISIBLE_LEAVE_REQUESTS;
-
-  const selectedRequestAttachments = selectedRequest
-    ? (attachmentsByRequestId[selectedRequest.id] ?? [])
-    : [];
 
   // The full formal-letter body (buildLeaveRequestEmail) is only for the
   // form's live "ตัวอย่างอีเมล" preview below. Once a request is submitted,
@@ -336,7 +375,7 @@ export default function LeavePage() {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="image/*,.pdf"
+                  accept="image/png,image/jpeg,application/pdf"
                   capture="environment"
                   multiple
                   className="hidden"
@@ -456,12 +495,14 @@ export default function LeavePage() {
         {selectedRequest && (
           <EmailContentBlock subject={selectedRequestSubject} body={selectedRequest.reason ?? ""} />
         )}
-        {selectedRequestAttachments.length > 0 && (
-          <div className="flex flex-col gap-1.5">
-            {selectedRequestAttachments.map((attachment) => (
-              <AttachmentRow key={attachment.id} attachment={attachment} />
-            ))}
-          </div>
+        {attachmentsLoading && (
+          <p className="text-center text-xs text-muted-foreground">กำลังโหลดไฟล์แนบ…</p>
+        )}
+        {attachmentsError && (
+          <p className="rounded-xl bg-danger px-3 py-2 text-xs text-danger-foreground">{attachmentsError}</p>
+        )}
+        {!attachmentsLoading && !attachmentsError && selectedRequest && (
+          <LeaveAttachmentList leaveRequestId={selectedRequest.id} attachments={selectedRequestAttachments} />
         )}
       </DetailModal>
 
