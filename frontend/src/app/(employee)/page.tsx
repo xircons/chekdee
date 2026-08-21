@@ -212,7 +212,7 @@ export default function EmployeeHome() {
     <div className="flex w-full flex-1 flex-col">
       <EmployeePageHeader
         title={`สวัสดี, ${me.first_name ?? me.display_name}`}
-        subtitle="Checkdee โดย turnPRO."
+        subtitle="Chekdee โดย turnPRO"
       />
 
       <div className="flex flex-1 flex-col gap-5 px-6 pb-6">
