@@ -23,7 +23,7 @@ export default function LoginPage() {
       <div className="flex w-full max-w-sm flex-col gap-4">
         <Card className="rounded-2xl border border-slate-200 shadow-md ring-0">
           <CardHeader>
-            <CardTitle className="text-center text-xl">Checkdee</CardTitle>
+            <CardTitle className="text-center text-xl">Chekdee</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
             <p className="text-center text-sm text-muted-foreground">
