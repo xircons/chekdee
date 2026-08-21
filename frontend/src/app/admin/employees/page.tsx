@@ -517,6 +517,8 @@ export default function EmployeesPage() {
                   <TableHead>ตำแหน่ง</TableHead>
                   <TableHead>สถานะ</TableHead>
                   <TableHead>รุ่นนักศึกษา</TableHead>
+                  <TableHead>รหัสนักศึกษา</TableHead>
+                  <TableHead>เบอร์โทร</TableHead>
                   <TableHead className="text-right">จัดการ</TableHead>
                 </TableRow>
               </TableHeader>
@@ -538,6 +540,8 @@ export default function EmployeesPage() {
                     <TableCell>{ROLE_LABEL_TH[employee.role]}</TableCell>
                     <TableCell>{statusBadge(employee)}</TableCell>
                     <TableCell>{employee.studentGen ? `(${employee.studentGen})` : "—"}</TableCell>
+                    <TableCell>{employee.studentId ?? "—"}</TableCell>
+                    <TableCell>{employee.phoneNumber ?? "—"}</TableCell>
                     <TableCell className="text-right">
                       {employee.offboardedAt ? (
                         <span className="text-muted-foreground">—</span>
@@ -567,7 +571,7 @@ export default function EmployeesPage() {
                 ))}
                 {employees.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center text-muted-foreground">
+                    <TableCell colSpan={7} className="text-center text-muted-foreground">
                       ไม่พบพนักงานที่ตรงกับการค้นหา
                     </TableCell>
                   </TableRow>

@@ -108,6 +108,14 @@ func RegisterRoutes(
 	e.GET("/leave-requests", leaves.List, RequireAuth(jwtIssuer), RequireRole(adminRoles...))
 	e.POST("/leave-requests/:id/approve", leaves.Approve, RequireAuth(jwtIssuer), RequireRole(adminRoles...))
 	e.POST("/leave-requests/:id/reject", leaves.Reject, RequireAuth(jwtIssuer), RequireRole(adminRoles...))
+	// No RequireRole on the attachment routes — the usecase itself allows
+	// either an admin-role caller or the leave request's own employee (see
+	// LeaveUsecase.checkAttachmentAccess). BodyLimit caps the multipart
+	// upload just above domain.MaxLeaveAttachmentBytes (10 MiB), so an
+	// oversized request is rejected before it's ever fully read into memory.
+	e.POST("/leave-requests/:id/attachments", leaves.UploadAttachment, RequireAuth(jwtIssuer), middleware.BodyLimit("11M"))
+	e.GET("/leave-requests/:id/attachments", leaves.ListAttachments, RequireAuth(jwtIssuer))
+	e.GET("/leave-requests/:id/attachments/:attachmentId", leaves.DownloadAttachment, RequireAuth(jwtIssuer))
 
 	e.GET("/notifications/me", notifications.Me, RequireAuth(jwtIssuer))
 	e.POST("/notifications/:id/read", notifications.MarkRead, RequireAuth(jwtIssuer))
