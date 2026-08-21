@@ -62,6 +62,11 @@ func userIDFromContext(c echo.Context) string {
 	return id
 }
 
+func roleFromContext(c echo.Context) domain.Role {
+	role, _ := c.Get(ctxRoleKey).(domain.Role)
+	return role
+}
+
 // RequireKioskDevice authenticates a kiosk route via the device's long-lived
 // link token (query param, matching the frontend's existing
 // `/kiosk/lobby-tv?token=` convention) — not a user JWT. Distinct from
