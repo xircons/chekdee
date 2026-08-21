@@ -44,7 +44,7 @@ export function AdminSidebar() {
               C
             </div>
             <div>
-              <p className="text-sm font-bold text-foreground">Checkdee</p>
+              <p className="text-sm font-bold text-foreground">Chekdee</p>
               <Badge variant="secondary" className="mt-1">
                 ผู้ดูแลระบบ
               </Badge>

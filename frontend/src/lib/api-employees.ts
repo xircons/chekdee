@@ -10,6 +10,8 @@ type EmployeeResponse = {
   first_name: string | null;
   last_name: string | null;
   student_gen: string | null;
+  student_id: string | null;
+  phone_number: string | null;
   line_display_name: string | null;
   line_picture_url: string | null;
   registration_completed_at: string | null;
@@ -26,6 +28,8 @@ export type Employee = {
   firstName: string | null;
   lastName: string | null;
   studentGen: string | null;
+  studentId: string | null;
+  phoneNumber: string | null;
   lineDisplayName: string | null;
   linePictureUrl: string | null;
   registrationCompletedAt: string | null;
@@ -49,6 +53,8 @@ function toEmployee(r: EmployeeResponse): Employee {
     firstName: r.first_name,
     lastName: r.last_name,
     studentGen: r.student_gen,
+    studentId: r.student_id,
+    phoneNumber: r.phone_number,
     lineDisplayName: r.line_display_name,
     linePictureUrl: r.line_picture_url,
     registrationCompletedAt: r.registration_completed_at,
@@ -136,10 +142,18 @@ export async function listEmployees(
 
 // PATCH /employees/:id — profile fields only. The backend does not accept
 // student_gen (set only once, during the employee's own LINE registration)
-// or anything else here; see UpdateEmployeeRequest in openapi.yaml.
+// here; see UpdateEmployeeRequest in openapi.yaml. student_id/phone_number
+// are a full replace like team_id — a null clears the stored value, it
+// doesn't mean "leave unchanged".
 export async function updateEmployee(
   id: string,
-  input: { firstName: string; lastName: string; teamId: string | null }
+  input: {
+    firstName: string;
+    lastName: string;
+    teamId: string | null;
+    studentId: string | null;
+    phoneNumber: string | null;
+  }
 ): Promise<Employee> {
   const res = await apiFetch(`/employees/${id}`, {
     method: "PATCH",
@@ -148,6 +162,8 @@ export async function updateEmployee(
       first_name: input.firstName,
       last_name: input.lastName,
       team_id: input.teamId,
+      student_id: input.studentId,
+      phone_number: input.phoneNumber,
     }),
   });
   return toEmployee(await parseOrThrow<EmployeeResponse>(res));

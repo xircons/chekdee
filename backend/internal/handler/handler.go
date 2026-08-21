@@ -75,10 +75,15 @@ func RegisterRoutes(
 	// Device-token authenticated (not a user JWT) — the kiosk TV polls this
 	// every ~15s to rotate its displayed QR.
 	e.GET("/kiosk/qr-token", kiosk.QRToken, RequireKioskDevice(deviceAuth))
+	// Also device-token authenticated -- aggregate-only counts for the
+	// public lobby display, deliberately narrower than the admin-only
+	// GET /reports/daily-log (see RosterStats' doc comment).
+	e.GET("/kiosk/roster-stats", kiosk.RosterStats, RequireKioskDevice(deviceAuth))
 
 	e.POST("/attendance/check-in", attendance.CheckIn, RequireAuth(jwtIssuer))
 	e.POST("/attendance/check-out", attendance.CheckOut, RequireAuth(jwtIssuer))
 	e.PATCH("/attendance-records/:id/status", attendance.CorrectStatus, RequireAuth(jwtIssuer), RequireRole(adminRoles...))
+	e.GET("/attendance/me/today", attendance.Today, RequireAuth(jwtIssuer))
 
 	e.GET("/reports/monthly", reports.Monthly, RequireAuth(jwtIssuer), RequireRole(adminRoles...))
 	e.GET("/reports/daily-log", reports.DailyLog, RequireAuth(jwtIssuer), RequireRole(adminRoles...))

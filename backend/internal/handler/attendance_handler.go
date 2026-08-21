@@ -48,6 +48,20 @@ func toAttendanceRecordView(a *domain.AttendanceRecord) attendanceRecordView {
 	return v
 }
 
+// Today returns the caller's own attendance record for today, or `null` if
+// they haven't checked in yet -- not a 404, since "no record yet" is the
+// normal pre-check-in state, not an error. Mounted behind RequireAuth.
+func (h *AttendanceHandler) Today(c echo.Context) error {
+	record, err := h.attendance.Today(c.Request().Context(), userIDFromContext(c))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load today's attendance")
+	}
+	if record == nil {
+		return c.JSON(http.StatusOK, nil)
+	}
+	return c.JSON(http.StatusOK, toAttendanceRecordView(record))
+}
+
 type checkInRequest struct {
 	QRToken        string `json:"qr_token"`
 	IdempotencyKey string `json:"idempotency_key"`

@@ -150,6 +150,7 @@ func InitializeServer(logger *slog.Logger) (*server.Server, error) {
 		usecase.NewHolidayUsecase,
 		usecase.NewKioskDeviceUsecase,
 		usecase.NewAttendanceUsecase,
+		usecase.NewKioskRosterUsecase,
 		usecase.NewReportUsecase,
 		usecase.NewReportExportUsecase,
 		usecase.NewAuditLogUsecase,

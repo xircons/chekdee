@@ -16,6 +16,7 @@ type fakeAttendanceRepo struct {
 	checkInCalls        int
 	lastStatus          domain.AttendanceStatus
 	cachedByKey         map[string]*domain.AttendanceRecord
+	todayRecord         *domain.AttendanceRecord
 	correctStatusResult *domain.AttendanceRecord
 	lastCorrectRecordID string
 	lastCorrectBy       string
@@ -24,7 +25,7 @@ type fakeAttendanceRepo struct {
 }
 
 func (f *fakeAttendanceRepo) GetForEmployeeDate(context.Context, string, time.Time) (*domain.AttendanceRecord, error) {
-	return nil, nil
+	return f.todayRecord, nil
 }
 func (f *fakeAttendanceRepo) GetByIdempotencyKey(_ context.Context, key string) (*domain.AttendanceRecord, error) {
 	return f.cachedByKey[key], nil
@@ -264,4 +265,23 @@ func TestAttendanceUsecase_CorrectStatus_DelegatesToRepository(t *testing.T) {
 	require.Equal(t, "admin-1", attendance.lastCorrectBy)
 	require.Equal(t, domain.AttendanceStatusAbsent, attendance.lastCorrectStatus)
 	require.Equal(t, "no-show", attendance.lastCorrectReason)
+}
+
+func TestAttendanceUsecase_Today_NoRecord(t *testing.T) {
+	attendance := &fakeAttendanceRepo{}
+	uc, _ := newAttendanceUsecase(t, attendance, &fakeScheduleRepo{}, &fakeKioskDeviceRepo{}, &fakeQRNonceRepo{})
+
+	rec, err := uc.Today(context.Background(), "employee-1")
+	require.NoError(t, err)
+	require.Nil(t, rec)
+}
+
+func TestAttendanceUsecase_Today_ReturnsExistingRecord(t *testing.T) {
+	existing := &domain.AttendanceRecord{ID: "rec-1", EmployeeID: "employee-1", Status: domain.AttendanceStatusLate}
+	attendance := &fakeAttendanceRepo{todayRecord: existing}
+	uc, _ := newAttendanceUsecase(t, attendance, &fakeScheduleRepo{}, &fakeKioskDeviceRepo{}, &fakeQRNonceRepo{})
+
+	rec, err := uc.Today(context.Background(), "employee-1")
+	require.NoError(t, err)
+	require.Equal(t, existing, rec)
 }

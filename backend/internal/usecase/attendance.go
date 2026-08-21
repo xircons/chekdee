@@ -125,6 +125,16 @@ func (a *AttendanceUsecase) CorrectStatus(ctx context.Context, attendanceRecordI
 	return a.attendance.CorrectStatus(ctx, attendanceRecordID, correctedBy, newStatus, reason)
 }
 
+// Today returns the caller's own attendance_records row for today (Asia/
+// Bangkok), or nil if they haven't checked in yet. Backs the employee home
+// page's "already checked in?" status on page load — the client-side
+// attendance-store is an in-memory-only optimistic cache that resets on
+// reload, so the page must hydrate from here rather than starting blank.
+func (a *AttendanceUsecase) Today(ctx context.Context, employeeID string) (*domain.AttendanceRecord, error) {
+	workDate := bangkokWorkDate(clockNow())
+	return a.attendance.GetForEmployeeDate(ctx, employeeID, workDate)
+}
+
 // computeStatus applies the no-grace-period rule: 0 minutes late or earlier
 // is present, up to 60 minutes late is late, over 60 (or no matching
 // schedule at all, so lateness can't be judged) falls back — see

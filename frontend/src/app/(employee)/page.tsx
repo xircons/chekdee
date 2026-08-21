@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   Calendar,
@@ -23,16 +23,12 @@ import { EmployeePageHeader } from "@/components/employee-page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { listMyLeaveRequests } from "@/lib/api-leave";
+import { type DailyLogRow, getMyDailyLog } from "@/lib/api-reports";
+import { getMySchedule } from "@/lib/api-schedules";
 import { useTodayAttendance, type TodayAttendance } from "@/lib/attendance-store";
 import { buildLeaveRequestEmail } from "@/lib/leave-email";
-import {
-  getAttendanceForEmployee,
-  getLeaveRequestsForEmployee,
-  getWorkScheduleForEmployee,
-  mockEmployees,
-  ROLE_LABEL_TH,
-  type MockAttendanceRecord,
-} from "@/lib/mock-data";
+import { ROLE_LABEL_TH, type MockLeaveRequest, type MockWorkSchedule } from "@/lib/mock-data";
 import { useMe } from "@/lib/session";
 import { cn, formatThaiDate, formatThaiDateRange } from "@/lib/utils";
 
@@ -107,6 +103,16 @@ function toIsoDateLocal(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
+// DailyLogRow.checkInAt/checkOutAt are "HH:MM:SS" time-of-day only (no
+// date) -- combines with the specific historical day it belongs to so
+// formatTime's `new Date(iso)` has something valid to parse.
+function timeOfDayToIso(date: Date, timeOfDay: string): string {
+  const [h, m, s] = timeOfDay.split(":").map(Number);
+  const d = new Date(date);
+  d.setHours(h, m, s ?? 0, 0);
+  return d.toISOString();
+}
+
 // Sunday-first dates for the week containing `reference`.
 function getWeekDates(reference: Date): Date[] {
   const sunday = new Date(reference);
@@ -122,7 +128,7 @@ function classifyDay(
   date: Date,
   todayIso: string,
   workingDays: Set<number>,
-  attendanceByDate: Map<string, MockAttendanceRecord>,
+  attendanceByDate: Map<string, DailyLogRow>,
   todayAttendance: TodayAttendance
 ): DayIconStatus {
   const iso = toIsoDateLocal(date);
@@ -135,8 +141,8 @@ function classifyDay(
 
   const record = attendanceByDate.get(iso);
   if (record?.status === "present") return "present";
-  if (record?.status === "สาย") return "late";
-  if (record?.status === "ขาด") return "absent";
+  if (record?.status === "late") return "late";
+  if (record?.status === "absent") return "absent";
   return "future";
 }
 
@@ -163,17 +169,44 @@ export default function EmployeeHome() {
   const [selectedDay, setSelectedDay] = useState<WeekDay | null>(null);
   const [dayModalOpen, setDayModalOpen] = useState(false);
   const [requestModalOpen, setRequestModalOpen] = useState(false);
+  const [myLeaveRequests, setMyLeaveRequests] = useState<MockLeaveRequest[]>([]);
+  const [mySchedule, setMySchedule] = useState<MockWorkSchedule[]>([]);
+  const [myDailyLog, setMyDailyLog] = useState<DailyLogRow[]>([]);
+
+  useEffect(() => {
+    listMyLeaveRequests()
+      .then(setMyLeaveRequests)
+      .catch(() => {
+        // Best-effort: the pending-leave-request preview card just doesn't
+        // show anything if this fails, rather than blocking the rest of
+        // the home page on a non-critical background fetch.
+      });
+
+    // The displayed week can span two months (e.g. Aug 31 in the same
+    // Sun-Sat row as Sep 1) -- /reports/daily-log/me is month-scoped, so
+    // fetch once per distinct month the week touches (usually just one).
+    const weekDates = getWeekDates(new Date());
+    const months = [...new Set(weekDates.map((d) => toIsoDateLocal(d).slice(0, 7)))];
+    Promise.all([getMySchedule(), Promise.all(months.map((m) => getMyDailyLog(m)))])
+      .then(([schedule, logsByMonth]) => {
+        setMySchedule(schedule);
+        setMyDailyLog(logsByMonth.flat());
+      })
+      .catch(() => {
+        // Best-effort: the weekly icons fall back to "future" for days
+        // with no loaded data rather than blocking the rest of the page.
+      });
+  }, []);
 
   const now = new Date();
   const todayIso = toIsoDateLocal(now);
 
-  const mockProfile = mockEmployees.find((e) => e.id === me.id);
   const fullName = [me.first_name, me.last_name].filter(Boolean).join(" ") || me.display_name || "—";
 
   const statusLabel = !today.checkInAt ? "ยังไม่เข้างาน" : !today.checkOutAt ? "เข้างานแล้ว" : "ออกงานแล้ว";
 
-  const workingDays = new Set(getWorkScheduleForEmployee(me.id).map((s) => s.dayOfWeek));
-  const attendanceByDate = new Map(getAttendanceForEmployee(me.id).map((r) => [r.workDate, r]));
+  const workingDays = new Set(mySchedule.map((s) => s.dayOfWeek));
+  const attendanceByDate = new Map(myDailyLog.map((r) => [r.date, r]));
   const weekDays: WeekDay[] = getWeekDates(now).map((date, i) => {
     const isoDate = toIsoDateLocal(date);
     const status = classifyDay(date, todayIso, workingDays, attendanceByDate, today);
@@ -184,14 +217,24 @@ export default function EmployeeHome() {
       label: WEEKDAY_LABELS_TH[i],
       status,
       isToday: isoDate === todayIso,
-      checkInAt: isoDate === todayIso ? today.checkInAt : (record?.checkInAt ?? null),
-      checkOutAt: isoDate === todayIso ? today.checkOutAt : (record?.checkOutAt ?? null),
+      checkInAt:
+        isoDate === todayIso
+          ? today.checkInAt
+          : record?.checkInAt
+            ? timeOfDayToIso(date, record.checkInAt)
+            : null,
+      checkOutAt:
+        isoDate === todayIso
+          ? today.checkOutAt
+          : record?.checkOutAt
+            ? timeOfDayToIso(date, record.checkOutAt)
+            : null,
     };
   });
 
   const onTimeStreak = computeOnTimeStreak(weekDays);
 
-  const pendingRequest = getLeaveRequestsForEmployee(me.id)
+  const pendingRequest = myLeaveRequests
     .filter((r) => r.status === "pending")
     .sort((a, b) => a.startDate.localeCompare(b.startDate))[0];
 
@@ -212,7 +255,7 @@ export default function EmployeeHome() {
     <div className="flex w-full flex-1 flex-col">
       <EmployeePageHeader
         title={`สวัสดี, ${me.first_name ?? me.display_name}`}
-        subtitle="Checkdee โดย turnPRO."
+        subtitle="Chekdee โดย turnPRO"
       />
 
       <div className="flex flex-1 flex-col gap-5 px-6 pb-6">
@@ -222,12 +265,7 @@ export default function EmployeeHome() {
               {initials(me.first_name, me.last_name, me.display_name)}
             </div>
             <div>
-              <p className="text-lg font-semibold text-foreground">
-                {fullName}
-                {mockProfile?.nickname && (
-                  <span className="font-normal text-muted-foreground"> ({mockProfile.nickname})</span>
-                )}
-              </p>
+              <p className="text-lg font-semibold text-foreground">{fullName}</p>
               <Badge variant="secondary" className="mt-1">
                 {ROLE_LABEL_TH[me.role]}
               </Badge>

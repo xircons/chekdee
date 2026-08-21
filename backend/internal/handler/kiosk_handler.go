@@ -13,10 +13,11 @@ import (
 type KioskHandler struct {
 	devices    *usecase.KioskDeviceUsecase
 	attendance *usecase.AttendanceUsecase
+	roster     *usecase.KioskRosterUsecase
 }
 
-func NewKioskHandler(devices *usecase.KioskDeviceUsecase, attendance *usecase.AttendanceUsecase) *KioskHandler {
-	return &KioskHandler{devices: devices, attendance: attendance}
+func NewKioskHandler(devices *usecase.KioskDeviceUsecase, attendance *usecase.AttendanceUsecase, roster *usecase.KioskRosterUsecase) *KioskHandler {
+	return &KioskHandler{devices: devices, attendance: attendance, roster: roster}
 }
 
 type kioskDeviceView struct {
@@ -131,5 +132,32 @@ func (h *KioskHandler) QRToken(c echo.Context) error {
 		Token:      token,
 		ExpiresAt:  expiresAt.Format("2006-01-02T15:04:05Z07:00"),
 		DeviceName: deviceNameFromContext(c),
+	})
+}
+
+type kioskRosterStatsView struct {
+	TotalActive int `json:"total_active"`
+	CheckedIn   int `json:"checked_in"`
+	Late        int `json:"late"`
+	Absent      int `json:"absent"`
+	OnLeave     int `json:"on_leave"`
+}
+
+// RosterStats returns today's org-wide counts, aggregate only -- no
+// employee names/ids/per-person status. Mounted behind RequireKioskDevice,
+// same as QRToken above: the lobby TV is a public display, so it gets a
+// narrower endpoint than the admin-only GET /reports/daily-log, not a
+// loosened version of that one.
+func (h *KioskHandler) RosterStats(c echo.Context) error {
+	stats, err := h.roster.Stats(c.Request().Context())
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load roster stats")
+	}
+	return c.JSON(http.StatusOK, kioskRosterStatsView{
+		TotalActive: stats.TotalActive,
+		CheckedIn:   stats.CheckedIn,
+		Late:        stats.Late,
+		Absent:      stats.Absent,
+		OnLeave:     stats.OnLeave,
 	})
 }

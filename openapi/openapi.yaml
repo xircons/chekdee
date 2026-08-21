@@ -1,8 +1,8 @@
 openapi: 3.0.3
 info:
-  title: Checkdee API
+  title: Chekdee API
   description: >
-    Employee attendance API for Checkdee โดย turnPRO.
+    Employee attendance API for Chekdee โดย turnPRO.
     This spec is the shared contract between the Go backend and the
     generated frontend client — see design.md and CONTRIBUTING.md for
     project-wide conventions.
@@ -463,6 +463,31 @@ paths:
         "401":
           description: Missing, invalid, or revoked device token
 
+  /kiosk/roster-stats:
+    get:
+      operationId: getKioskRosterStats
+      summary: >
+        Today's org-wide attendance counts, aggregate only -- no employee
+        names, ids, or per-person status. Device-token authenticated (query
+        param), same as /kiosk/qr-token -- deliberately narrower than the
+        admin-only GET /reports/daily-log, since this backs the public
+        lobby display.
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Today's aggregate roster counts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KioskRosterStats"
+        "401":
+          description: Missing, invalid, or revoked device token
+
   /attendance/check-in:
     post:
       operationId: checkIn
@@ -556,6 +581,27 @@ paths:
           description: Caller is not admin/supervisor/system_owner
         "404":
           description: Attendance record not found
+
+  /attendance/me/today:
+    get:
+      operationId: getMyTodayAttendance
+      summary: >
+        The caller's own attendance record for today (Asia/Bangkok), or null
+        if they haven't checked in yet. Backs the employee home page's
+        "already checked in?" status on page load.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Today's attendance record, or null
+          content:
+            application/json:
+              schema:
+                nullable: true
+                allOf:
+                  - $ref: "#/components/schemas/AttendanceRecord"
+        "401":
+          description: Missing or invalid access token
 
   /reports/monthly:
     get:
@@ -1327,6 +1373,21 @@ components:
           format: date-time
         device_name:
           type: string
+
+    KioskRosterStats:
+      type: object
+      required: [total_active, checked_in, late, absent, on_leave]
+      properties:
+        total_active:
+          type: integer
+        checked_in:
+          type: integer
+        late:
+          type: integer
+        absent:
+          type: integer
+        on_leave:
+          type: integer
 
     CheckInRequest:
       type: object
