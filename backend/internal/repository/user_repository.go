@@ -211,14 +211,14 @@ func (r *UserRepository) List(ctx context.Context, filter domain.EmployeeListFil
 
 // Update edits profile fields only — see the interface doc comment for why
 // role/offboarding are separate methods.
-func (r *UserRepository) Update(ctx context.Context, id string, firstName, lastName, teamID, studentID, phoneNumber *string) (*domain.User, error) {
+func (r *UserRepository) Update(ctx context.Context, id string, firstName, lastName, teamID, studentGen, studentID, phoneNumber *string) (*domain.User, error) {
 	row := r.pool.QueryRow(ctx, `
 		UPDATE users
 		SET first_name = $2, last_name = $3, team_id = $4::uuid,
-		    student_id = $5, phone_number = $6, updated_at = now()
+		    student_gen = $5, student_id = $6, phone_number = $7, updated_at = now()
 		WHERE id = $1
 		RETURNING `+userColumns,
-		id, firstName, lastName, teamID, studentID, phoneNumber,
+		id, firstName, lastName, teamID, studentGen, studentID, phoneNumber,
 	)
 	u, err := scanUser(row)
 	if errors.Is(err, pgx.ErrNoRows) {

@@ -48,16 +48,16 @@ type lineAuthorizeResponse struct {
 func (h *AuthHandler) LineAuthorize(c echo.Context) error {
 	redirectURI := c.QueryParam("redirect_uri")
 	if redirectURI == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "redirect_uri is required")
+		return echo.NewHTTPError(http.StatusBadRequest, "ต้องระบุ redirect_uri")
 	}
 
 	state, err := randomToken()
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to start login")
+		return echo.NewHTTPError(http.StatusInternalServerError, "เริ่มกระบวนการเข้าสู่ระบบไม่สำเร็จ")
 	}
 	nonce, err := randomToken()
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to start login")
+		return echo.NewHTTPError(http.StatusInternalServerError, "เริ่มกระบวนการเข้าสู่ระบบไม่สำเร็จ")
 	}
 
 	setOAuthCookie(c, stateCookieName, state)
@@ -103,10 +103,10 @@ func toUserView(u *domain.User) userView {
 func (h *AuthHandler) LineLogin(c echo.Context) error {
 	var req lineLoginRequest
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+		return echo.NewHTTPError(http.StatusBadRequest, "ข้อมูลคำขอไม่ถูกต้อง")
 	}
 	if req.Code == "" || req.RedirectURI == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "code and redirect_uri are required")
+		return echo.NewHTTPError(http.StatusBadRequest, "ต้องระบุ code และ redirect_uri")
 	}
 
 	// Bind the callback to the attempt started by LineAuthorize: the state in
@@ -114,11 +114,11 @@ func (h *AuthHandler) LineLogin(c echo.Context) error {
 	// id_token is verified against.
 	stateCookie, err := c.Cookie(stateCookieName)
 	if err != nil || stateCookie.Value == "" || req.State == "" || req.State != stateCookie.Value {
-		return echo.NewHTTPError(http.StatusUnauthorized, "invalid login state")
+		return echo.NewHTTPError(http.StatusUnauthorized, "สถานะการเข้าสู่ระบบไม่ถูกต้อง")
 	}
 	nonceCookie, err := c.Cookie(nonceCookieName)
 	if err != nil || nonceCookie.Value == "" {
-		return echo.NewHTTPError(http.StatusUnauthorized, "invalid login state")
+		return echo.NewHTTPError(http.StatusUnauthorized, "สถานะการเข้าสู่ระบบไม่ถูกต้อง")
 	}
 	clearOAuthCookie(c, stateCookieName)
 	clearOAuthCookie(c, nonceCookieName)
@@ -126,9 +126,9 @@ func (h *AuthHandler) LineLogin(c echo.Context) error {
 	user, tokens, err := h.auth.LoginWithLine(c.Request().Context(), req.Code, req.RedirectURI, nonceCookie.Value, c.Request().UserAgent(), c.RealIP())
 	if err != nil {
 		if errors.Is(err, usecase.ErrAccountDeactivated) {
-			return echo.NewHTTPError(http.StatusForbidden, "account deactivated")
+			return echo.NewHTTPError(http.StatusForbidden, "บัญชีถูกระงับการใช้งาน")
 		}
-		return echo.NewHTTPError(http.StatusUnauthorized, "line login failed")
+		return echo.NewHTTPError(http.StatusUnauthorized, "เข้าสู่ระบบด้วย LINE ไม่สำเร็จ")
 	}
 
 	setRefreshCookie(c, tokens.RefreshToken)
@@ -150,18 +150,18 @@ type passwordLoginRequest struct {
 func (h *AuthHandler) PasswordLogin(c echo.Context) error {
 	var req passwordLoginRequest
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+		return echo.NewHTTPError(http.StatusBadRequest, "ข้อมูลคำขอไม่ถูกต้อง")
 	}
 	if req.Username == "" || req.Password == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "username and password are required")
+		return echo.NewHTTPError(http.StatusBadRequest, "ต้องระบุชื่อผู้ใช้และรหัสผ่าน")
 	}
 
 	user, tokens, err := h.auth.LoginWithPassword(c.Request().Context(), req.Username, req.Password, c.Request().UserAgent(), c.RealIP())
 	if err != nil {
 		if errors.Is(err, usecase.ErrAccountDeactivated) {
-			return echo.NewHTTPError(http.StatusForbidden, "account deactivated")
+			return echo.NewHTTPError(http.StatusForbidden, "บัญชีถูกระงับการใช้งาน")
 		}
-		return echo.NewHTTPError(http.StatusUnauthorized, "invalid username or password")
+		return echo.NewHTTPError(http.StatusUnauthorized, "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง")
 	}
 
 	setRefreshCookie(c, tokens.RefreshToken)
@@ -176,13 +176,13 @@ func (h *AuthHandler) PasswordLogin(c echo.Context) error {
 func (h *AuthHandler) Refresh(c echo.Context) error {
 	cookie, err := c.Cookie(refreshCookieName)
 	if err != nil || cookie.Value == "" {
-		return echo.NewHTTPError(http.StatusUnauthorized, "missing refresh token")
+		return echo.NewHTTPError(http.StatusUnauthorized, "ไม่พบ refresh token")
 	}
 
 	tokens, err := h.auth.Refresh(c.Request().Context(), cookie.Value, c.Request().UserAgent(), c.RealIP())
 	if err != nil {
 		clearRefreshCookie(c)
-		return echo.NewHTTPError(http.StatusUnauthorized, "invalid refresh token")
+		return echo.NewHTTPError(http.StatusUnauthorized, "refresh token ไม่ถูกต้อง")
 	}
 
 	setRefreshCookie(c, tokens.RefreshToken)
@@ -217,10 +217,10 @@ type completeRegistrationRequest struct {
 func (h *AuthHandler) CompleteRegistration(c echo.Context) error {
 	var req completeRegistrationRequest
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+		return echo.NewHTTPError(http.StatusBadRequest, "ข้อมูลคำขอไม่ถูกต้อง")
 	}
 	if req.FirstName == "" || req.LastName == "" || req.StudentGen == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "first_name, last_name, and student_gen are required")
+		return echo.NewHTTPError(http.StatusBadRequest, "ต้องระบุชื่อ นามสกุล และรุ่นนักศึกษา")
 	}
 
 	var studentID, phoneNumber *string
@@ -233,7 +233,7 @@ func (h *AuthHandler) CompleteRegistration(c echo.Context) error {
 
 	user, err := h.auth.CompleteRegistration(c.Request().Context(), userIDFromContext(c), req.FirstName, req.LastName, req.StudentGen, studentID, phoneNumber)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to complete registration")
+		return echo.NewHTTPError(http.StatusInternalServerError, "ลงทะเบียนไม่สำเร็จ")
 	}
 
 	return c.JSON(http.StatusOK, toUserView(user))
@@ -243,7 +243,7 @@ func (h *AuthHandler) CompleteRegistration(c echo.Context) error {
 func (h *AuthHandler) Me(c echo.Context) error {
 	user, err := h.auth.Me(c.Request().Context(), userIDFromContext(c))
 	if err != nil {
-		return echo.NewHTTPError(http.StatusNotFound, "user not found")
+		return echo.NewHTTPError(http.StatusNotFound, "ไม่พบผู้ใช้งาน")
 	}
 	return c.JSON(http.StatusOK, toUserView(user))
 }

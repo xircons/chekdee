@@ -107,12 +107,12 @@ func queryInt(c echo.Context, name string) int {
 func (h *EmployeeHandler) List(c echo.Context) error {
 	teamID := queryStringPtr(c, "team_id")
 	if teamID != nil && !uuidPattern.MatchString(*teamID) {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid team_id")
+		return echo.NewHTTPError(http.StatusBadRequest, "team_id ไม่ถูกต้อง")
 	}
 
 	status := queryStringPtr(c, "status")
 	if status != nil && *status != "active" && *status != "offboarded" {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid status, expected active or offboarded")
+		return echo.NewHTTPError(http.StatusBadRequest, "สถานะไม่ถูกต้อง ต้องเป็น active หรือ offboarded")
 	}
 
 	filter := domain.EmployeeListFilter{
@@ -129,7 +129,7 @@ func (h *EmployeeHandler) List(c echo.Context) error {
 
 	rows, total, err := h.employees.List(c.Request().Context(), filter)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load employees")
+		return echo.NewHTTPError(http.StatusInternalServerError, "โหลดรายชื่อพนักงานไม่สำเร็จ")
 	}
 	return c.JSON(http.StatusOK, employeeListResponse{Employees: toEmployeeViews(rows), Total: total})
 }
@@ -138,10 +138,10 @@ func (h *EmployeeHandler) List(c echo.Context) error {
 func (h *EmployeeHandler) Get(c echo.Context) error {
 	u, err := h.employees.GetByID(c.Request().Context(), c.Param("id"))
 	if errors.Is(err, domain.ErrUserNotFound) {
-		return echo.NewHTTPError(http.StatusNotFound, "employee not found")
+		return echo.NewHTTPError(http.StatusNotFound, "ไม่พบพนักงาน")
 	}
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load employee")
+		return echo.NewHTTPError(http.StatusInternalServerError, "โหลดข้อมูลพนักงานไม่สำเร็จ")
 	}
 	return c.JSON(http.StatusOK, toEmployeeView(u))
 }
@@ -150,6 +150,7 @@ type updateEmployeeRequest struct {
 	FirstName   string  `json:"first_name"`
 	LastName    string  `json:"last_name"`
 	TeamID      *string `json:"team_id"`
+	StudentGen  *string `json:"student_gen"`
 	StudentID   *string `json:"student_id"`
 	PhoneNumber *string `json:"phone_number"`
 }
@@ -158,18 +159,18 @@ type updateEmployeeRequest struct {
 func (h *EmployeeHandler) Update(c echo.Context) error {
 	var req updateEmployeeRequest
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+		return echo.NewHTTPError(http.StatusBadRequest, "ข้อมูลคำขอไม่ถูกต้อง")
 	}
 	if req.FirstName == "" || req.LastName == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "first_name and last_name are required")
+		return echo.NewHTTPError(http.StatusBadRequest, "ต้องระบุชื่อและนามสกุล")
 	}
 
-	updated, err := h.employees.Update(c.Request().Context(), userIDFromContext(c), c.Param("id"), &req.FirstName, &req.LastName, req.TeamID, req.StudentID, req.PhoneNumber)
+	updated, err := h.employees.Update(c.Request().Context(), userIDFromContext(c), c.Param("id"), &req.FirstName, &req.LastName, req.TeamID, req.StudentGen, req.StudentID, req.PhoneNumber)
 	if errors.Is(err, domain.ErrUserNotFound) {
-		return echo.NewHTTPError(http.StatusNotFound, "employee not found")
+		return echo.NewHTTPError(http.StatusNotFound, "ไม่พบพนักงาน")
 	}
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to update employee")
+		return echo.NewHTTPError(http.StatusInternalServerError, "แก้ไขข้อมูลพนักงานไม่สำเร็จ")
 	}
 	return c.JSON(http.StatusOK, toEmployeeView(updated))
 }
@@ -195,25 +196,25 @@ func isKnownRole(role string) bool {
 func (h *EmployeeHandler) UpdateRole(c echo.Context) error {
 	var req updateEmployeeRoleRequest
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+		return echo.NewHTTPError(http.StatusBadRequest, "ข้อมูลคำขอไม่ถูกต้อง")
 	}
 	if req.Role == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "role is required")
+		return echo.NewHTTPError(http.StatusBadRequest, "ต้องระบุตำแหน่ง")
 	}
 	if !isKnownRole(req.Role) {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid role")
+		return echo.NewHTTPError(http.StatusBadRequest, "ตำแหน่งไม่ถูกต้อง")
 	}
 
 	updated, err := h.employees.UpdateRole(c.Request().Context(), userIDFromContext(c), c.Param("id"), domain.Role(req.Role))
 	switch {
 	case errors.Is(err, domain.ErrCannotModifySystemOwnerRole):
-		return echo.NewHTTPError(http.StatusForbidden, "cannot change role to or from system_owner")
+		return echo.NewHTTPError(http.StatusForbidden, "ไม่สามารถเปลี่ยนตำแหน่งเป็นหรือจาก system_owner ได้")
 	case errors.Is(err, domain.ErrInsufficientRole):
-		return echo.NewHTTPError(http.StatusForbidden, "insufficient role to make this change")
+		return echo.NewHTTPError(http.StatusForbidden, "สิทธิ์ไม่เพียงพอสำหรับการเปลี่ยนแปลงนี้")
 	case errors.Is(err, domain.ErrUserNotFound):
-		return echo.NewHTTPError(http.StatusNotFound, "employee not found")
+		return echo.NewHTTPError(http.StatusNotFound, "ไม่พบพนักงาน")
 	case err != nil:
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to update role")
+		return echo.NewHTTPError(http.StatusInternalServerError, "เปลี่ยนตำแหน่งไม่สำเร็จ")
 	}
 	return c.JSON(http.StatusOK, toEmployeeView(updated))
 }
@@ -226,7 +227,7 @@ type offboardEmployeeRequest struct {
 func (h *EmployeeHandler) Offboard(c echo.Context) error {
 	var req offboardEmployeeRequest
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+		return echo.NewHTTPError(http.StatusBadRequest, "ข้อมูลคำขอไม่ถูกต้อง")
 	}
 
 	var reason *string
@@ -237,15 +238,15 @@ func (h *EmployeeHandler) Offboard(c echo.Context) error {
 	offboarded, err := h.employees.Offboard(c.Request().Context(), userIDFromContext(c), c.Param("id"), reason)
 	switch {
 	case errors.Is(err, domain.ErrCannotOffboardSystemOwner):
-		return echo.NewHTTPError(http.StatusForbidden, "cannot offboard system_owner")
+		return echo.NewHTTPError(http.StatusForbidden, "ไม่สามารถให้ system_owner พ้นสภาพได้")
 	case errors.Is(err, domain.ErrInsufficientRole):
-		return echo.NewHTTPError(http.StatusForbidden, "insufficient role to offboard this employee")
+		return echo.NewHTTPError(http.StatusForbidden, "สิทธิ์ไม่เพียงพอสำหรับการให้พนักงานคนนี้พ้นสภาพ")
 	case errors.Is(err, domain.ErrUserNotFound):
-		return echo.NewHTTPError(http.StatusNotFound, "employee not found")
+		return echo.NewHTTPError(http.StatusNotFound, "ไม่พบพนักงาน")
 	case errors.Is(err, domain.ErrUserAlreadyOffboarded):
-		return echo.NewHTTPError(http.StatusConflict, "employee already offboarded")
+		return echo.NewHTTPError(http.StatusConflict, "พนักงานพ้นสภาพไปแล้ว")
 	case err != nil:
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to offboard employee")
+		return echo.NewHTTPError(http.StatusInternalServerError, "ให้พนักงานพ้นสภาพไม่สำเร็จ")
 	}
 	return c.JSON(http.StatusOK, toEmployeeView(offboarded))
 }

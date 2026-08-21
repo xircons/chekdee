@@ -46,7 +46,7 @@ func (h *NotificationHandler) Me(c echo.Context) error {
 	unreadOnly := c.QueryParam("unread") == "true"
 	rows, err := h.notifications.ListForRecipient(c.Request().Context(), userIDFromContext(c), unreadOnly)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load notifications")
+		return echo.NewHTTPError(http.StatusInternalServerError, "โหลดการแจ้งเตือนไม่สำเร็จ")
 	}
 	out := make([]notificationView, 0, len(rows))
 	for _, n := range rows {
@@ -60,10 +60,10 @@ func (h *NotificationHandler) Me(c echo.Context) error {
 func (h *NotificationHandler) MarkRead(c echo.Context) error {
 	err := h.notifications.MarkRead(c.Request().Context(), c.Param("id"), userIDFromContext(c))
 	if errors.Is(err, domain.ErrNotificationNotFound) {
-		return echo.NewHTTPError(http.StatusNotFound, "notification not found")
+		return echo.NewHTTPError(http.StatusNotFound, "ไม่พบการแจ้งเตือน")
 	}
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to mark notification read")
+		return echo.NewHTTPError(http.StatusInternalServerError, "ทำเครื่องหมายว่าอ่านแล้วไม่สำเร็จ")
 	}
 	return c.NoContent(http.StatusNoContent)
 }

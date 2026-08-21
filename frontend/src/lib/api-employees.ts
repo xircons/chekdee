@@ -67,7 +67,7 @@ function toEmployee(r: EmployeeResponse): Employee {
 async function parseOrThrow<T>(res: Response): Promise<T> {
   if (!res.ok) {
     const body = await res.json().catch(() => null);
-    throw new Error(body?.message ?? `Request failed (${res.status})`);
+    throw new Error(body?.message ?? `คำขอไม่สำเร็จ (${res.status})`);
   }
   return res.json() as Promise<T>;
 }
@@ -140,17 +140,16 @@ export async function listEmployees(
   return { employees: body.employees.map(toEmployee), total: body.total };
 }
 
-// PATCH /employees/:id — profile fields only. The backend does not accept
-// student_gen (set only once, during the employee's own LINE registration)
-// here; see UpdateEmployeeRequest in openapi.yaml. student_id/phone_number
-// are a full replace like team_id — a null clears the stored value, it
-// doesn't mean "leave unchanged".
+// PATCH /employees/:id — profile fields only. student_gen/student_id/
+// phone_number are a full replace like team_id — a null clears the stored
+// value, it doesn't mean "leave unchanged".
 export async function updateEmployee(
   id: string,
   input: {
     firstName: string;
     lastName: string;
     teamId: string | null;
+    studentGen: string | null;
     studentId: string | null;
     phoneNumber: string | null;
   }
@@ -162,6 +161,7 @@ export async function updateEmployee(
       first_name: input.firstName,
       last_name: input.lastName,
       team_id: input.teamId,
+      student_gen: input.studentGen,
       student_id: input.studentId,
       phone_number: input.phoneNumber,
     }),

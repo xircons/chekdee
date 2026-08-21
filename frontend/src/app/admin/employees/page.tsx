@@ -58,6 +58,10 @@ import { getMonthlyReport, type MonthlyReportRow } from "@/lib/api-reports";
 import { ROLE_LABEL_TH, type Role } from "@/lib/mock-data";
 
 const directoryRoles: EmployeeRole[] = ["employee", "supervisor", "admin"];
+// student_gen is a generation ordinal (which admission cohort), not a
+// calendar year — these are the only valid values, per the backend (see
+// STUDENT_GENERATIONS in frontend/src/app/register/page.tsx).
+const STUDENT_GENERATIONS = ["6", "7", "8", "9"] as const;
 const PAGE_SIZE = 20;
 // How long to wait after the last keystroke before sending a search request
 // — the search box drives a real server-side query now (GET /employees's
@@ -76,6 +80,7 @@ const employeeSchema = z.object({
   lastName: z.string().trim().min(1, "กรุณากรอกนามสกุล"),
   role: z.enum(["employee", "supervisor", "admin"] as const),
   // Optional, matching the backend keeping them optional.
+  studentGen: z.enum(STUDENT_GENERATIONS).optional(),
   studentId: z.string().trim().optional(),
   phoneNumber: z.string().trim().optional(),
 });
@@ -197,6 +202,32 @@ function EmployeeFormFields({
                 {directoryRoles.map((role) => (
                   <SelectItem key={role} value={role}>
                     {ROLE_LABEL_TH[role]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        />
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        {/* No htmlFor — SelectTrigger isn't a native input, same reason as
+            the ตำแหน่ง Select above. */}
+        <Label>รุ่นนักศึกษา</Label>
+        <Controller
+          name="studentGen"
+          control={control}
+          render={({ field }) => (
+            <Select value={field.value} onValueChange={field.onChange} modal={false}>
+              <SelectTrigger id="studentGen" className={`w-full ${SELECT_TRIGGER_CLASS}`}>
+                <SelectValue placeholder="เลือกรุ่นนักศึกษา">
+                  {(value: string | null) => value ?? "เลือกรุ่นนักศึกษา"}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent alignItemWithTrigger={false} sideOffset={4}>
+                {STUDENT_GENERATIONS.map((gen) => (
+                  <SelectItem key={gen} value={gen}>
+                    {gen}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -360,6 +391,7 @@ export default function EmployeesPage() {
         firstName: values.firstName,
         lastName: values.lastName,
         teamId: editingEmployee.teamId,
+        studentGen: values.studentGen ?? null,
         studentId: values.studentId || null,
         phoneNumber: values.phoneNumber || null,
       });
@@ -606,6 +638,11 @@ export default function EmployeesPage() {
                 firstName: editingEmployee.firstName ?? "",
                 lastName: editingEmployee.lastName ?? "",
                 role: editingEmployee.role === "system_owner" ? "employee" : editingEmployee.role,
+                studentGen: STUDENT_GENERATIONS.includes(
+                  editingEmployee.studentGen as (typeof STUDENT_GENERATIONS)[number]
+                )
+                  ? (editingEmployee.studentGen as (typeof STUDENT_GENERATIONS)[number])
+                  : undefined,
                 studentId: editingEmployee.studentId ?? "",
                 phoneNumber: editingEmployee.phoneNumber ?? "",
               }}

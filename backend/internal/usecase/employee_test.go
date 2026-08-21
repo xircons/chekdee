@@ -65,14 +65,14 @@ func (f *fakeEmployeeRepo) List(_ context.Context, filter domain.EmployeeListFil
 	}
 	return out, len(out), nil
 }
-func (f *fakeEmployeeRepo) Update(_ context.Context, id string, firstName, lastName, teamID, studentID, phoneNumber *string) (*domain.User, error) {
+func (f *fakeEmployeeRepo) Update(_ context.Context, id string, firstName, lastName, teamID, studentGen, studentID, phoneNumber *string) (*domain.User, error) {
 	f.updateCalls++
 	u, ok := f.users[id]
 	if !ok {
 		return nil, domain.ErrUserNotFound
 	}
 	u.FirstName, u.LastName, u.TeamID = firstName, lastName, teamID
-	u.StudentID, u.PhoneNumber = studentID, phoneNumber
+	u.StudentGen, u.StudentID, u.PhoneNumber = studentGen, studentID, phoneNumber
 	return u, nil
 }
 func (f *fakeEmployeeRepo) UpdateRole(_ context.Context, id string, role domain.Role, auditEntry *domain.AdminAuditLog) (*domain.User, error) {

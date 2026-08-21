@@ -138,7 +138,7 @@ func TestUserRepository_List_FiltersAndPaginates(t *testing.T) {
 	})
 
 	firstName, lastName := marker+" Alice", "Employee"
-	_, err = repo.Update(ctx, alice.ID, &firstName, &lastName, &teamID, nil, nil)
+	_, err = repo.Update(ctx, alice.ID, &firstName, &lastName, &teamID, nil, nil, nil)
 	require.NoError(t, err)
 
 	// search: both rows share the marker in first_name.
@@ -209,12 +209,13 @@ func TestUserRepository_Update(t *testing.T) {
 	})
 
 	first, last := "New", "Name"
-	studentID, phoneNumber := "672110160", "081-234-5678"
-	updated, err := repo.Update(ctx, created.ID, &first, &last, nil, &studentID, &phoneNumber)
+	studentGen, studentID, phoneNumber := "7", "672110160", "081-234-5678"
+	updated, err := repo.Update(ctx, created.ID, &first, &last, nil, &studentGen, &studentID, &phoneNumber)
 	require.NoError(t, err)
 	require.Equal(t, "New", *updated.FirstName)
 	require.Equal(t, "Name", *updated.LastName)
 	require.Nil(t, updated.TeamID)
+	require.Equal(t, "7", *updated.StudentGen)
 	require.Equal(t, "672110160", *updated.StudentID)
 	require.Equal(t, "081-234-5678", *updated.PhoneNumber)
 	// Role/offboarding must be untouched by Update — see the interface
@@ -227,13 +228,15 @@ func TestUserRepository_Update(t *testing.T) {
 	// RETURNING clause.
 	fetched, err := repo.GetByID(ctx, created.ID)
 	require.NoError(t, err)
+	require.Equal(t, "7", *fetched.StudentGen)
 	require.Equal(t, "672110160", *fetched.StudentID)
 	require.Equal(t, "081-234-5678", *fetched.PhoneNumber)
 
 	// nil clears them — Update is a full replace of these fields, not a
 	// partial patch (same contract as team_id above).
-	cleared, err := repo.Update(ctx, created.ID, &first, &last, nil, nil, nil)
+	cleared, err := repo.Update(ctx, created.ID, &first, &last, nil, nil, nil, nil)
 	require.NoError(t, err)
+	require.Nil(t, cleared.StudentGen)
 	require.Nil(t, cleared.StudentID)
 	require.Nil(t, cleared.PhoneNumber)
 }
@@ -247,7 +250,7 @@ func TestUserRepository_Update_NotFound(t *testing.T) {
 
 	repo := repository.NewUserRepository(pool)
 	first, last := "X", "Y"
-	_, err = repo.Update(context.Background(), "00000000-0000-0000-0000-000000000000", &first, &last, nil, nil, nil)
+	_, err = repo.Update(context.Background(), "00000000-0000-0000-0000-000000000000", &first, &last, nil, nil, nil, nil)
 	require.ErrorIs(t, err, domain.ErrUserNotFound)
 }
 

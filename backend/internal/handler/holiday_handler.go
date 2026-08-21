@@ -42,16 +42,16 @@ func toHolidayView(h *domain.Holiday) holidayView {
 func (h *HolidayHandler) List(c echo.Context) error {
 	from, err := time.Parse(dateLayout, c.QueryParam("from"))
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid or missing from, expected YYYY-MM-DD")
+		return echo.NewHTTPError(http.StatusBadRequest, "from ไม่ถูกต้องหรือไม่ได้ระบุ รูปแบบที่ถูกต้องคือ YYYY-MM-DD")
 	}
 	to, err := time.Parse(dateLayout, c.QueryParam("to"))
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid or missing to, expected YYYY-MM-DD")
+		return echo.NewHTTPError(http.StatusBadRequest, "to ไม่ถูกต้องหรือไม่ได้ระบุ รูปแบบที่ถูกต้องคือ YYYY-MM-DD")
 	}
 
 	holidays, err := h.holidays.ListInRange(c.Request().Context(), from, to)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load holidays")
+		return echo.NewHTTPError(http.StatusInternalServerError, "โหลดวันหยุดไม่สำเร็จ")
 	}
 
 	out := make([]holidayView, 0, len(holidays))
@@ -72,19 +72,19 @@ type createHolidayRequest struct {
 func (h *HolidayHandler) Create(c echo.Context) error {
 	var req createHolidayRequest
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+		return echo.NewHTTPError(http.StatusBadRequest, "ข้อมูลคำขอไม่ถูกต้อง")
 	}
 	if req.Name == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "name is required")
+		return echo.NewHTTPError(http.StatusBadRequest, "ต้องระบุชื่อ")
 	}
 	date, err := time.Parse(dateLayout, req.Date)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid date, expected YYYY-MM-DD")
+		return echo.NewHTTPError(http.StatusBadRequest, "วันที่ไม่ถูกต้อง รูปแบบที่ถูกต้องคือ YYYY-MM-DD")
 	}
 
 	created, err := h.holidays.CreateManual(c.Request().Context(), date, req.Name, req.LocalName, userIDFromContext(c))
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "failed to create holiday")
+		return echo.NewHTTPError(http.StatusBadRequest, "สร้างวันหยุดไม่สำเร็จ")
 	}
 	return c.JSON(http.StatusCreated, toHolidayView(created))
 }
@@ -99,18 +99,18 @@ type updateHolidayRequest struct {
 func (h *HolidayHandler) Update(c echo.Context) error {
 	var req updateHolidayRequest
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+		return echo.NewHTTPError(http.StatusBadRequest, "ข้อมูลคำขอไม่ถูกต้อง")
 	}
 	if req.Name == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "name is required")
+		return echo.NewHTTPError(http.StatusBadRequest, "ต้องระบุชื่อ")
 	}
 
 	updated, err := h.holidays.Update(c.Request().Context(), c.Param("id"), req.Name, req.LocalName, userIDFromContext(c))
 	if errors.Is(err, domain.ErrHolidayNotFound) {
-		return echo.NewHTTPError(http.StatusNotFound, "holiday not found")
+		return echo.NewHTTPError(http.StatusNotFound, "ไม่พบวันหยุด")
 	}
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to update holiday")
+		return echo.NewHTTPError(http.StatusInternalServerError, "แก้ไขวันหยุดไม่สำเร็จ")
 	}
 	return c.JSON(http.StatusOK, toHolidayView(updated))
 }
@@ -119,7 +119,7 @@ func (h *HolidayHandler) Update(c echo.Context) error {
 // rule that applies to users. Mounted behind RequireRole.
 func (h *HolidayHandler) Delete(c echo.Context) error {
 	if err := h.holidays.Delete(c.Request().Context(), c.Param("id")); err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to delete holiday")
+		return echo.NewHTTPError(http.StatusInternalServerError, "ลบวันหยุดไม่สำเร็จ")
 	}
 	return c.NoContent(http.StatusNoContent)
 }

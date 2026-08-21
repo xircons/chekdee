@@ -998,9 +998,10 @@ paths:
     patch:
       operationId: updateEmployee
       summary: >
-        Edit profile fields only (first_name, last_name, team_id). Role and
-        offboarding go through their own endpoints below — distinct, more
-        sensitive actions with their own audit-log entries.
+        Edit profile fields only (first_name, last_name, team_id,
+        student_gen, student_id, phone_number). Role and offboarding go
+        through their own endpoints below — distinct, more sensitive
+        actions with their own audit-log entries.
       security:
         - bearerAuth: []
       parameters:
@@ -1690,6 +1691,9 @@ components:
         last_name:
           type: string
         team_id:
+          type: string
+          nullable: true
+        student_gen:
           type: string
           nullable: true
         student_id:
