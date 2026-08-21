@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { GraduationCap, IdCard, LogOut, Phone } from "lucide-react";
+import { Briefcase, GraduationCap, IdCard, LogOut, Mail, Phone } from "lucide-react";
 
 import { EmployeeListRow } from "@/components/employee-list-row";
 import { EmployeePageHeader } from "@/components/employee-page-header";
@@ -23,7 +23,9 @@ export default function ProfilePage() {
   const router = useRouter();
 
   const fullName = [me.first_name, me.last_name].filter(Boolean).join(" ") || me.display_name || "—";
-  const hasDetails = Boolean(me.student_gen || me.student_id || me.phone_number);
+  const hasDetails = Boolean(
+    me.student_gen || me.student_id || me.phone_number || me.project || me.email
+  );
 
   return (
     <div className="flex w-full flex-1 flex-col">
@@ -58,6 +60,10 @@ export default function ProfilePage() {
               )}
               {me.phone_number && (
                 <EmployeeListRow icon={Phone} label="เบอร์โทรศัพท์" value={me.phone_number} />
+              )}
+              {me.email && <EmployeeListRow icon={Mail} label="อีเมล" value={me.email} />}
+              {me.project && (
+                <EmployeeListRow icon={Briefcase} label="โปรเจกต์ที่รับผิดชอบ" value={me.project} />
               )}
             </CardContent>
           </Card>

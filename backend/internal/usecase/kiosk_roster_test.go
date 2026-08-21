@@ -30,7 +30,7 @@ func (f *fakeUserRepoForKioskRoster) CreateEmployeeFromLine(context.Context, str
 func (f *fakeUserRepoForKioskRoster) UpdateLineProfile(context.Context, string, string, string) error {
 	return nil
 }
-func (f *fakeUserRepoForKioskRoster) CompleteRegistration(context.Context, string, string, string, string, *string, *string) (*domain.User, error) {
+func (f *fakeUserRepoForKioskRoster) CompleteRegistration(context.Context, string, string, string, string, *string, *string, *string, *string) (*domain.User, error) {
 	return nil, nil
 }
 func (f *fakeUserRepoForKioskRoster) CreateSystemOwner(context.Context, string, string) (*domain.User, error) {
@@ -42,7 +42,7 @@ func (f *fakeUserRepoForKioskRoster) ListActiveEmployees(context.Context) ([]*do
 func (f *fakeUserRepoForKioskRoster) List(context.Context, domain.EmployeeListFilter) ([]*domain.User, int, error) {
 	return nil, 0, nil
 }
-func (f *fakeUserRepoForKioskRoster) Update(context.Context, string, *string, *string, *string, *string, *string, *string) (*domain.User, error) {
+func (f *fakeUserRepoForKioskRoster) Update(context.Context, string, *string, *string, *string, *string, *string, *string, *string, *string) (*domain.User, error) {
 	return nil, nil
 }
 func (f *fakeUserRepoForKioskRoster) UpdateRole(context.Context, string, domain.Role, *domain.AdminAuditLog) (*domain.User, error) {

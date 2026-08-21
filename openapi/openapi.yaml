@@ -1303,6 +1303,13 @@ components:
         phone_number:
           type: string
           description: Optional, same reasoning as student_id.
+        project:
+          type: string
+          description: The project the employee is responsible for. Optional, same reasoning as student_id.
+        email:
+          type: string
+          format: email
+          description: Optional, same reasoning as student_id.
 
     User:
       type: object
@@ -1326,6 +1333,12 @@ components:
           type: string
           nullable: true
         phone_number:
+          type: string
+          nullable: true
+        project:
+          type: string
+          nullable: true
+        email:
           type: string
           nullable: true
         display_name:
@@ -1769,6 +1782,12 @@ components:
         phone_number:
           type: string
           nullable: true
+        project:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
         line_display_name:
           type: string
           nullable: true
@@ -1820,6 +1839,12 @@ components:
           type: string
           nullable: true
         phone_number:
+          type: string
+          nullable: true
+        project:
+          type: string
+          nullable: true
+        email:
           type: string
           nullable: true
 

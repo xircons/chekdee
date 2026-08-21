@@ -16,6 +16,8 @@ export type Me = {
   student_gen: string | null;
   student_id: string | null;
   phone_number: string | null;
+  project: string | null;
+  email: string | null;
   display_name: string | null;
   picture_url: string | null;
   is_registered: boolean;

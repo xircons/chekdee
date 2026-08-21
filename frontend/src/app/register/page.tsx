@@ -34,6 +34,8 @@ const registrationSchema = z.object({
   // completeRegistrationRequest on the backend).
   student_id: z.string().trim().optional(),
   phone_number: z.string().trim().optional(),
+  project: z.string().trim().optional(),
+  email: z.union([z.string().trim().email("อีเมลไม่ถูกต้อง"), z.literal("")]).optional(),
 });
 
 type RegistrationForm = z.infer<typeof registrationSchema>;
@@ -144,6 +146,19 @@ export default function RegisterPage() {
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="phone_number">เบอร์โทร</Label>
               <Input id="phone_number" className={FIELD_CLASS} {...register("phone_number")} />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="email">อีเมล</Label>
+              <Input id="email" type="email" className={FIELD_CLASS} {...register("email")} />
+              {errors.email && (
+                <p className="text-xs text-danger-foreground">{errors.email.message}</p>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="project">โปรเจกต์ที่รับผิดชอบ</Label>
+              <Input id="project" className={FIELD_CLASS} {...register("project")} />
             </div>
 
             {submitError && <p className="text-xs text-danger-foreground">{submitError}</p>}

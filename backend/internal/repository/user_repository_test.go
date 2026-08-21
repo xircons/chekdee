@@ -50,7 +50,7 @@ func TestUserRepository_CreateFetchRegister(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "Updated Name", *updated.LineDisplayName)
 
-	registered, err := repo.CompleteRegistration(ctx, created.ID, "First", "Last", "68", nil, nil)
+	registered, err := repo.CompleteRegistration(ctx, created.ID, "First", "Last", "68", nil, nil, nil, nil)
 	require.NoError(t, err)
 	require.True(t, registered.IsRegistered())
 	require.Equal(t, "First", *registered.FirstName)
@@ -58,6 +58,8 @@ func TestUserRepository_CreateFetchRegister(t *testing.T) {
 	require.Equal(t, "68", *registered.StudentGen)
 	require.Nil(t, registered.StudentID, "optional, not supplied")
 	require.Nil(t, registered.PhoneNumber, "optional, not supplied")
+	require.Nil(t, registered.Project, "optional, not supplied")
+	require.Nil(t, registered.Email, "optional, not supplied")
 }
 
 // TestUserRepository_CompleteRegistration_WithStudentIDAndPhoneNumber
@@ -82,15 +84,20 @@ func TestUserRepository_CompleteRegistration_WithStudentIDAndPhoneNumber(t *test
 	})
 
 	studentID, phoneNumber := "652110145", "082-345-6789"
-	registered, err := repo.CompleteRegistration(ctx, created.ID, "First", "Last", "68", &studentID, &phoneNumber)
+	project, email := "chekdee", "student@example.com"
+	registered, err := repo.CompleteRegistration(ctx, created.ID, "First", "Last", "68", &studentID, &phoneNumber, &project, &email)
 	require.NoError(t, err)
 	require.Equal(t, "652110145", *registered.StudentID)
 	require.Equal(t, "082-345-6789", *registered.PhoneNumber)
+	require.Equal(t, "chekdee", *registered.Project)
+	require.Equal(t, "student@example.com", *registered.Email)
 
 	fetched, err := repo.GetByID(ctx, created.ID)
 	require.NoError(t, err)
 	require.Equal(t, "652110145", *fetched.StudentID)
 	require.Equal(t, "082-345-6789", *fetched.PhoneNumber)
+	require.Equal(t, "chekdee", *fetched.Project)
+	require.Equal(t, "student@example.com", *fetched.Email)
 }
 
 func TestUserRepository_GetByLineUserID_NotFound(t *testing.T) {
@@ -138,7 +145,7 @@ func TestUserRepository_List_FiltersAndPaginates(t *testing.T) {
 	})
 
 	firstName, lastName := marker+" Alice", "Employee"
-	_, err = repo.Update(ctx, alice.ID, &firstName, &lastName, &teamID, nil, nil, nil)
+	_, err = repo.Update(ctx, alice.ID, &firstName, &lastName, &teamID, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 
 	// search: both rows share the marker in first_name.
@@ -210,7 +217,8 @@ func TestUserRepository_Update(t *testing.T) {
 
 	first, last := "New", "Name"
 	studentGen, studentID, phoneNumber := "7", "672110160", "081-234-5678"
-	updated, err := repo.Update(ctx, created.ID, &first, &last, nil, &studentGen, &studentID, &phoneNumber)
+	project, email := "chekdee", "student@example.com"
+	updated, err := repo.Update(ctx, created.ID, &first, &last, nil, &studentGen, &studentID, &phoneNumber, &project, &email)
 	require.NoError(t, err)
 	require.Equal(t, "New", *updated.FirstName)
 	require.Equal(t, "Name", *updated.LastName)
@@ -218,6 +226,8 @@ func TestUserRepository_Update(t *testing.T) {
 	require.Equal(t, "7", *updated.StudentGen)
 	require.Equal(t, "672110160", *updated.StudentID)
 	require.Equal(t, "081-234-5678", *updated.PhoneNumber)
+	require.Equal(t, "chekdee", *updated.Project)
+	require.Equal(t, "student@example.com", *updated.Email)
 	// Role/offboarding must be untouched by Update — see the interface
 	// doc comment for why those are separate methods.
 	require.Equal(t, domain.RoleEmployee, updated.Role)
@@ -231,14 +241,18 @@ func TestUserRepository_Update(t *testing.T) {
 	require.Equal(t, "7", *fetched.StudentGen)
 	require.Equal(t, "672110160", *fetched.StudentID)
 	require.Equal(t, "081-234-5678", *fetched.PhoneNumber)
+	require.Equal(t, "chekdee", *fetched.Project)
+	require.Equal(t, "student@example.com", *fetched.Email)
 
 	// nil clears them — Update is a full replace of these fields, not a
 	// partial patch (same contract as team_id above).
-	cleared, err := repo.Update(ctx, created.ID, &first, &last, nil, nil, nil, nil)
+	cleared, err := repo.Update(ctx, created.ID, &first, &last, nil, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 	require.Nil(t, cleared.StudentGen)
 	require.Nil(t, cleared.StudentID)
 	require.Nil(t, cleared.PhoneNumber)
+	require.Nil(t, cleared.Project)
+	require.Nil(t, cleared.Email)
 }
 
 func TestUserRepository_Update_NotFound(t *testing.T) {
@@ -250,7 +264,7 @@ func TestUserRepository_Update_NotFound(t *testing.T) {
 
 	repo := repository.NewUserRepository(pool)
 	first, last := "X", "Y"
-	_, err = repo.Update(context.Background(), "00000000-0000-0000-0000-000000000000", &first, &last, nil, nil, nil, nil)
+	_, err = repo.Update(context.Background(), "00000000-0000-0000-0000-000000000000", &first, &last, nil, nil, nil, nil, nil, nil)
 	require.ErrorIs(t, err, domain.ErrUserNotFound)
 }
 

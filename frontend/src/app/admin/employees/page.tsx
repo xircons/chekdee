@@ -3,7 +3,17 @@
 import { useEffect, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ChevronLeft, ChevronRight, IdCard, Phone, Search, User, Users } from "lucide-react";
+import {
+  Briefcase,
+  ChevronLeft,
+  ChevronRight,
+  IdCard,
+  Mail,
+  Phone,
+  Search,
+  User,
+  Users,
+} from "lucide-react";
 import { z } from "zod";
 
 import { AdminDetailDialog, AdminDetailInfoBlock } from "@/components/admin-detail-dialog";
@@ -86,6 +96,8 @@ const employeeSchema = z.object({
   studentGen: z.union([z.enum(STUDENT_GENERATIONS), z.literal("")]).optional(),
   studentId: z.string().trim().optional(),
   phoneNumber: z.string().trim().optional(),
+  project: z.string().trim().optional(),
+  email: z.union([z.string().trim().email("อีเมลไม่ถูกต้อง"), z.literal("")]).optional(),
 });
 
 type EmployeeForm = z.infer<typeof employeeSchema>;
@@ -270,6 +282,39 @@ function EmployeeFormFields({
         </div>
       </div>
 
+      <div className="grid grid-cols-2 gap-3">
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="email" className="font-semibold">
+            อีเมล
+          </Label>
+          <div className="relative">
+            <Mail className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              id="email"
+              type="email"
+              placeholder="กรอกอีเมล"
+              className={ICON_INPUT_CLASS}
+              {...register("email")}
+            />
+          </div>
+          {errors.email && <p className="text-xs text-danger-foreground">{errors.email.message}</p>}
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="project" className="font-semibold">
+            โปรเจกต์ที่รับผิดชอบ
+          </Label>
+          <div className="relative">
+            <Briefcase className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              id="project"
+              placeholder="กรอกโปรเจกต์ที่รับผิดชอบ"
+              className={ICON_INPUT_CLASS}
+              {...register("project")}
+            />
+          </div>
+        </div>
+      </div>
+
       <DialogFooter>
         <Button type="button" variant="outline" className={ACTION_BUTTON_CLASS} onClick={onCancel}>
           ยกเลิก
@@ -397,6 +442,8 @@ export default function EmployeesPage() {
         studentGen: values.studentGen || null,
         studentId: values.studentId || null,
         phoneNumber: values.phoneNumber || null,
+        project: values.project || null,
+        email: values.email || null,
       });
       setEmployees((prev) => prev.map((e) => (e.id === profileUpdated.id ? profileUpdated : e)));
 
@@ -519,6 +566,7 @@ export default function EmployeesPage() {
                   <TableHead>รุ่นนักศึกษา</TableHead>
                   <TableHead>รหัสนักศึกษา</TableHead>
                   <TableHead>เบอร์โทร</TableHead>
+                  <TableHead>โปรเจกต์ที่รับผิดชอบ</TableHead>
                   <TableHead className="text-right">จัดการ</TableHead>
                 </TableRow>
               </TableHeader>
@@ -542,6 +590,7 @@ export default function EmployeesPage() {
                     <TableCell>{employee.studentGen ? `(${employee.studentGen})` : "—"}</TableCell>
                     <TableCell>{employee.studentId ?? "—"}</TableCell>
                     <TableCell>{employee.phoneNumber ?? "—"}</TableCell>
+                    <TableCell>{employee.project ?? "—"}</TableCell>
                     <TableCell className="text-right">
                       {employee.offboardedAt ? (
                         <span className="text-muted-foreground">—</span>
@@ -571,7 +620,7 @@ export default function EmployeesPage() {
                 ))}
                 {employees.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center text-muted-foreground">
+                    <TableCell colSpan={8} className="text-center text-muted-foreground">
                       ไม่พบพนักงานที่ตรงกับการค้นหา
                     </TableCell>
                   </TableRow>
@@ -652,6 +701,8 @@ export default function EmployeesPage() {
                   : "",
                 studentId: editingEmployee.studentId ?? "",
                 phoneNumber: editingEmployee.phoneNumber ?? "",
+                project: editingEmployee.project ?? "",
+                email: editingEmployee.email ?? "",
               }}
               onSubmit={handleSubmit}
               onCancel={() => setFormOpen(false)}
@@ -732,6 +783,14 @@ export default function EmployeesPage() {
                 <div className="flex items-center gap-1.5 text-foreground">
                   <Phone className="size-3.5 text-muted-foreground" />
                   {detailEmployee.phoneNumber ?? "ไม่มีข้อมูลเบอร์โทรศัพท์"}
+                </div>
+                <div className="flex items-center gap-1.5 text-foreground">
+                  <Mail className="size-3.5 text-muted-foreground" />
+                  {detailEmployee.email ?? "ไม่มีข้อมูลอีเมล"}
+                </div>
+                <div className="flex items-center gap-1.5 text-foreground">
+                  <Briefcase className="size-3.5 text-muted-foreground" />
+                  {detailEmployee.project ?? "ไม่มีข้อมูลโปรเจกต์ที่รับผิดชอบ"}
                 </div>
               </div>
             </div>

@@ -57,6 +57,8 @@ type User struct {
 	StudentGen  *string
 	StudentID   *string
 	PhoneNumber *string
+	Project     *string
+	Email       *string
 
 	RegistrationCompletedAt *time.Time
 
