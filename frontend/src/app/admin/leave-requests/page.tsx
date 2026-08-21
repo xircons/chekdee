@@ -3,11 +3,18 @@
 import { useEffect, useState } from "react";
 import { CalendarRange, Check, Eye, X } from "lucide-react";
 
-import { AdminDetailDialog, AdminDetailInfoBlock } from "@/components/admin-detail-dialog";
-import { LeaveAttachmentList } from "@/components/leave-attachment-list";
+import { DetailModalInfoBlock } from "@/components/detail-modal";
+import { LeaveAttachmentPreviewPanel } from "@/components/leave-attachment-preview-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Table,
   TableBody,
@@ -338,18 +345,71 @@ export default function LeaveRequestsPage() {
         </CardContent>
       </Card>
 
-      <AdminDetailDialog
+      {/* Wider two-column layout (file list + preview on the left, request
+          info on the right) instead of AdminDetailDialog's single-column
+          shell — built on the same ui/dialog.tsx primitives AdminDetailDialog
+          itself wraps, kept separate so admin/employees's dialog (the other
+          AdminDetailDialog caller) is unaffected. */}
+      <Dialog
         open={detailOpen}
         onOpenChange={(open) => {
           if (!open) closeDetail();
         }}
-        icon={CalendarRange}
-        title={selectedSubject}
-        badgeText={selectedRequest ? statusLabelTh[selectedRequest.status] : ""}
-        badgeVariant={selectedRequest ? statusBadgeVariant[selectedRequest.status] : "warning"}
-        footer={
-          selectedRequest?.status === "pending" ? (
-            <div className="flex justify-end gap-2">
+      >
+        <DialogContent className="flex h-[85vh] max-h-[85vh] w-full max-w-5xl flex-col gap-4 overflow-hidden rounded-2xl sm:max-w-5xl">
+          <DialogHeader className="flex-row items-center gap-3">
+            <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-brand-100 text-brand-600">
+              <CalendarRange className="size-5" />
+            </div>
+            <div className="flex flex-col items-start gap-1">
+              <DialogTitle className="text-base font-bold">{selectedSubject}</DialogTitle>
+              <Badge
+                variant={selectedRequest ? statusBadgeVariant[selectedRequest.status] : "warning"}
+              >
+                {selectedRequest ? statusLabelTh[selectedRequest.status] : ""}
+              </Badge>
+            </div>
+          </DialogHeader>
+
+          <div className="border-t border-slate-200" />
+
+          <div className="grid min-h-0 flex-1 grid-cols-1 gap-x-6 gap-y-4 overflow-y-auto md:grid-cols-2">
+            <div className="flex min-h-0 flex-col gap-2">
+              <p className="text-xs font-semibold text-muted-foreground">ไฟล์แนบ</p>
+              {attachmentsLoading && (
+                <p className="text-center text-xs text-muted-foreground">กำลังโหลดไฟล์แนบ…</p>
+              )}
+              {attachmentsError && (
+                <p className="rounded-xl bg-danger px-3 py-2 text-xs text-danger-foreground">{attachmentsError}</p>
+              )}
+              {!attachmentsLoading && !attachmentsError && selectedRequest && (
+                <LeaveAttachmentPreviewPanel
+                  key={selectedRequest.id}
+                  leaveRequestId={selectedRequest.id}
+                  attachments={selectedRequestAttachments}
+                />
+              )}
+            </div>
+
+            {selectedRequest && (
+              <div className="flex flex-col gap-3">
+                <p className="text-xs font-semibold text-muted-foreground">ข้อมูลคำขอลา</p>
+                <DetailModalInfoBlock label="พนักงาน" value={selectedEmployeeName} valueSize="sm" />
+                <DetailModalInfoBlock
+                  label="วันที่ลา"
+                  value={formatThaiDateRange(selectedRequest.startDate, selectedRequest.endDate)}
+                  valueSize="sm"
+                />
+                <DetailModalInfoBlock label="เหตุผล" value={selectedRequest.reason ?? "-"} valueSize="sm" />
+                <p className="text-xs text-muted-foreground">
+                  ส่งคำขอเมื่อ {formatThaiDate(new Date(selectedRequest.submittedAt))}
+                </p>
+              </div>
+            )}
+          </div>
+
+          {selectedRequest?.status === "pending" && (
+            <DialogFooter>
               <Button
                 variant="outline"
                 className="cursor-pointer"
@@ -365,33 +425,10 @@ export default function LeaveRequestsPage() {
                 <Check className="size-4" />
                 อนุมัติ
               </Button>
-            </div>
-          ) : undefined
-        }
-      >
-        {selectedRequest && (
-          <div className="flex flex-col gap-3">
-            <AdminDetailInfoBlock
-              label="วันที่ลา"
-              value={formatThaiDateRange(selectedRequest.startDate, selectedRequest.endDate)}
-              valueSize="sm"
-            />
-            <AdminDetailInfoBlock label="เหตุผล" value={selectedRequest.reason ?? "-"} valueSize="sm" />
-            <p className="text-xs text-muted-foreground">
-              ส่งคำขอเมื่อ {formatThaiDate(new Date(selectedRequest.submittedAt))}
-            </p>
-            {attachmentsLoading && (
-              <p className="text-center text-xs text-muted-foreground">กำลังโหลดไฟล์แนบ…</p>
-            )}
-            {attachmentsError && (
-              <p className="rounded-xl bg-danger px-3 py-2 text-xs text-danger-foreground">{attachmentsError}</p>
-            )}
-            {!attachmentsLoading && !attachmentsError && (
-              <LeaveAttachmentList leaveRequestId={selectedRequest.id} attachments={selectedRequestAttachments} />
-            )}
-          </div>
-        )}
-      </AdminDetailDialog>
+            </DialogFooter>
+          )}
+        </DialogContent>
+      </Dialog>
     </main>
   );
 }
