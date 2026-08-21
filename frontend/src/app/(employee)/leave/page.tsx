@@ -6,6 +6,16 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { CalendarRange, ChevronDown, ChevronUp, FileText, Image as ImageIcon, Mail, Upload, X } from "lucide-react";
 import { z } from "zod";
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { DetailModal } from "@/components/detail-modal";
 import { EmployeeListRow } from "@/components/employee-list-row";
 import { EmployeePageHeader } from "@/components/employee-page-header";
@@ -118,6 +128,12 @@ export default function LeavePage() {
   const [attachments, setAttachments] = useState<LeaveAttachment[]>([]);
   const [attachmentsByRequestId, setAttachmentsByRequestId] = useState<Record<string, LeaveAttachment[]>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Holds the validated form values between "ส่งคำขอ" (which only opens the
+  // confirm dialog) and the dialog's own ยืนยัน action actually submitting —
+  // react-hook-form's handleSubmit already validated them by the time this
+  // is set, so the confirm step never needs to re-validate.
+  const [pendingSubmit, setPendingSubmit] = useState<LeaveRequestForm | null>(null);
+  const [confirmSubmitting, setConfirmSubmitting] = useState(false);
 
   useEffect(() => {
     listMyLeaveRequests()
@@ -183,8 +199,11 @@ export default function LeavePage() {
     attachmentCount: attachments.length,
   });
 
-  const onSubmit = async (values: LeaveRequestForm) => {
+  // Fires only from the confirm dialog's ยืนยัน action, never directly from
+  // the form — openConfirm below is what the form's onSubmit points at.
+  const submitLeaveRequest = async (values: LeaveRequestForm) => {
     setSubmitError(null);
+    setConfirmSubmitting(true);
     try {
       const created = await createLeaveRequest({
         leave_type: values.leave_type,
@@ -202,9 +221,23 @@ export default function LeavePage() {
       reset();
       setAttachments([]);
       setShowPreview(false);
+      // Clearing this closes the AlertDialog (open is derived from it) —
+      // only on success, so a failed submit leaves the dialog open with
+      // the error visible and ยืนยัน ready to retry.
+      setPendingSubmit(null);
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : "ส่งคำขอไม่สำเร็จ");
+    } finally {
+      setConfirmSubmitting(false);
     }
+  };
+
+  // react-hook-form's own handleSubmit already validated `values` by the
+  // time this runs — it just stops here to open the confirm dialog instead
+  // of submitting straight away.
+  const openConfirm = (values: LeaveRequestForm) => {
+    setSubmitError(null);
+    setPendingSubmit(values);
   };
 
   const visibleRequests = requestListExpanded
@@ -254,7 +287,7 @@ export default function LeavePage() {
               </p>
             </div>
 
-            <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
+            <form onSubmit={handleSubmit(openConfirm)} className="flex flex-col gap-4">
               <div className="flex flex-col gap-1.5">
                 <div className="flex items-center justify-between">
                   <Label htmlFor="subject" className="text-xs text-muted-foreground">
@@ -364,12 +397,6 @@ export default function LeavePage() {
                 )}
               </div>
 
-              {submitError && (
-                <p className="rounded-xl bg-danger px-3 py-2 text-xs text-danger-foreground">
-                  {submitError}
-                </p>
-              )}
-
               <Button
                 type="submit"
                 disabled={isSubmitting}
@@ -379,6 +406,35 @@ export default function LeavePage() {
               </Button>
             </form>
           </CardContent>
+
+          <AlertDialog
+            open={pendingSubmit !== null}
+            onOpenChange={(open) => {
+              if (!open && !confirmSubmitting) setPendingSubmit(null);
+            }}
+          >
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>ยืนยันการส่งคำขอลา</AlertDialogTitle>
+                <AlertDialogDescription>{autoSubject}</AlertDialogDescription>
+              </AlertDialogHeader>
+              {submitError && (
+                <p className="rounded-xl bg-danger px-3 py-2 text-xs text-danger-foreground">
+                  {submitError}
+                </p>
+              )}
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={confirmSubmitting}>ยกเลิก</AlertDialogCancel>
+                <AlertDialogAction
+                  className="bg-accent-600 text-white hover:bg-accent-700"
+                  disabled={confirmSubmitting}
+                  onClick={() => pendingSubmit && void submitLeaveRequest(pendingSubmit)}
+                >
+                  {confirmSubmitting ? "กำลังส่ง…" : "ยืนยัน"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </Card>
 
         <Card className="rounded-2xl border border-slate-200 ring-0">
