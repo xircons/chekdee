@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, Clock, Copy, Search, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -8,12 +8,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { ACTION_BUTTON_CLASS, FIELD_CLASS } from "@/lib/admin-ui";
-import {
-  getActiveEmployees,
-  mockWorkSchedules,
-  type MockEmployee,
-  type MockWorkSchedule,
-} from "@/lib/mock-data";
+import { type Employee, listEmployees } from "@/lib/api-employees";
+import { getEmployeeSchedule, replaceEmployeeSchedule } from "@/lib/api-schedules";
+import type { MockWorkSchedule } from "@/lib/mock-data";
 import { cn } from "@/lib/utils";
 
 const DAY_LABELS_TH = ["อาทิตย์", "จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์"];
@@ -24,16 +21,27 @@ const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
 type DayEntry = { working: boolean; startTime: string; endTime: string };
 type Tab = "individual" | "import";
 
-type ImportRow = { employeeId: string; dayOfWeek: number; startTime: string; endTime: string };
+type ImportRow = { employeeId: string; dayOfWeek: number; startTime: string; endTime: string; line: number };
 type ImportError = { line: number; message: string };
 type ImportResult = { imported: number; errors: ImportError[] };
 
-function employeeName(employee: MockEmployee): string {
-  return `${employee.firstName} ${employee.lastName}`;
+// firstName/lastName are nullable on the real Employee (registration may not
+// be complete yet) -- falls back to the LINE display name, then the id.
+function employeeName(employee: Employee): string {
+  const name = [employee.firstName, employee.lastName].filter(Boolean).join(" ");
+  return name || employee.lineDisplayName || employee.id;
 }
 
-function initials(employee: MockEmployee): string {
-  return `${employee.firstName[0] ?? ""}${employee.lastName[0] ?? ""}`.toUpperCase();
+function initials(employee: Employee): string {
+  const name = [employee.firstName, employee.lastName].filter(Boolean).join(" ") || employee.lineDisplayName;
+  if (!name) return "?";
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase();
 }
 
 function minutesBetween(start: string, end: string): number {
@@ -77,7 +85,11 @@ function parseCsv(text: string): string[][] {
     .map((line) => line.split(",").map((cell) => cell.trim()));
 }
 
-function validateRow(cells: string[], validEmployeeIds: Set<string>): { row?: ImportRow; error?: string } {
+function validateRow(
+  cells: string[],
+  validEmployeeIds: Set<string>,
+  line: number
+): { row?: ImportRow; error?: string } {
   const [employeeId, dayOfWeekRaw, startTime, endTime] = cells;
 
   if (!employeeId || !validEmployeeIds.has(employeeId)) {
@@ -97,7 +109,26 @@ function validateRow(cells: string[], validEmployeeIds: Set<string>): { row?: Im
     return { error: "end_time ต้องอยู่หลัง start_time" };
   }
 
-  return { row: { employeeId, dayOfWeek, startTime, endTime } };
+  return { row: { employeeId, dayOfWeek, startTime, endTime, line } };
+}
+
+// DayEntry[] (index = day_of_week) -> the PUT /schedules/:employeeId row
+// shape, working days only. DayEntry times are "HH:mm" (native <input
+// type="time">, and the CSV format) -- the backend requires "HH:MM:SS".
+function daysToScheduleRows(days: DayEntry[]) {
+  const effectiveFrom = new Date().toISOString().slice(0, 10);
+  return days.flatMap((d, dayOfWeek) =>
+    d.working
+      ? [
+          {
+            day_of_week: dayOfWeek,
+            start_time: `${d.startTime}:00`,
+            end_time: `${d.endTime}:00`,
+            effective_from: effectiveFrom,
+          },
+        ]
+      : []
+  );
 }
 
 function buildDayEntries(employeeId: string, schedules: MockWorkSchedule[]): DayEntry[] {
@@ -155,7 +186,7 @@ function ScheduleEditor({
   onSave,
   onCancel,
 }: {
-  employee: MockEmployee;
+  employee: Employee;
   days: DayEntry[];
   dirty: boolean;
   onUpdateDay: (index: number, patch: Partial<DayEntry>) => void;
@@ -248,10 +279,12 @@ function ScheduleEditor({
 }
 
 export default function SchedulesPage() {
-  const employees = useMemo(() => getActiveEmployees().filter((e) => e.role === "employee"), []);
+  const [employees, setEmployees] = useState<Employee[]>([]);
   const [tab, setTab] = useState<Tab>("individual");
-  const [selectedId, setSelectedId] = useState<string | null>(employees[0]?.id ?? null);
-  const [schedules, setSchedules] = useState<MockWorkSchedule[]>(mockWorkSchedules);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [schedules, setSchedules] = useState<MockWorkSchedule[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   // Per-employee in-progress edits, lifted here so the name list can flag
   // which employees have unsaved changes. Cleared for an employee on
@@ -274,6 +307,23 @@ export default function SchedulesPage() {
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    listEmployees({ role: "employee", status: "active", limit: 200 })
+      .then(async ({ employees: activeEmployees }) => {
+        setEmployees(activeEmployees);
+        setSelectedId((prev) => prev ?? activeEmployees[0]?.id ?? null);
+        // There's no bulk "all schedules" endpoint (see api-schedules.ts) --
+        // one GET per employee, in parallel, deduplicated by nothing since
+        // every id here is already distinct. Fine at this org's employee
+        // count; would need a real batch endpoint to stay fine at scale.
+        const perEmployee = await Promise.all(
+          activeEmployees.map((e) => getEmployeeSchedule(e.id))
+        );
+        setSchedules(perEmployee.flat());
+      })
+      .catch((err: Error) => setLoadError(err.message));
+  }, []);
 
   const filteredEmployees = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -322,28 +372,15 @@ export default function SchedulesPage() {
     });
   };
 
-  const handleSave = (id: string) => {
-    const days = daysFor(id);
-    setSchedules((prev) => {
-      const withoutEmployee = prev.filter((s) => s.employeeId !== id);
-      const newEntries: MockWorkSchedule[] = days.flatMap((d, dayOfWeek) =>
-        d.working
-          ? [
-            {
-              id: `sched-${id}-${dayOfWeek}`,
-              employeeId: id,
-              dayOfWeek,
-              startTime: d.startTime,
-              endTime: d.endTime,
-              effectiveFrom: new Date().toISOString().slice(0, 10),
-              effectiveTo: null,
-            },
-          ]
-          : []
-      );
-      return [...withoutEmployee, ...newEntries];
-    });
-    clearDraft(id);
+  const handleSave = async (id: string) => {
+    setSaveError(null);
+    try {
+      const saved = await replaceEmployeeSchedule(id, daysToScheduleRows(daysFor(id)));
+      setSchedules((prev) => [...prev.filter((s) => s.employeeId !== id), ...saved]);
+      clearDraft(id);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "บันทึกตารางไม่สำเร็จ");
+    }
   };
 
   const runImport = async (file: File) => {
@@ -358,7 +395,7 @@ export default function SchedulesPage() {
 
     dataRows.forEach((cells, i) => {
       const line = i + (hasHeader ? 2 : 1);
-      const { row, error } = validateRow(cells, validEmployeeIds);
+      const { row, error } = validateRow(cells, validEmployeeIds, line);
       if (error) {
         errors.push({ line, message: error });
       } else if (row) {
@@ -366,25 +403,52 @@ export default function SchedulesPage() {
       }
     });
 
+    // PUT /schedules/:employeeId replaces that employee's whole week, not
+    // just the days present in the file (unlike the old mock's per-row
+    // upsert) -- so each touched employee's currently-saved days not
+    // mentioned in the CSV must be carried forward, or they'd be silently
+    // wiped. One PUT per distinct employee_id in the file.
+    const rowsByEmployee = new Map<string, ImportRow[]>();
+    for (const row of validRows) {
+      const existing = rowsByEmployee.get(row.employeeId) ?? [];
+      existing.push(row);
+      rowsByEmployee.set(row.employeeId, existing);
+    }
+
+    const results = await Promise.allSettled(
+      [...rowsByEmployee.entries()].map(async ([employeeId, rows]) => {
+        const merged = buildDayEntries(employeeId, schedules).map((day, dayOfWeek) => {
+          const override = rows.find((r) => r.dayOfWeek === dayOfWeek);
+          return override ? { working: true, startTime: override.startTime, endTime: override.endTime } : day;
+        });
+        const saved = await replaceEmployeeSchedule(employeeId, daysToScheduleRows(merged));
+        return { employeeId, saved };
+      })
+    );
+
+    let imported = 0;
+    const employeeIds = [...rowsByEmployee.keys()];
     setSchedules((prev) => {
       let next = prev;
-      for (const row of validRows) {
-        next = next.filter((s) => !(s.employeeId === row.employeeId && s.dayOfWeek === row.dayOfWeek));
+      results.forEach((result, i) => {
+        if (result.status !== "fulfilled") return;
+        const { saved } = result.value;
+        next = next.filter((s) => s.employeeId !== employeeIds[i]);
+        next = [...next, ...saved];
+        imported += rowsByEmployee.get(employeeIds[i])?.length ?? 0;
+      });
+      return next;
+    });
+    results.forEach((result, i) => {
+      if (result.status !== "rejected") return;
+      const message = result.reason instanceof Error ? result.reason.message : "บันทึกไม่สำเร็จ";
+      for (const row of rowsByEmployee.get(employeeIds[i]) ?? []) {
+        errors.push({ line: row.line, message });
       }
-      const newEntries: MockWorkSchedule[] = validRows.map((row) => ({
-        id: `sched-${row.employeeId}-${row.dayOfWeek}`,
-        employeeId: row.employeeId,
-        dayOfWeek: row.dayOfWeek,
-        startTime: row.startTime,
-        endTime: row.endTime,
-        effectiveFrom: new Date().toISOString().slice(0, 10),
-        effectiveTo: null,
-      }));
-      return [...next, ...newEntries];
     });
 
     setDrafts({});
-    setImportResult({ imported: validRows.length, errors });
+    setImportResult({ imported, errors });
     setImportFile(null);
   };
 
@@ -418,6 +482,13 @@ export default function SchedulesPage() {
           <p className="mt-1 text-sm text-white/80">จัดการตารางเวลาทำงานรายสัปดาห์และนำเข้าข้อมูล</p>
         </div>
       </header>
+
+      {loadError && (
+        <p className="text-sm text-danger-foreground">โหลดข้อมูลไม่สำเร็จ: {loadError}</p>
+      )}
+      {saveError && (
+        <p className="text-sm text-danger-foreground">บันทึกไม่สำเร็จ: {saveError}</p>
+      )}
 
       <div className="relative flex w-full shrink-0 overflow-hidden rounded-xl border border-brand-600/30">
         {/* Sliding fill left square (no own rounding) — the container's

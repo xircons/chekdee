@@ -67,3 +67,19 @@ export async function getTodayAttendance(): Promise<AttendanceRecordResponse | n
   const res = await apiFetch("/attendance/me/today");
   return parseOrThrow<AttendanceRecordResponse | null>(res);
 }
+
+// Admin manual correction -- PATCH /attendance-records/:id/status. id is
+// the underlying attendance_records id (GET /reports/daily-log's `id`
+// field), not the employee id.
+export async function correctAttendanceStatus(
+  attendanceRecordId: string,
+  status: "present" | "late" | "absent",
+  reason: string
+): Promise<AttendanceRecordResponse> {
+  const res = await apiFetch(`/attendance-records/${attendanceRecordId}/status`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status, reason }),
+  });
+  return parseOrThrow<AttendanceRecordResponse>(res);
+}
