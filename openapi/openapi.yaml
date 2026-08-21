@@ -1219,6 +1219,9 @@ components:
         last_name:
           type: string
           nullable: true
+        student_gen:
+          type: string
+          nullable: true
         student_id:
           type: string
           nullable: true
