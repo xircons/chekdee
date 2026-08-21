@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { CalendarRange, Check, Eye, X } from "lucide-react";
 
 import { AdminDetailDialog, AdminDetailInfoBlock } from "@/components/admin-detail-dialog";
+import { LeaveAttachmentList } from "@/components/leave-attachment-list";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,7 +16,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { approveLeaveRequest, listAllLeaveRequests, rejectLeaveRequest } from "@/lib/api-leave";
+import {
+  approveLeaveRequest,
+  listAllLeaveRequests,
+  listLeaveAttachments,
+  rejectLeaveRequest,
+  type LeaveAttachment,
+} from "@/lib/api-leave";
 import { getEmployeesByIds, type Employee } from "@/lib/api-employees";
 import { buildLeaveRequestEmail } from "@/lib/leave-email";
 import { type LeaveStatus, type MockLeaveRequest } from "@/lib/mock-data";
@@ -173,6 +180,9 @@ export default function LeaveRequestsPage() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [selectedRequest, setSelectedRequest] = useState<MockLeaveRequest | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
+  const [selectedRequestAttachments, setSelectedRequestAttachments] = useState<LeaveAttachment[]>([]);
+  const [attachmentsLoading, setAttachmentsLoading] = useState(false);
+  const [attachmentsError, setAttachmentsError] = useState<string | null>(null);
 
   const [employeesById, setEmployeesById] = useState<Map<string, Employee>>(new Map());
   const [employeesLoading, setEmployeesLoading] = useState(false);
@@ -198,12 +208,18 @@ export default function LeaveRequestsPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  const closeDetail = () => {
+    setDetailOpen(false);
+    setSelectedRequestAttachments([]);
+    setAttachmentsError(null);
+  };
+
   const decide = async (id: string, status: "approved" | "rejected") => {
     setActionError(null);
     try {
       const decided = status === "approved" ? await approveLeaveRequest(id) : await rejectLeaveRequest(id);
       setRequests((prev) => prev.map((r) => (r.id === id ? decided : r)));
-      setDetailOpen(false);
+      closeDetail();
     } catch (err) {
       // A 409 here means someone else already decided it between page load
       // and this click — the decision is final either way, so surface the
@@ -212,9 +228,20 @@ export default function LeaveRequestsPage() {
     }
   };
 
+  // Fetches attachments directly here, triggered by the click that opens
+  // the dialog, rather than a useEffect reactively watching detailOpen --
+  // this is event-driven, not a sync-with-external-system case.
   const openDetail = (request: MockLeaveRequest) => {
     setSelectedRequest(request);
+    setSelectedRequestAttachments([]);
+    setAttachmentsError(null);
     setDetailOpen(true);
+
+    setAttachmentsLoading(true);
+    listLeaveAttachments(request.id)
+      .then((rows) => setSelectedRequestAttachments(rows))
+      .catch((err: Error) => setAttachmentsError(err.message))
+      .finally(() => setAttachmentsLoading(false));
   };
 
   const sortedRequests = [...requests].sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
@@ -226,9 +253,9 @@ export default function LeaveRequestsPage() {
     : "";
   // The formal-letter body is a fixed template the employee fills in
   // themselves (see lib/leave-email.ts) — only the auto-generated subject
-  // (name + dates) is meaningful here. Attachments are ephemeral local
-  // state on the employee's own /leave page, not part of the shared mock
-  // model, so there's nothing to surface for them on the admin side yet.
+  // (name + dates) is meaningful here. Attachments are real server data
+  // now (see the useEffect above), rendered separately via
+  // LeaveAttachmentList below, not part of this subject line.
   const selectedSubject = selectedRequest
     ? buildLeaveRequestEmail({
         employeeName: selectedEmployeeName,
@@ -314,7 +341,9 @@ export default function LeaveRequestsPage() {
 
       <AdminDetailDialog
         open={detailOpen}
-        onOpenChange={setDetailOpen}
+        onOpenChange={(open) => {
+          if (!open) closeDetail();
+        }}
         icon={CalendarRange}
         title={selectedSubject}
         badgeText={selectedRequest ? statusLabelTh[selectedRequest.status] : ""}
@@ -352,6 +381,15 @@ export default function LeaveRequestsPage() {
             <p className="text-xs text-muted-foreground">
               ส่งคำขอเมื่อ {formatThaiDate(new Date(selectedRequest.submittedAt))}
             </p>
+            {attachmentsLoading && (
+              <p className="text-center text-xs text-muted-foreground">กำลังโหลดไฟล์แนบ…</p>
+            )}
+            {attachmentsError && (
+              <p className="rounded-xl bg-danger px-3 py-2 text-xs text-danger-foreground">{attachmentsError}</p>
+            )}
+            {!attachmentsLoading && !attachmentsError && (
+              <LeaveAttachmentList leaveRequestId={selectedRequest.id} attachments={selectedRequestAttachments} />
+            )}
           </div>
         )}
       </AdminDetailDialog>

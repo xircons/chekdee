@@ -139,22 +139,28 @@ export default function LeavePage() {
       .finally(() => setLoading(false));
   }, []);
 
-  // Fetched fresh each time the detail modal opens for a (possibly
-  // different) request, rather than kept as local-only state keyed by
-  // request id — this is now real server data, not a session-only stand-in.
-  useEffect(() => {
-    if (!requestModalOpen || !selectedRequest) {
-      setSelectedRequestAttachments([]);
-      setAttachmentsError(null);
-      return;
-    }
-    setAttachmentsLoading(true);
+  // Fetches attachments directly here, triggered by the click that opens
+  // the modal (see below), rather than a useEffect reactively watching
+  // requestModalOpen -- this is event-driven, not a sync-with-external-
+  // system case. Real server data now, not the old session-only local map.
+  const openRequestDetail = (request: MockLeaveRequest) => {
+    setSelectedRequest(request);
+    setRequestModalOpen(true);
+    setSelectedRequestAttachments([]);
     setAttachmentsError(null);
-    listLeaveAttachments(selectedRequest.id)
+
+    setAttachmentsLoading(true);
+    listLeaveAttachments(request.id)
       .then((rows) => setSelectedRequestAttachments(rows))
       .catch((err: Error) => setAttachmentsError(err.message))
       .finally(() => setAttachmentsLoading(false));
-  }, [requestModalOpen, selectedRequest]);
+  };
+
+  const closeRequestDetail = () => {
+    setRequestModalOpen(false);
+    setSelectedRequestAttachments([]);
+    setAttachmentsError(null);
+  };
 
   const handleAttachmentSelect = (fileList: FileList | null) => {
     if (!fileList || fileList.length === 0) return;
@@ -454,10 +460,7 @@ export default function LeavePage() {
                       {statusLabelTh[request.status]}
                     </Badge>
                   }
-                  onClick={() => {
-                    setSelectedRequest(request);
-                    setRequestModalOpen(true);
-                  }}
+                  onClick={() => openRequestDetail(request)}
                   className={
                     index >= VISIBLE_LEAVE_REQUESTS
                       ? "duration-200 animate-in slide-in-from-top-2"
@@ -486,7 +489,9 @@ export default function LeavePage() {
 
       <DetailModal
         open={requestModalOpen}
-        onOpenChange={setRequestModalOpen}
+        onOpenChange={(open) => {
+          if (!open) closeRequestDetail();
+        }}
         icon={CalendarRange}
         title={selectedRequestSubject}
         badgeText={selectedRequest ? statusLabelTh[selectedRequest.status] : ""}
