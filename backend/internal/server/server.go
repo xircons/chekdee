@@ -55,7 +55,7 @@ func New(
 		AllowCredentials: true,
 	}))
 
-	handler.RegisterRoutes(e, authHandler, scheduleHandler, holidayHandler, kioskHandler, attendanceHandler, reportHandler, leaveHandler, notificationHandler, employeeHandler, jwtIssuer, kioskDeviceUsecase)
+	handler.RegisterRoutes(e, authHandler, scheduleHandler, holidayHandler, kioskHandler, attendanceHandler, reportHandler, leaveHandler, notificationHandler, employeeHandler, jwtIssuer, kioskDeviceUsecase, cfg.Env == "development")
 
 	return &Server{echo: e, cfg: cfg, logger: logger, riverClient: riverClient}
 }

@@ -175,6 +175,41 @@ func (h *AuthHandler) PasswordLogin(c echo.Context) error {
 	})
 }
 
+type devLoginRequest struct {
+	Role string `json:"role"`
+}
+
+// DevLogin is only wired up in development (see server.New) -- it issues a
+// real token pair for one of four fixed seeded users, one per role, so the
+// frontend's dev-login bypass buttons behave exactly like a real login
+// instead of faking a session client-side.
+func (h *AuthHandler) DevLogin(c echo.Context) error {
+	var req devLoginRequest
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+	}
+
+	role := domain.Role(req.Role)
+	switch role {
+	case domain.RoleEmployee, domain.RoleSupervisor, domain.RoleAdmin, domain.RoleSystemOwner:
+	default:
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid role")
+	}
+
+	user, tokens, err := h.auth.DevLogin(c.Request().Context(), role, c.Request().UserAgent(), c.RealIP())
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "dev login failed")
+	}
+
+	setRefreshCookie(c, tokens.RefreshToken)
+
+	return c.JSON(http.StatusOK, authResponse{
+		AccessToken: tokens.AccessToken,
+		ExpiresAt:   tokens.ExpiresAt,
+		User:        toUserView(user),
+	})
+}
+
 func (h *AuthHandler) Refresh(c echo.Context) error {
 	cookie, err := c.Cookie(refreshCookieName)
 	if err != nil || cookie.Value == "" {
