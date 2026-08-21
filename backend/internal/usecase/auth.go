@@ -3,6 +3,7 @@ package usecase
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -103,6 +104,110 @@ func (a *AuthUsecase) LoginWithPassword(ctx context.Context, username, password,
 
 	tokens, err := a.issueTokens(ctx, user, userAgent, ip)
 	return user, tokens, err
+}
+
+// devUserSeed is a fixed identity used to find-or-create the one seeded
+// user per non-owner role that DevLogin issues tokens for.
+type devUserSeed struct {
+	lineUserID  string
+	displayName string
+	firstName   string
+	lastName    string
+}
+
+var devUserSeeds = map[domain.Role]devUserSeed{
+	domain.RoleEmployee:   {lineUserID: "dev-employee", displayName: "Dev Employee", firstName: "Dev", lastName: "Employee"},
+	domain.RoleSupervisor: {lineUserID: "dev-supervisor", displayName: "Dev Supervisor", firstName: "Dev", lastName: "Supervisor"},
+	domain.RoleAdmin:      {lineUserID: "dev-admin", displayName: "Dev Admin", firstName: "Dev", lastName: "Admin"},
+}
+
+const devSystemOwnerUsername = "dev-system-owner"
+
+// DevLogin is the backend half of the frontend dev-login bypass (see
+// frontend/src/lib/dev-auth.ts): it finds-or-creates one fixed seeded user
+// per role and issues a real token pair for it exactly like
+// LoginWithPassword/LoginWithLine, so the frontend gets a genuine bearer
+// token instead of faking a session client-side. The handler is
+// responsible for refusing this call outside development.
+func (a *AuthUsecase) DevLogin(ctx context.Context, role domain.Role, userAgent, ip string) (*domain.User, TokenPair, error) {
+	user, err := a.getOrCreateDevUser(ctx, role)
+	if err != nil {
+		return nil, TokenPair{}, err
+	}
+
+	tokens, err := a.issueTokens(ctx, user, userAgent, ip)
+	return user, tokens, err
+}
+
+func (a *AuthUsecase) getOrCreateDevUser(ctx context.Context, role domain.Role) (*domain.User, error) {
+	if role == domain.RoleSystemOwner {
+		return a.getOrCreateDevSystemOwner(ctx)
+	}
+
+	seed, ok := devUserSeeds[role]
+	if !ok {
+		return nil, fmt.Errorf("dev login: unsupported role %q", role)
+	}
+
+	user, err := a.users.GetByLineUserID(ctx, seed.lineUserID)
+	if err == nil {
+		return user, nil
+	}
+	if !errors.Is(err, domain.ErrUserNotFound) {
+		return nil, err
+	}
+
+	user, err = a.users.CreateEmployeeFromLine(ctx, seed.lineUserID, seed.displayName, "")
+	if err != nil {
+		return nil, err
+	}
+
+	user, err = a.users.CompleteRegistration(ctx, user.ID, seed.firstName, seed.lastName, "dev", nil, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if role == domain.RoleEmployee {
+		return user, nil
+	}
+
+	targetType := "user"
+	return a.users.UpdateRole(ctx, user.ID, role, &domain.AdminAuditLog{
+		ActorID:    user.ID,
+		Action:     "dev_login.seed_role",
+		TargetType: &targetType,
+		TargetID:   &user.ID,
+	})
+}
+
+// getOrCreateDevSystemOwner mirrors getOrCreateDevUser's find-or-create, but
+// system_owner has no LINE identity (see LoginWithPassword) so it's keyed on
+// username instead, with a fixed placeholder password hash that DevLogin
+// never checks against (the caller never presents a password at all).
+//
+// Also completes registration on creation, same as the LINE-seeded roles --
+// a freshly seedowner-bootstrapped system_owner has no registration row
+// either (there's no self-registration path for it in production), but
+// leaving that gap in a dev convenience login would just dead-end the
+// button on the /register form, which assumes a student employee.
+func (a *AuthUsecase) getOrCreateDevSystemOwner(ctx context.Context) (*domain.User, error) {
+	user, err := a.users.GetByUsername(ctx, devSystemOwnerUsername)
+	if err == nil {
+		return user, nil
+	}
+	if !errors.Is(err, domain.ErrUserNotFound) {
+		return nil, err
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(devSystemOwnerUsername), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, err
+	}
+	user, err = a.users.CreateSystemOwner(ctx, devSystemOwnerUsername, string(hash))
+	if err != nil {
+		return nil, err
+	}
+	return a.users.CompleteRegistration(ctx, user.ID, "Dev", "Owner", "dev", nil, nil)
 }
 
 func (a *AuthUsecase) issueTokens(ctx context.Context, user *domain.User, userAgent, ip string) (TokenPair, error) {
