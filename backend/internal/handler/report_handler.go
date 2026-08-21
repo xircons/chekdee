@@ -112,6 +112,30 @@ func (h *ReportHandler) DailyLog(c echo.Context) error {
 	return c.JSON(http.StatusOK, out)
 }
 
+// MyDailyLog is the employee-scoped read DailyLog above has no equivalent
+// of: any authenticated employee's own daily log, always forced to their
+// own id regardless of query params, so there's no way to request someone
+// else's. Mounted behind RequireAuth only, not RequireRole -- backs the
+// employee home page's weekly attendance-history icons.
+func (h *ReportHandler) MyDailyLog(c echo.Context) error {
+	month := c.QueryParam("month")
+	if month == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "month is required, expected YYYY-MM")
+	}
+	employeeID := userIDFromContext(c)
+
+	rows, err := h.reports.DailyLog(c.Request().Context(), month, &employeeID)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid month or failed to load daily log")
+	}
+
+	out := make([]dailyLogRowView, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, toDailyLogRowView(r))
+	}
+	return c.JSON(http.StatusOK, out)
+}
+
 type reportExportView struct {
 	ID     string  `json:"id"`
 	Month  string  `json:"month"`
