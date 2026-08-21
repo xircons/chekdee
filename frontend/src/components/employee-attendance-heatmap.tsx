@@ -1,15 +1,13 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { buildMonthGrid, toIsoDate } from "@/components/employee-schedule-calendar";
-import {
-  getAttendanceForEmployee,
-  getWorkScheduleForEmployee,
-  mockHolidays,
-  mockLeaveRequests,
-  type AttendanceStatus,
-} from "@/lib/mock-data";
+import { listHolidays } from "@/lib/api-holidays";
+import { listAllLeaveRequests } from "@/lib/api-leave";
+import { getDailyLog, type DailyLogRow } from "@/lib/api-reports";
+import { getEmployeeSchedule } from "@/lib/api-schedules";
+import type { MockHoliday, MockLeaveRequest, MockWorkSchedule } from "@/lib/mock-data";
 import { cn } from "@/lib/utils";
 
 const WEEKDAY_LABELS_TH = ["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"];
@@ -49,25 +47,60 @@ type HeatmapDay = {
   state: HeatmapState | null; // null: scheduled workday with no data yet
 };
 
+// DailyLogRow.status is the backend's English enum -- present/late/absent
+// (pending is a DB-default sentinel CheckIn never actually returns).
+function toHeatmapState(status: DailyLogRow["status"]): HeatmapState | null {
+  switch (status) {
+    case "present":
+      return "present";
+    case "late":
+      return "สาย";
+    case "absent":
+      return "ขาด";
+    default:
+      return null;
+  }
+}
+
 export function EmployeeAttendanceHeatmap({ employeeId }: { employeeId: string }) {
   const today = useMemo(() => new Date(), []);
   const todayIso = toIsoDate(today);
+  const monthIso = todayIso.slice(0, 7);
 
-  const records = useMemo(() => getAttendanceForEmployee(employeeId), [employeeId]);
-  const recordsByDate = useMemo(() => new Map(records.map((r) => [r.workDate, r])), [records]);
+  const [dailyLog, setDailyLog] = useState<DailyLogRow[]>([]);
+  const [schedule, setSchedule] = useState<MockWorkSchedule[]>([]);
+  const [leaveRequests, setLeaveRequests] = useState<MockLeaveRequest[]>([]);
+  const [holidays, setHolidays] = useState<MockHoliday[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  const schedule = useMemo(() => getWorkScheduleForEmployee(employeeId), [employeeId]);
+  useEffect(() => {
+    const monthStart = `${monthIso}-01`;
+    const monthEnd = toIsoDate(new Date(today.getFullYear(), today.getMonth() + 1, 0));
+
+    // No per-employee "approved leave" endpoint -- GET /leave-requests is
+    // org-wide (admin-only, which this page already requires), filtered to
+    // this employee client-side.
+    Promise.all([
+      getDailyLog(monthIso, employeeId),
+      getEmployeeSchedule(employeeId),
+      listAllLeaveRequests(),
+      listHolidays(monthStart, monthEnd),
+    ])
+      .then(([logRows, scheduleRows, leaveRows, holidayRows]) => {
+        setDailyLog(logRows);
+        setSchedule(scheduleRows);
+        setLeaveRequests(leaveRows.filter((r) => r.employeeId === employeeId && r.status === "approved"));
+        setHolidays(holidayRows);
+      })
+      .catch((err: Error) => setLoadError(err.message));
+  }, [employeeId, monthIso, today]);
+
+  const recordsByDate = useMemo(() => new Map(dailyLog.map((r) => [r.date, r])), [dailyLog]);
   const scheduleByDayOfWeek = useMemo(
     () => new Map(schedule.map((s) => [s.dayOfWeek, s])),
     [schedule]
   );
-
-  const approvedLeave = useMemo(
-    () => mockLeaveRequests.filter((r) => r.employeeId === employeeId && r.status === "approved"),
-    [employeeId]
-  );
-
-  const holidaysByDate = useMemo(() => new Map(mockHolidays.map((h) => [h.date, h])), []);
+  const holidaysByDate = useMemo(() => new Map(holidays.map((h) => [h.date, h])), [holidays]);
 
   const weeks = useMemo(() => {
     return buildMonthGrid(today.getFullYear(), today.getMonth()).map((week) =>
@@ -76,13 +109,13 @@ export function EmployeeAttendanceHeatmap({ employeeId }: { employeeId: string }
         const inMonth = date.getMonth() === today.getMonth();
 
         const record = recordsByDate.get(isoDate);
-        const onLeave = approvedLeave.some((r) => r.startDate <= isoDate && isoDate <= r.endDate);
+        const onLeave = leaveRequests.some((r) => r.startDate <= isoDate && isoDate <= r.endDate);
         const isHoliday = holidaysByDate.has(isoDate);
         const isScheduled = scheduleByDayOfWeek.has(date.getDay());
 
         let state: HeatmapState | null;
-        if (record?.status === "present" || record?.status === "สาย" || record?.status === "ขาด") {
-          state = record.status as AttendanceStatus;
+        if (record) {
+          state = toHeatmapState(record.status);
         } else if (onLeave) {
           state = "leave";
         } else if (isHoliday) {
@@ -96,10 +129,14 @@ export function EmployeeAttendanceHeatmap({ employeeId }: { employeeId: string }
         return { isoDate, date, inMonth, isToday: isoDate === todayIso, state };
       })
     );
-  }, [today, recordsByDate, approvedLeave, holidaysByDate, scheduleByDayOfWeek, todayIso]);
+  }, [today, recordsByDate, leaveRequests, holidaysByDate, scheduleByDayOfWeek, todayIso]);
 
   return (
     <div className="flex flex-col gap-2">
+      {loadError && (
+        <p className="text-xs text-danger-foreground">โหลดข้อมูลไม่สำเร็จ: {loadError}</p>
+      )}
+
       <div className="flex">
         {WEEKDAY_LABELS_TH.map((label) => (
           <div key={label} className="flex-1 text-center text-[10px] font-medium text-muted-foreground">
