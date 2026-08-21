@@ -47,7 +47,7 @@ func (f *fakeEmployeeRepo) CreateEmployeeFromLine(context.Context, string, strin
 func (f *fakeEmployeeRepo) UpdateLineProfile(context.Context, string, string, string) error {
 	return nil
 }
-func (f *fakeEmployeeRepo) CompleteRegistration(context.Context, string, string, string, string, *string, *string) (*domain.User, error) {
+func (f *fakeEmployeeRepo) CompleteRegistration(context.Context, string, string, string, string, *string, *string, *string, *string) (*domain.User, error) {
 	return nil, nil
 }
 func (f *fakeEmployeeRepo) CreateSystemOwner(context.Context, string, string) (*domain.User, error) {
@@ -65,7 +65,7 @@ func (f *fakeEmployeeRepo) List(_ context.Context, filter domain.EmployeeListFil
 	}
 	return out, len(out), nil
 }
-func (f *fakeEmployeeRepo) Update(_ context.Context, id string, firstName, lastName, teamID, studentGen, studentID, phoneNumber *string) (*domain.User, error) {
+func (f *fakeEmployeeRepo) Update(_ context.Context, id string, firstName, lastName, teamID, studentGen, studentID, phoneNumber, project, email *string) (*domain.User, error) {
 	f.updateCalls++
 	u, ok := f.users[id]
 	if !ok {
@@ -73,6 +73,7 @@ func (f *fakeEmployeeRepo) Update(_ context.Context, id string, firstName, lastN
 	}
 	u.FirstName, u.LastName, u.TeamID = firstName, lastName, teamID
 	u.StudentGen, u.StudentID, u.PhoneNumber = studentGen, studentID, phoneNumber
+	u.Project, u.Email = project, email
 	return u, nil
 }
 func (f *fakeEmployeeRepo) UpdateRole(_ context.Context, id string, role domain.Role, auditEntry *domain.AdminAuditLog) (*domain.User, error) {

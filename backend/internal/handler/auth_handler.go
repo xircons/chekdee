@@ -82,6 +82,8 @@ type userView struct {
 	StudentGen   *string `json:"student_gen"`
 	StudentID    *string `json:"student_id"`
 	PhoneNumber  *string `json:"phone_number"`
+	Project      *string `json:"project"`
+	Email        *string `json:"email"`
 	DisplayName  *string `json:"display_name"`
 	PictureURL   *string `json:"picture_url"`
 	IsRegistered bool    `json:"is_registered"`
@@ -96,6 +98,8 @@ func toUserView(u *domain.User) userView {
 		StudentGen:   u.StudentGen,
 		StudentID:    u.StudentID,
 		PhoneNumber:  u.PhoneNumber,
+		Project:      u.Project,
+		Email:        u.Email,
 		DisplayName:  u.LineDisplayName,
 		PictureURL:   u.LinePictureURL,
 		IsRegistered: u.IsRegistered(),
@@ -243,10 +247,12 @@ type completeRegistrationRequest struct {
 	FirstName  string `json:"first_name"`
 	LastName   string `json:"last_name"`
 	StudentGen string `json:"student_gen"`
-	// StudentID/PhoneNumber are optional — adding them as a required pair
-	// would break registration for anyone already mid-flow.
+	// StudentID/PhoneNumber/Project/Email are optional — adding any of them
+	// as required would break registration for anyone already mid-flow.
 	StudentID   string `json:"student_id"`
 	PhoneNumber string `json:"phone_number"`
+	Project     string `json:"project"`
+	Email       string `json:"email"`
 }
 
 // CompleteRegistration finishes onboarding for the authenticated user.
@@ -260,15 +266,21 @@ func (h *AuthHandler) CompleteRegistration(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "ต้องระบุชื่อ นามสกุล และรุ่นนักศึกษา")
 	}
 
-	var studentID, phoneNumber *string
+	var studentID, phoneNumber, project, email *string
 	if req.StudentID != "" {
 		studentID = &req.StudentID
 	}
 	if req.PhoneNumber != "" {
 		phoneNumber = &req.PhoneNumber
 	}
+	if req.Project != "" {
+		project = &req.Project
+	}
+	if req.Email != "" {
+		email = &req.Email
+	}
 
-	user, err := h.auth.CompleteRegistration(c.Request().Context(), userIDFromContext(c), req.FirstName, req.LastName, req.StudentGen, studentID, phoneNumber)
+	user, err := h.auth.CompleteRegistration(c.Request().Context(), userIDFromContext(c), req.FirstName, req.LastName, req.StudentGen, studentID, phoneNumber, project, email)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "ลงทะเบียนไม่สำเร็จ")
 	}

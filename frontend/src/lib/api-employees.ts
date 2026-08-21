@@ -12,6 +12,8 @@ type EmployeeResponse = {
   student_gen: string | null;
   student_id: string | null;
   phone_number: string | null;
+  project: string | null;
+  email: string | null;
   line_display_name: string | null;
   line_picture_url: string | null;
   registration_completed_at: string | null;
@@ -30,6 +32,8 @@ export type Employee = {
   studentGen: string | null;
   studentId: string | null;
   phoneNumber: string | null;
+  project: string | null;
+  email: string | null;
   lineDisplayName: string | null;
   linePictureUrl: string | null;
   registrationCompletedAt: string | null;
@@ -55,6 +59,8 @@ function toEmployee(r: EmployeeResponse): Employee {
     studentGen: r.student_gen,
     studentId: r.student_id,
     phoneNumber: r.phone_number,
+    project: r.project,
+    email: r.email,
     lineDisplayName: r.line_display_name,
     linePictureUrl: r.line_picture_url,
     registrationCompletedAt: r.registration_completed_at,
@@ -141,8 +147,8 @@ export async function listEmployees(
 }
 
 // PATCH /employees/:id — profile fields only. student_gen/student_id/
-// phone_number are a full replace like team_id — a null clears the stored
-// value, it doesn't mean "leave unchanged".
+// phone_number/project/email are a full replace like team_id — a null
+// clears the stored value, it doesn't mean "leave unchanged".
 export async function updateEmployee(
   id: string,
   input: {
@@ -152,6 +158,8 @@ export async function updateEmployee(
     studentGen: string | null;
     studentId: string | null;
     phoneNumber: string | null;
+    project: string | null;
+    email: string | null;
   }
 ): Promise<Employee> {
   const res = await apiFetch(`/employees/${id}`, {
@@ -164,6 +172,8 @@ export async function updateEmployee(
       student_gen: input.studentGen,
       student_id: input.studentId,
       phone_number: input.phoneNumber,
+      project: input.project,
+      email: input.email,
     }),
   });
   return toEmployee(await parseOrThrow<EmployeeResponse>(res));

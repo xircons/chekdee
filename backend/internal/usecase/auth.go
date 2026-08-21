@@ -162,7 +162,7 @@ func (a *AuthUsecase) getOrCreateDevUser(ctx context.Context, role domain.Role) 
 		return nil, err
 	}
 
-	user, err = a.users.CompleteRegistration(ctx, user.ID, seed.firstName, seed.lastName, "dev", nil, nil)
+	user, err = a.users.CompleteRegistration(ctx, user.ID, seed.firstName, seed.lastName, "dev", nil, nil, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -207,7 +207,7 @@ func (a *AuthUsecase) getOrCreateDevSystemOwner(ctx context.Context) (*domain.Us
 	if err != nil {
 		return nil, err
 	}
-	return a.users.CompleteRegistration(ctx, user.ID, "Dev", "Owner", "dev", nil, nil)
+	return a.users.CompleteRegistration(ctx, user.ID, "Dev", "Owner", "dev", nil, nil, nil, nil)
 }
 
 func (a *AuthUsecase) issueTokens(ctx context.Context, user *domain.User, userAgent, ip string) (TokenPair, error) {
@@ -277,8 +277,8 @@ func (a *AuthUsecase) Logout(ctx context.Context, refreshTokenRaw string) error 
 // CompleteRegistration finishes onboarding. Employees cannot check in
 // until this has been called. studentID/phoneNumber are optional (nil if
 // not supplied) — only first_name/last_name/student_gen are required.
-func (a *AuthUsecase) CompleteRegistration(ctx context.Context, userID, firstName, lastName, studentGen string, studentID, phoneNumber *string) (*domain.User, error) {
-	return a.users.CompleteRegistration(ctx, userID, firstName, lastName, studentGen, studentID, phoneNumber)
+func (a *AuthUsecase) CompleteRegistration(ctx context.Context, userID, firstName, lastName, studentGen string, studentID, phoneNumber, project, email *string) (*domain.User, error) {
+	return a.users.CompleteRegistration(ctx, userID, firstName, lastName, studentGen, studentID, phoneNumber, project, email)
 }
 
 // Me returns the authenticated user — used by the frontend on page load

@@ -38,6 +38,8 @@ type employeeView struct {
 	StudentGen              *string `json:"student_gen"`
 	StudentID               *string `json:"student_id"`
 	PhoneNumber             *string `json:"phone_number"`
+	Project                 *string `json:"project"`
+	Email                   *string `json:"email"`
 	LineDisplayName         *string `json:"line_display_name"`
 	LinePictureURL          *string `json:"line_picture_url"`
 	RegistrationCompletedAt *string `json:"registration_completed_at"`
@@ -57,6 +59,8 @@ func toEmployeeView(u *domain.User) employeeView {
 		StudentGen:       u.StudentGen,
 		StudentID:        u.StudentID,
 		PhoneNumber:      u.PhoneNumber,
+		Project:          u.Project,
+		Email:            u.Email,
 		LineDisplayName:  u.LineDisplayName,
 		LinePictureURL:   u.LinePictureURL,
 		OffboardedReason: u.OffboardedReason,
@@ -153,6 +157,8 @@ type updateEmployeeRequest struct {
 	StudentGen  *string `json:"student_gen"`
 	StudentID   *string `json:"student_id"`
 	PhoneNumber *string `json:"phone_number"`
+	Project     *string `json:"project"`
+	Email       *string `json:"email"`
 }
 
 // Update edits profile fields only. Mounted behind RequireRole.
@@ -165,7 +171,7 @@ func (h *EmployeeHandler) Update(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "ต้องระบุชื่อและนามสกุล")
 	}
 
-	updated, err := h.employees.Update(c.Request().Context(), userIDFromContext(c), c.Param("id"), &req.FirstName, &req.LastName, req.TeamID, req.StudentGen, req.StudentID, req.PhoneNumber)
+	updated, err := h.employees.Update(c.Request().Context(), userIDFromContext(c), c.Param("id"), &req.FirstName, &req.LastName, req.TeamID, req.StudentGen, req.StudentID, req.PhoneNumber, req.Project, req.Email)
 	if errors.Is(err, domain.ErrUserNotFound) {
 		return echo.NewHTTPError(http.StatusNotFound, "ไม่พบพนักงาน")
 	}
