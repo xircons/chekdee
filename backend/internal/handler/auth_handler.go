@@ -79,6 +79,7 @@ type userView struct {
 	Role         string  `json:"role"`
 	FirstName    *string `json:"first_name"`
 	LastName     *string `json:"last_name"`
+	StudentGen   *string `json:"student_gen"`
 	StudentID    *string `json:"student_id"`
 	PhoneNumber  *string `json:"phone_number"`
 	DisplayName  *string `json:"display_name"`
@@ -92,6 +93,7 @@ func toUserView(u *domain.User) userView {
 		Role:         string(u.Role),
 		FirstName:    u.FirstName,
 		LastName:     u.LastName,
+		StudentGen:   u.StudentGen,
 		StudentID:    u.StudentID,
 		PhoneNumber:  u.PhoneNumber,
 		DisplayName:  u.LineDisplayName,

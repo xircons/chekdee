@@ -584,6 +584,7 @@ type User struct {
 	PhoneNumber  *string  `json:"phone_number,omitempty"`
 	PictureUrl   *string  `json:"picture_url,omitempty"`
 	Role         UserRole `json:"role"`
+	StudentGen   *string  `json:"student_gen,omitempty"`
 	StudentId    *string  `json:"student_id,omitempty"`
 }
 
