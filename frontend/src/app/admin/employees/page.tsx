@@ -566,6 +566,7 @@ export default function EmployeesPage() {
                   <TableHead>รุ่นนักศึกษา</TableHead>
                   <TableHead>รหัสนักศึกษา</TableHead>
                   <TableHead>เบอร์โทร</TableHead>
+                  <TableHead>อีเมล</TableHead>
                   <TableHead>โปรเจกต์ที่รับผิดชอบ</TableHead>
                   <TableHead className="text-right">จัดการ</TableHead>
                 </TableRow>
@@ -590,6 +591,7 @@ export default function EmployeesPage() {
                     <TableCell>{employee.studentGen ? `(${employee.studentGen})` : "—"}</TableCell>
                     <TableCell>{employee.studentId ?? "—"}</TableCell>
                     <TableCell>{employee.phoneNumber ?? "—"}</TableCell>
+                    <TableCell>{employee.email ?? "—"}</TableCell>
                     <TableCell>{employee.project ?? "—"}</TableCell>
                     <TableCell className="text-right">
                       {employee.offboardedAt ? (
@@ -620,7 +622,7 @@ export default function EmployeesPage() {
                 ))}
                 {employees.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center text-muted-foreground">
+                    <TableCell colSpan={9} className="text-center text-muted-foreground">
                       ไม่พบพนักงานที่ตรงกับการค้นหา
                     </TableCell>
                   </TableRow>
